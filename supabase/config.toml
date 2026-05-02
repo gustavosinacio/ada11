@@ -1,0 +1,32 @@
+project_id = "gym-tracker"
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+port = 54323
+
+[auth]
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["gymtracker://"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[auth.external.google]
+enabled = true
+client_id = "env(EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)"
+secret = "env(GOOGLE_OAUTH_SECRET)"
+redirect_uri = ""
+
+[auth.external.apple]
+enabled = true
+client_id = ""
+secret = ""
