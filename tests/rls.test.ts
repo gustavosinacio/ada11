@@ -49,8 +49,10 @@ async function main() {
     const clientA = createClient(url, anon, { auth: { persistSession: false } });
     const clientB = createClient(url, anon, { auth: { persistSession: false } });
 
-    await clientA.auth.signInWithPassword({ email: aEmail, password });
-    await clientB.auth.signInWithPassword({ email: bEmail, password });
+    const signInA = await clientA.auth.signInWithPassword({ email: aEmail, password });
+    if (signInA.error) throw new Error(`A sign-in failed: ${signInA.error.message}`);
+    const signInB = await clientB.auth.signInWithPassword({ email: bEmail, password });
+    if (signInB.error) throw new Error(`B sign-in failed: ${signInB.error.message}`);
 
     // A creates an exercise.
     const { data: aEx, error: insErr } = await clientA

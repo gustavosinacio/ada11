@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "Gym Tracker",
-    "slug": "gym-tracker",
+    "name": "Ada11",
+    "slug": "ada11",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gymtracker",
+    "scheme": "ada11",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gustavoinacio.gymtracker",
-      "usesAppleSignIn": true
+      "bundleIdentifier": "com.gustavoinacio.ada11",
+      "appleTeamId": "WFKG5983G9"
     },
     "android": {
-      "package": "com.gustavoinacio.gymtracker",
+      "package": "com.gustavoinacio.ada11",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,7 +32,6 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

@@ -1,6 +1,8 @@
-# Gym Tracker
+# Ada11 — Gym Tracker
 
 Personal training-session tracker. Universal app: iOS, Android, and Web from one Expo Router codebase. Backend on Supabase (Postgres + Auth + RLS).
+
+> Detailed architecture, decisions, and onboarding context live in [`docs/`](./docs/README.md). New agents/contributors should read `docs/README.md` first.
 
 ## Stack
 

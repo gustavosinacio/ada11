@@ -18,5 +18,5 @@ export const queryClient = new QueryClient({
 
 export const queryPersister = createAsyncStoragePersister({
   storage: AsyncStorage,
-  key: "gym-tracker-query-cache",
+  key: "ada11-query-cache",
 });

@@ -43,6 +43,12 @@ supabase/.env
 # typescript
 *.tsbuildinfo
 
+# Playwright
+tests/e2e/test-results/
+test-results/
+playwright-report/
+playwright/.cache/
+
 app-example
 
 # generated native folders
