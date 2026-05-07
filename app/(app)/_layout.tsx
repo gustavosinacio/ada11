@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Dumbbell, History, ListChecks, User } from "lucide-react-native";
+import { Dumbbell, History, ListChecks, User, Wrench } from "lucide-react-native";
 
 export default function AppLayout() {
   return (
@@ -16,6 +16,13 @@ export default function AppLayout() {
         options={{
           title: "Routines",
           tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="exercises"
+        options={{
+          title: "Exercises",
+          tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} />,
         }}
       />
       <Tabs.Screen

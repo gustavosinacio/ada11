@@ -27,8 +27,8 @@
 | Day | Goal | Status |
 |---|---|---|
 | 1 | Bootstrap, schema, RLS, RLS test passing | ✅ scaffolded; awaits Supabase project + `npm run db:push` |
-| 2 | Auth: providers in Supabase, Google OAuth setup, sign-in working end-to-end on web + iPhone | ⬜ |
-| 3 | Exercises CRUD (list, create, edit, soft-delete) + Routines CRUD (without exercises inside yet) | ⬜ |
+| 2 | Auth: providers in Supabase, Google OAuth setup, sign-in working end-to-end on web + iPhone | ✅ |
+| 3 | Exercises CRUD (list, create, edit, soft-delete) + Routines CRUD (without exercises inside yet) | ✅ |
 | 4 | Routine builder: add/reorder exercises, set targets (sets, reps, weight, rest seconds) | ⬜ |
 | 5 | Live workout flow: start session (from routine or ad-hoc), log sets, set type selector (warmup/working/dropset), parent linking for drops | ⬜ |
 | 6 | Rest timer (client-side state) + history list + session detail (read-only) | ⬜ |
