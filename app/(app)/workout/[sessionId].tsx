@@ -11,11 +11,13 @@ import {
 
 import { ExerciseBlock } from "~/components/exercise-block";
 import { ExercisePicker } from "~/components/exercise-picker";
+import { RestTimerOverlay } from "~/components/rest-timer-overlay";
 import { SessionHeader } from "~/components/session-header";
 import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow } from "~/db/types";
 import { useExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
+import { useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
 import { useFinishSession, useSession } from "~/hooks/use-sessions";
 import { useDeleteSet, useLogSet, useSetsForSession, useUpdateSet } from "~/hooks/use-sets";
@@ -35,9 +37,21 @@ export default function LiveWorkoutScreen() {
   const unit = useWeightUnit();
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
+  const restTimer = useRestTimer();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [adHocExerciseIds, setAdHocExerciseIds] = useState<string[]>([]);
+
+  // Map exercise_id -> target_rest_seconds (from the routine, if any).
+  const restByExercise = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const re of routineExercisesQ.data ?? []) {
+      if (re.target_rest_seconds && re.target_rest_seconds > 0) {
+        map.set(re.exercise_id, re.target_rest_seconds);
+      }
+    }
+    return map;
+  }, [routineExercisesQ.data]);
 
   // Build the ordered list of exercises for this session:
   // - if from a routine: use routine_exercises in their position order
@@ -165,6 +179,12 @@ export default function LiveWorkoutScreen() {
                     set_type: input.set_type,
                     parent_set_id: input.parent_set_id ?? null,
                   });
+                  // Auto-start rest timer for working/dropset using the
+                  // routine's target rest, if configured.
+                  if (input.set_type !== "warmup") {
+                    const rest = restByExercise.get(ex.id);
+                    if (rest && rest > 0) restTimer.start(rest);
+                  }
                 } catch (err) {
                   console.warn("Log set failed", err);
                 }
@@ -212,6 +232,8 @@ export default function LiveWorkoutScreen() {
           setPickerOpen(false);
         }}
       />
+
+      <RestTimerOverlay />
     </View>
   );
 }
