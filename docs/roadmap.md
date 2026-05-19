@@ -29,10 +29,21 @@
 | 1 | Bootstrap, schema, RLS, RLS test passing | ✅ scaffolded; awaits Supabase project + `npm run db:push` |
 | 2 | Auth: providers in Supabase, Google OAuth setup, sign-in working end-to-end on web + iPhone | ✅ |
 | 3 | Exercises CRUD (list, create, edit, soft-delete) + Routines CRUD (without exercises inside yet) | ✅ |
-| 4 | Routine builder: add/reorder exercises, set targets (sets, reps, weight, rest seconds) | ⬜ |
-| 5 | Live workout flow: start session (from routine or ad-hoc), log sets, set type selector (warmup/working/dropset), parent linking for drops | ⬜ |
-| 6 | Rest timer (client-side state) + history list + session detail (read-only) | ⬜ |
-| 7 | Profile screen polish, weight unit toggle, empty/loading/error states, `eas deploy` web, install on iPhone via `expo run:ios --device` | ⬜ |
+| 4 | Routine builder: add/reorder exercises, set targets (sets, reps, weight, rest seconds) | ✅ (reorder via up/down arrows; gesture drag deferred to v1.5) |
+| 5 | Live workout flow: start session (from routine or ad-hoc), log sets, set type selector (warmup/working/dropset), parent linking for drops | ✅ |
+| 6 | Rest timer (client-side state) + history list + session detail (read-only) | ✅ |
+| 7 | Profile screen polish, weight unit toggle, empty/loading/error states, `eas deploy` web, install on iPhone via `expo run:ios --device` | ✅ profile + unit toggle + states; `eas deploy` and `expo run:ios --device` are owner-run actions |
+
+## Post-week-1 — done, awaiting commit + `db:push`
+
+Pulled forward from the Deferred section. All wired and typechecked; lint clean; e2e suite authored. Migration `0002_add_notes_columns.sql` must be applied via `npm run db:push` before notes will persist.
+
+- ✅ **Per-exercise notes** — `text` column on `exercises`, Textarea in new/edit forms.
+- ✅ **Per-set notes** — `text` column on `sets`, toggleable inline editor in `SetInput`, rendered in history detail.
+- ✅ **Plate calculator** — modal accessible from the Live Workout screen; kg/lbs aware; computes per-side plate stack with remainder warning. Assumes 20 kg bar + standard plates (25 / 20 / 15 / 10 / 5 / 2.5 / 1.25 kg).
+- ✅ **Progress charts** — per-exercise `/exercises/[id]/progress` route showing estimated 1RM (Epley) and total volume trend per session. SVG-rendered. Working sets only; warmups excluded.
+- ✅ **E2E test suite** — Playwright spec at `tests/e2e/crud.spec.ts` covering routines/exercises CRUD, ad-hoc workout flow, history visibility, profile unit toggle. Creates confirmed Supabase users via admin API and tears them down per-test. Owner-run: needs `.env.local` with `SUPABASE_SERVICE_ROLE_KEY` and a dev server on `:8081`.
+- ↪️ **Refactor**: `app/(app)/exercises/[id].tsx` → folder with `index.tsx` + sibling `progress.tsx`. Same edit-screen behavior; just a sub-route added.
 
 ## Hooks and components needed (week-1 detail)
 
@@ -113,9 +124,6 @@
 | 🔒 Body weight tracking | Owner wants to chart body weight alongside lift weight. Trivial: one new table. |
 | 🔒 Personal records table | If "compute PRs from `sets` on demand" gets too slow (won't, at personal scale). |
 | 🔒 Photos / form videos | When owner wants form check via camera. Needs Supabase Storage wiring. |
-| 🔒 Per-set notes | When per-session notes feel insufficient. One new column on `sets`. |
-| 🔒 Plate calculator | UI feature, no schema. Day-7 stretch goal. |
-| 🔒 Progress charts | Day-7+ when there's session data to chart. UI feature, no schema. |
 | 🔒 Sharing / social | Probably never. App is personal. |
 | 🔒 Periodization (mesocycles) | If owner does structured programming and the current "routines as flat templates" feels limiting. |
 | 🔒 Offline-first sync engine | When the owner reports concrete gym-side pain logging sets. See `decisions.md` #5. |
