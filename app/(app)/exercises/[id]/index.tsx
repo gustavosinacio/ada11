@@ -6,9 +6,11 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { z } from "zod";
 
 import { confirmDelete } from "~/components/confirm-delete";
+import { MuscleGroupPicker } from "~/components/muscle-group-picker";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import { MUSCLE_GROUPS } from "~/db/types";
 import {
   useExercise,
   useSoftDeleteExercise,
@@ -17,7 +19,9 @@ import {
 
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Too long"),
-  primary_muscle: z.string().trim().max(40).optional().or(z.literal("")),
+  muscles: z
+    .array(z.enum(MUSCLE_GROUPS as unknown as [string, ...string[]]))
+    .min(1, "Pick at least one muscle group"),
   equipment: z.string().trim().max(40).optional().or(z.literal("")),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
@@ -38,14 +42,14 @@ export default function EditExerciseScreen() {
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", primary_muscle: "", equipment: "", notes: "" },
+    defaultValues: { name: "", muscles: [], equipment: "", notes: "" },
   });
 
   useEffect(() => {
     if (data) {
       reset({
         name: data.name,
-        primary_muscle: data.primary_muscle ?? "",
+        muscles: data.muscles ?? [],
         equipment: data.equipment ?? "",
         notes: data.notes ?? "",
       });
@@ -59,7 +63,7 @@ export default function EditExerciseScreen() {
         id,
         patch: {
           name: values.name,
-          primary_muscle: values.primary_muscle ? values.primary_muscle : null,
+          muscles: values.muscles,
           equipment: values.equipment ? values.equipment : null,
           notes: values.notes ? values.notes : null,
         },
@@ -130,14 +134,13 @@ export default function EditExerciseScreen() {
 
       <Controller
         control={control}
-        name="primary_muscle"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <Input
-            label="Primary muscle (optional)"
-            value={value ?? ""}
-            onBlur={onBlur}
-            onChangeText={onChange}
-            error={errors.primary_muscle?.message}
+        name="muscles"
+        render={({ field: { onChange, value } }) => (
+          <MuscleGroupPicker
+            label="Muscles"
+            value={value ?? []}
+            onChange={onChange}
+            error={errors.muscles?.message}
           />
         )}
       />

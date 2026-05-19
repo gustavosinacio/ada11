@@ -9,7 +9,9 @@ type Props = {
 };
 
 export function ExerciseListItem({ exercise, onPress }: Props) {
-  const subtitleParts = [exercise.primary_muscle, exercise.equipment].filter(
+  const musclesText =
+    exercise.muscles.length > 0 ? exercise.muscles.join(", ") : null;
+  const subtitleParts = [musclesText, exercise.equipment].filter(
     (s): s is string => Boolean(s),
   );
   const subtitle = subtitleParts.join(" · ");

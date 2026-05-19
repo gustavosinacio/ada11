@@ -83,9 +83,14 @@ export function ExerciseBlock({
           <Text className="text-lg font-semibold text-black dark:text-white">
             {exercise.name}
           </Text>
-          {(exercise.primary_muscle || exercise.equipment) && (
+          {(exercise.muscles.length > 0 || exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">
-              {[exercise.primary_muscle, exercise.equipment]
+              {[
+                exercise.muscles.length > 0
+                  ? exercise.muscles.join(", ")
+                  : null,
+                exercise.equipment,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </Text>

@@ -33,7 +33,7 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
     return list.filter((e) => {
       return (
         e.name.toLowerCase().includes(q) ||
-        (e.primary_muscle ?? "").toLowerCase().includes(q) ||
+        e.muscles.some((m) => m.toLowerCase().includes(q)) ||
         (e.equipment ?? "").toLowerCase().includes(q)
       );
     });
@@ -108,9 +108,14 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
                     >
                       {item.name}
                     </Text>
-                    {(item.primary_muscle || item.equipment) && (
+                    {(item.muscles.length > 0 || item.equipment) && (
                       <Text className="mt-0.5 text-sm text-gray-500">
-                        {[item.primary_muscle, item.equipment]
+                        {[
+                          item.muscles.length > 0
+                            ? item.muscles.join(", ")
+                            : null,
+                          item.equipment,
+                        ]
                           .filter(Boolean)
                           .join(" · ")}
                       </Text>

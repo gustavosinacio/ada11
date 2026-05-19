@@ -46,7 +46,7 @@ export const exercises = pgTable(
       .notNull()
       .references(() => authUsers.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    primaryMuscle: text("primary_muscle"),
+    muscles: text("muscles").array().notNull().default(sql`'{}'::text[]`),
     equipment: text("equipment"),
     notes: text("notes"),
     ...timestamps,

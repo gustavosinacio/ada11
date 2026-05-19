@@ -3,7 +3,7 @@ import type { ExerciseRow } from "~/db/types";
 
 export type ExerciseInput = {
   name: string;
-  primary_muscle?: string | null;
+  muscles: string[];
   equipment?: string | null;
   notes?: string | null;
 };
@@ -39,7 +39,7 @@ export async function createExercise(input: ExerciseInput): Promise<ExerciseRow>
     .insert({
       user_id: userId,
       name: input.name,
-      primary_muscle: input.primary_muscle ?? null,
+      muscles: input.muscles,
       equipment: input.equipment ?? null,
       notes: input.notes ?? null,
     })
@@ -57,7 +57,7 @@ export async function updateExercise(
     .from("exercises")
     .update({
       name: patch.name,
-      primary_muscle: patch.primary_muscle ?? null,
+      muscles: patch.muscles,
       equipment: patch.equipment ?? null,
       notes: patch.notes ?? null,
     })

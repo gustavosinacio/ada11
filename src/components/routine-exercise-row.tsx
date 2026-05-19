@@ -61,9 +61,14 @@ export function RoutineExerciseRow({
           <Text className="text-base font-medium text-black dark:text-white">
             {entry.exercise.name}
           </Text>
-          {(entry.exercise.primary_muscle || entry.exercise.equipment) && (
+          {(entry.exercise.muscles.length > 0 || entry.exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">
-              {[entry.exercise.primary_muscle, entry.exercise.equipment]
+              {[
+                entry.exercise.muscles.length > 0
+                  ? entry.exercise.muscles.join(", ")
+                  : null,
+                entry.exercise.equipment,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </Text>

@@ -32,11 +32,30 @@ export type WeightUnit = "kg" | "lbs";
 // Drizzle's InferSelectModel returns camelCase, but the Supabase JS client
 // returns columns as-is — so screens and hooks consume these.
 
+export type MuscleGroup =
+  | "Chest"
+  | "Upper back"
+  | "Lower back"
+  | "Shoulders"
+  | "Arms"
+  | "Legs"
+  | "Core";
+
+export const MUSCLE_GROUPS: readonly MuscleGroup[] = [
+  "Chest",
+  "Upper back",
+  "Lower back",
+  "Shoulders",
+  "Arms",
+  "Legs",
+  "Core",
+] as const;
+
 export type ExerciseRow = {
   id: string;
   user_id: string;
   name: string;
-  primary_muscle: string | null;
+  muscles: string[];
   equipment: string | null;
   notes: string | null;
   created_at: string;
