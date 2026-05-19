@@ -1,0 +1,124 @@
+import { Stack, useLocalSearchParams } from "expo-router";
+import { useMemo } from "react";
+import { ActivityIndicator, ScrollView, Text, useWindowDimensions, View } from "react-native";
+
+import { ProgressChart, type DataPoint } from "~/components/progress-chart";
+import { useExercise } from "~/hooks/use-exercises";
+import { useWeightUnit } from "~/hooks/use-preferences";
+import { useExerciseProgress } from "~/hooks/use-progress";
+import { epley1RM } from "~/utils/formulas";
+import { formatWeight, kgToLbs } from "~/utils/units";
+
+function shortDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  } catch {
+    return "?";
+  }
+}
+
+export default function ExerciseProgressScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const exercise = useExercise(id);
+  const progressQ = useExerciseProgress(id);
+  const unit = useWeightUnit();
+  const { width: screenWidth } = useWindowDimensions();
+  const chartWidth = Math.min(screenWidth - 48, 500);
+
+  const { e1rmData, volumeData, bestE1rm, totalSessions } = useMemo(() => {
+    const sessions = progressQ.data ?? [];
+    const e1rm: DataPoint[] = [];
+    const vol: DataPoint[] = [];
+    let best = 0;
+
+    for (const s of sessions) {
+      const label = shortDate(s.started_at);
+      let sessionBestE1rm = 0;
+      let sessionVolume = 0;
+
+      for (const set of s.sets) {
+        if (set.set_type === "warmup") continue;
+        const w = set.weight ? parseFloat(set.weight) : 0;
+        const r = set.reps ?? 0;
+        if (w > 0 && r > 0) {
+          const est = epley1RM(w, r);
+          if (est > sessionBestE1rm) sessionBestE1rm = est;
+          sessionVolume += w * r;
+        }
+      }
+
+      if (sessionBestE1rm > 0) {
+        const displayE1rm = unit === "kg" ? sessionBestE1rm : kgToLbs(sessionBestE1rm);
+        e1rm.push({ label, value: displayE1rm });
+        if (sessionBestE1rm > best) best = sessionBestE1rm;
+      }
+      if (sessionVolume > 0) {
+        const displayVol = unit === "kg" ? sessionVolume : kgToLbs(sessionVolume);
+        vol.push({ label, value: displayVol });
+      }
+    }
+
+    return {
+      e1rmData: e1rm,
+      volumeData: vol,
+      bestE1rm: best,
+      totalSessions: sessions.length,
+    };
+  }, [progressQ.data, unit]);
+
+  if (exercise.isLoading || progressQ.isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white dark:bg-black">
+        <Stack.Screen options={{ title: "Progress", headerShown: true }} />
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      className="flex-1 bg-white dark:bg-black"
+      contentContainerClassName="px-6 py-6 pb-12"
+    >
+      <Stack.Screen
+        options={{ title: exercise.data?.name ?? "Progress", headerShown: true }}
+      />
+
+      <Text className="mb-1 text-2xl font-semibold text-black dark:text-white">
+        {exercise.data?.name}
+      </Text>
+      <Text className="mb-6 text-sm text-gray-500">
+        {totalSessions} {totalSessions === 1 ? "session" : "sessions"} logged
+        {bestE1rm > 0 ? ` · Best est. 1RM: ${formatWeight(bestE1rm, unit)}` : ""}
+      </Text>
+
+      {e1rmData.length === 0 ? (
+        <View className="items-center py-10">
+          <Text className="text-base text-gray-500">
+            No working sets recorded yet. Complete a workout with this exercise to see
+            progress.
+          </Text>
+        </View>
+      ) : (
+        <View className="gap-8">
+          <ProgressChart
+            data={e1rmData}
+            width={chartWidth}
+            title={`Estimated 1RM (${unit})`}
+            formatValue={(v) => v.toFixed(1)}
+          />
+
+          <ProgressChart
+            data={volumeData}
+            width={chartWidth}
+            title={`Total volume (${unit})`}
+            formatValue={(v) =>
+              v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
+            }
+          />
+        </View>
+      )}
+    </ScrollView>
+  );
+}
