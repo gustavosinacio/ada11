@@ -50,7 +50,11 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "7ce8b039-e43e-47cc-a57d-6a5be9b80295"
+      }
+    },
+    "owner": "gustavo.inacio"
   }
 }
