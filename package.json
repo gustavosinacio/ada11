@@ -11,8 +11,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:push": "supabase db push",
-    "db:reset": "supabase db reset",
+    "db:push": "npx supabase db push",
+    "db:reset": "npx supabase db reset",
     "deploy:web": "expo export --platform web && eas deploy",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"
