@@ -50,10 +50,11 @@ export function SessionSummaryRow({
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-1 pr-3">
-          <Text className="text-base font-medium text-black dark:text-white">
-            {formatDate(session.started_at)}
+          <Text className="text-base font-semibold text-black dark:text-white">
+            {session.name?.trim() || "Workout"}
           </Text>
-          <Text className="mt-1 text-sm text-gray-500">
+          <Text className="mt-0.5 text-sm text-gray-500">
+            {formatDate(session.started_at)} ·{" "}
             {formatDuration(session.started_at, session.ended_at)}
             {totalSets != null
               ? ` · ${totalSets} ${totalSets === 1 ? "set" : "sets"}`

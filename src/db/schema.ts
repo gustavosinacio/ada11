@@ -112,6 +112,7 @@ export const sessions = pgTable(
     routineId: uuid("routine_id").references(() => routines.id, {
       onDelete: "set null",
     }),
+    name: text("name"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     notes: text("notes"),

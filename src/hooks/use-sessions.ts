@@ -7,6 +7,7 @@ import {
   listSessions,
   softDeleteSession,
   startSession,
+  updateSessionName,
   updateSessionNotes,
 } from "~/api/sessions";
 
@@ -66,6 +67,18 @@ export function useUpdateSessionNotes() {
   return useMutation({
     mutationFn: ({ id, notes }: { id: string; notes: string | null }) =>
       updateSessionNotes(id, notes),
+    onSuccess: (row) => {
+      qc.setQueryData(KEYS.detail(row.id), row);
+      qc.invalidateQueries({ queryKey: KEYS.all });
+    },
+  });
+}
+
+export function useUpdateSessionName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string | null }) =>
+      updateSessionName(id, name),
     onSuccess: (row) => {
       qc.setQueryData(KEYS.detail(row.id), row);
       qc.invalidateQueries({ queryKey: KEYS.all });

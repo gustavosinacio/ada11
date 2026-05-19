@@ -37,6 +37,7 @@ export async function getActiveSession(): Promise<SessionRow | null> {
 
 export async function startSession(input: {
   routine_id?: string | null;
+  name?: string | null;
   notes?: string | null;
 }): Promise<SessionRow> {
   const { data: auth } = await supabase.auth.getUser();
@@ -48,6 +49,7 @@ export async function startSession(input: {
     .insert({
       user_id: userId,
       routine_id: input.routine_id ?? null,
+      name: input.name ?? null,
       started_at: new Date().toISOString(),
       notes: input.notes ?? null,
     })
@@ -75,6 +77,20 @@ export async function updateSessionNotes(
   const { data, error } = await supabase
     .from("sessions")
     .update({ notes })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SessionRow;
+}
+
+export async function updateSessionName(
+  id: string,
+  name: string | null,
+): Promise<SessionRow> {
+  const { data, error } = await supabase
+    .from("sessions")
+    .update({ name })
     .eq("id", id)
     .select()
     .single();

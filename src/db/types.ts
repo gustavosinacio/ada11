@@ -74,6 +74,7 @@ export type SessionRow = {
   id: string;
   user_id: string;
   routine_id: string | null;
+  name: string | null;
   started_at: string;
   ended_at: string | null;
   notes: string | null;

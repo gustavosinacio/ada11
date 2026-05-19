@@ -37,9 +37,12 @@ export default function WorkoutHome() {
     }
   };
 
-  const startFromRoutine = async (routineId: string) => {
+  const startFromRoutine = async (routineId: string, routineName: string) => {
     try {
-      const row = await start.mutateAsync({ routine_id: routineId });
+      const row = await start.mutateAsync({
+        routine_id: routineId,
+        name: routineName,
+      });
       setPickerOpen(false);
       router.replace(`/(app)/workout/${row.id}`);
     } catch (err) {
@@ -113,7 +116,7 @@ export default function WorkoutHome() {
               {routines.data.map((r) => (
                 <Pressable
                   key={r.id}
-                  onPress={() => startFromRoutine(r.id)}
+                  onPress={() => startFromRoutine(r.id, r.name)}
                   accessibilityRole="button"
                   className="border-b border-gray-100 px-4 py-4 active:bg-gray-50 dark:border-gray-900 dark:active:bg-gray-950"
                 >
