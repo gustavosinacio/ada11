@@ -8,6 +8,12 @@ import { kgToLbs, lbsToKg } from "~/utils/units";
 type Props = {
   row: SetRow;
   unit: WeightUnit;
+  /**
+   * Previous completed set for this exercise (in-session if any, else from
+   * the most recent past session). Its weight/reps/rpe are used as placeholder
+   * text on this row's empty fields. Not used as the actual value.
+   */
+  previousSet?: SetRow | null;
   onCommit: (patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null }) => void;
   onDelete: () => void;
 };
@@ -46,7 +52,16 @@ const TYPE_BADGE: Record<SetType, { label: string; classes: string }> = {
   dropset: { label: "↓", classes: "bg-purple-100 text-purple-800" },
 };
 
-export function SetInput({ row, unit, onCommit, onDelete }: Props) {
+export function SetInput({ row, unit, previousSet, onCommit, onDelete }: Props) {
+  const weightPlaceholder = previousSet?.weight
+    ? inputStringFromKg(previousSet.weight, unit)
+    : unit === "kg"
+      ? "kg"
+      : "lbs";
+  const repsPlaceholder = previousSet?.reps != null
+    ? previousSet.reps.toString()
+    : "reps";
+  const rpePlaceholder = previousSet?.rpe ?? "RPE";
   const [reps, setReps] = useState(row.reps?.toString() ?? "");
   const [weight, setWeight] = useState(inputStringFromKg(row.weight, unit));
   const [rpe, setRpe] = useState(row.rpe ?? "");
@@ -88,7 +103,7 @@ export function SetInput({ row, unit, onCommit, onDelete }: Props) {
             onChangeText={setWeight}
             onBlur={commit}
             onSubmitEditing={commit}
-            placeholder={unit === "kg" ? "kg" : "lbs"}
+            placeholder={weightPlaceholder}
             placeholderTextColor="#9ca3af"
             keyboardType="decimal-pad"
             className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
@@ -101,7 +116,7 @@ export function SetInput({ row, unit, onCommit, onDelete }: Props) {
             onChangeText={setReps}
             onBlur={commit}
             onSubmitEditing={commit}
-            placeholder="reps"
+            placeholder={repsPlaceholder}
             placeholderTextColor="#9ca3af"
             keyboardType="number-pad"
             className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
@@ -114,7 +129,7 @@ export function SetInput({ row, unit, onCommit, onDelete }: Props) {
             onChangeText={setRpe}
             onBlur={commit}
             onSubmitEditing={commit}
-            placeholder="RPE"
+            placeholder={rpePlaceholder}
             placeholderTextColor="#9ca3af"
             keyboardType="decimal-pad"
             className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"

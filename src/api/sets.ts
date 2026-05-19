@@ -87,6 +87,35 @@ export async function updateSet(
   return data as SetRow;
 }
 
+/**
+ * Most recent completed working/dropset for the given exercise across any
+ * finished past session. Used to seed placeholders for new sets so the user
+ * sees their last actual numbers when starting an exercise. Excludes warmups
+ * (they don't reflect work weight) and unfinished/current sessions.
+ */
+export async function getLastWorkingSetForExercise(
+  exerciseId: string,
+): Promise<SetRow | null> {
+  const { data, error } = await supabase
+    .from("sets")
+    .select("*, sessions!inner(ended_at)")
+    .eq("exercise_id", exerciseId)
+    .in("set_type", ["working", "dropset"])
+    .not("weight", "is", null)
+    .not("reps", "is", null)
+    .is("deleted_at", null)
+    .not("sessions.ended_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { sessions: _sessions, ...row } = data as SetRow & {
+    sessions: unknown;
+  };
+  return row as SetRow;
+}
+
 export async function softDeleteSet(id: string): Promise<void> {
   const { error } = await supabase
     .from("sets")

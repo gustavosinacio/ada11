@@ -43,6 +43,14 @@ export default function LiveWorkoutScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [plateCalcOpen, setPlateCalcOpen] = useState(false);
   const [adHocExerciseIds, setAdHocExerciseIds] = useState<string[]>([]);
+  // User-controlled exercise ordering for this session. Null = use derived
+  // default (routine order → first-logged order → ad-hoc order). Non-null
+  // means the user explicitly reordered; we honor that, with any new
+  // exercises (added via picker or first-logged) appended to the end.
+  // Not persisted across reloads — same scope as adHocExerciseIds.
+  const [exerciseOrderOverride, setExerciseOrderOverride] = useState<
+    string[] | null
+  >(null);
 
   // Map exercise_id -> target_rest_seconds (from the routine, if any).
   const restByExercise = useMemo(() => {
@@ -96,8 +104,42 @@ export default function LiveWorkoutScreen() {
       }
     }
 
+    // Apply user-controlled reorder: items present in the override come
+    // first in override order; any items not in the override (newly added
+    // since the reorder) keep their default position appended.
+    if (exerciseOrderOverride) {
+      const overrideSet = new Set(exerciseOrderOverride);
+      const byId = new Map(out.map((e) => [e.id, e]));
+      const reordered: ExerciseRow[] = [];
+      for (const id of exerciseOrderOverride) {
+        const ex = byId.get(id);
+        if (ex) reordered.push(ex);
+      }
+      for (const ex of out) {
+        if (!overrideSet.has(ex.id)) reordered.push(ex);
+      }
+      return reordered;
+    }
+
     return out;
-  }, [exercisesQ.data, routineExercisesQ.data, setsQ.data, adHocExerciseIds]);
+  }, [
+    exercisesQ.data,
+    routineExercisesQ.data,
+    setsQ.data,
+    adHocExerciseIds,
+    exerciseOrderOverride,
+  ]);
+
+  const moveExercise = (exerciseId: string, direction: "up" | "down") => {
+    const currentOrder = orderedExercises.map((e) => e.id);
+    const idx = currentOrder.indexOf(exerciseId);
+    if (idx === -1) return;
+    const target = direction === "up" ? idx - 1 : idx + 1;
+    if (target < 0 || target >= currentOrder.length) return;
+    const next = [...currentOrder];
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
+    setExerciseOrderOverride(next);
+  };
 
   const setsByExercise = useMemo(() => {
     const map = new Map<string, SetRow[]>();
@@ -166,12 +208,16 @@ export default function LiveWorkoutScreen() {
             </Text>
           </View>
         ) : (
-          orderedExercises.map((ex) => (
+          orderedExercises.map((ex, idx) => (
             <ExerciseBlock
               key={ex.id}
               exercise={ex}
               sets={setsByExercise.get(ex.id) ?? []}
               unit={unit}
+              isFirst={idx === 0}
+              isLast={idx === orderedExercises.length - 1}
+              onMoveUp={() => moveExercise(ex.id, "up")}
+              onMoveDown={() => moveExercise(ex.id, "down")}
               onAddSet={async (input) => {
                 if (!sessionId) return;
                 try {

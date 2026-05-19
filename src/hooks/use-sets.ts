@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getLastWorkingSetForExercise,
   listSetsForSession,
   logSet,
   softDeleteSet,
@@ -11,7 +12,19 @@ import {
 
 const KEYS = {
   forSession: (sessionId: string) => ["sets", sessionId] as const,
+  lastWorking: (exerciseId: string) =>
+    ["sets", "last-working", exerciseId] as const,
 };
+
+export function useLastWorkingSet(exerciseId: string | undefined) {
+  return useQuery({
+    queryKey: exerciseId
+      ? KEYS.lastWorking(exerciseId)
+      : ["sets", "last-working", "none"],
+    queryFn: () => getLastWorkingSetForExercise(exerciseId as string),
+    enabled: Boolean(exerciseId),
+  });
+}
 
 export function useSetsForSession(sessionId: string | undefined) {
   return useQuery({
