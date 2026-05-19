@@ -13,7 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "npx supabase db push",
     "db:reset": "npx supabase db reset",
-    "deploy:web": "expo export --platform web && eas deploy",
+    "deploy:web": "expo export --platform web && eas deploy --prod --non-interactive",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"
   },
