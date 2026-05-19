@@ -48,6 +48,7 @@ export const exercises = pgTable(
     name: text("name").notNull(),
     primaryMuscle: text("primary_muscle"),
     equipment: text("equipment"),
+    notes: text("notes"),
     ...timestamps,
   },
   (t) => ({
@@ -140,6 +141,7 @@ export const sets = pgTable(
     rpe: numeric("rpe", { precision: 3, scale: 1 }),
     setType: text("set_type").notNull(), // 'warmup' | 'working' | 'dropset'
     parentSetId: uuid("parent_set_id"),
+    notes: text("notes"),
     completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
     ...timestamps,
   },

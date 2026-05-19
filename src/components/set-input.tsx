@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react-native";
+import { MessageSquare, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
@@ -8,7 +8,7 @@ import { kgToLbs, lbsToKg } from "~/utils/units";
 type Props = {
   row: SetRow;
   unit: WeightUnit;
-  onCommit: (patch: { reps: number | null; weight: string | null; rpe: string | null }) => void;
+  onCommit: (patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null }) => void;
   onDelete: () => void;
 };
 
@@ -50,79 +50,109 @@ export function SetInput({ row, unit, onCommit, onDelete }: Props) {
   const [reps, setReps] = useState(row.reps?.toString() ?? "");
   const [weight, setWeight] = useState(inputStringFromKg(row.weight, unit));
   const [rpe, setRpe] = useState(row.rpe ?? "");
+  const [notes, setNotes] = useState(row.notes ?? "");
+  const [notesOpen, setNotesOpen] = useState(!!row.notes);
 
   useEffect(() => {
     setReps(row.reps?.toString() ?? "");
     setWeight(inputStringFromKg(row.weight, unit));
     setRpe(row.rpe ?? "");
-  }, [row.reps, row.weight, row.rpe, unit]);
+    setNotes(row.notes ?? "");
+    setNotesOpen(!!row.notes);
+  }, [row.reps, row.weight, row.rpe, row.notes, unit]);
 
   const commit = () => {
     onCommit({
       reps: parseInt0(reps),
       weight: kgFromInputString(weight, unit),
       rpe: rpe.trim() ? parseFloat0(rpe)?.toFixed(1) ?? null : null,
+      notes: notes.trim() || null,
     });
   };
 
   const badge = TYPE_BADGE[row.set_type];
 
   return (
-    <View className="flex-row items-center gap-2 border-b border-gray-100 px-4 py-2 dark:border-gray-900">
-      <View
-        className={`h-7 w-7 items-center justify-center rounded-full ${badge.classes}`}
-      >
-        <Text className="text-xs font-semibold">{badge.label}</Text>
-      </View>
-      <Text className="w-6 text-sm text-gray-500">{row.set_number}</Text>
+    <View className="border-b border-gray-100 dark:border-gray-900">
+      <View className="flex-row items-center gap-2 px-4 py-2">
+        <View
+          className={`h-7 w-7 items-center justify-center rounded-full ${badge.classes}`}
+        >
+          <Text className="text-xs font-semibold">{badge.label}</Text>
+        </View>
+        <Text className="w-6 text-sm text-gray-500">{row.set_number}</Text>
 
-      <View className="flex-1">
-        <TextInput
-          value={weight}
-          onChangeText={setWeight}
-          onBlur={commit}
-          onSubmitEditing={commit}
-          placeholder={unit === "kg" ? "kg" : "lbs"}
-          placeholderTextColor="#9ca3af"
-          keyboardType="decimal-pad"
-          className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
-        />
+        <View className="flex-1">
+          <TextInput
+            value={weight}
+            onChangeText={setWeight}
+            onBlur={commit}
+            onSubmitEditing={commit}
+            placeholder={unit === "kg" ? "kg" : "lbs"}
+            placeholderTextColor="#9ca3af"
+            keyboardType="decimal-pad"
+            className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
+          />
+        </View>
+
+        <View className="flex-1">
+          <TextInput
+            value={reps}
+            onChangeText={setReps}
+            onBlur={commit}
+            onSubmitEditing={commit}
+            placeholder="reps"
+            placeholderTextColor="#9ca3af"
+            keyboardType="number-pad"
+            className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
+          />
+        </View>
+
+        <View className="w-14">
+          <TextInput
+            value={rpe}
+            onChangeText={setRpe}
+            onBlur={commit}
+            onSubmitEditing={commit}
+            placeholder="RPE"
+            placeholderTextColor="#9ca3af"
+            keyboardType="decimal-pad"
+            className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
+          />
+        </View>
+
+        <Pressable
+          onPress={() => setNotesOpen((v) => !v)}
+          accessibilityLabel="Toggle set notes"
+          accessibilityRole="button"
+          className="rounded p-1"
+        >
+          <MessageSquare color={notes.trim() ? "#3b82f6" : "#9ca3af"} size={16} />
+        </Pressable>
+
+        <Pressable
+          onPress={onDelete}
+          accessibilityLabel="Delete set"
+          accessibilityRole="button"
+          className="rounded p-1"
+        >
+          <Trash2 color="#ef4444" size={16} />
+        </Pressable>
       </View>
 
-      <View className="flex-1">
-        <TextInput
-          value={reps}
-          onChangeText={setReps}
-          onBlur={commit}
-          onSubmitEditing={commit}
-          placeholder="reps"
-          placeholderTextColor="#9ca3af"
-          keyboardType="number-pad"
-          className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
-        />
-      </View>
-
-      <View className="w-14">
-        <TextInput
-          value={rpe}
-          onChangeText={setRpe}
-          onBlur={commit}
-          onSubmitEditing={commit}
-          placeholder="RPE"
-          placeholderTextColor="#9ca3af"
-          keyboardType="decimal-pad"
-          className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
-        />
-      </View>
-
-      <Pressable
-        onPress={onDelete}
-        accessibilityLabel="Delete set"
-        accessibilityRole="button"
-        className="rounded p-1"
-      >
-        <Trash2 color="#ef4444" size={16} />
-      </Pressable>
+      {notesOpen ? (
+        <View className="px-4 pb-2">
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            onBlur={commit}
+            onSubmitEditing={commit}
+            placeholder="Set notes..."
+            placeholderTextColor="#9ca3af"
+            className="rounded border border-gray-200 px-2 py-1.5 text-sm text-black dark:border-gray-800 dark:text-white"
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -15,7 +15,7 @@ type Props = {
   }) => void;
   onUpdateSet: (
     id: string,
-    patch: { reps: number | null; weight: string | null; rpe: string | null },
+    patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null },
   ) => void;
   onDeleteSet: (id: string) => void;
 };
@@ -63,7 +63,8 @@ export function ExerciseBlock({
           </Text>
           <Text className="flex-1 text-xs text-gray-500">Reps</Text>
           <Text className="w-14 text-xs text-gray-500">RPE</Text>
-          <View className="w-6" />
+          <View className="w-7" />
+          <View className="w-7" />
         </View>
       )}
 

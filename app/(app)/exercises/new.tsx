@@ -6,12 +6,14 @@ import { z } from "zod";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
 import { useCreateExercise } from "~/hooks/use-exercises";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Too long"),
   primary_muscle: z.string().trim().max(40).optional().or(z.literal("")),
   equipment: z.string().trim().max(40).optional().or(z.literal("")),
+  notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -26,7 +28,7 @@ export default function NewExerciseScreen() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", primary_muscle: "", equipment: "" },
+    defaultValues: { name: "", primary_muscle: "", equipment: "", notes: "" },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -35,6 +37,7 @@ export default function NewExerciseScreen() {
         name: values.name,
         primary_muscle: values.primary_muscle ? values.primary_muscle : null,
         equipment: values.equipment ? values.equipment : null,
+        notes: values.notes ? values.notes : null,
       });
       router.back();
     } catch (err) {
@@ -92,6 +95,21 @@ export default function NewExerciseScreen() {
             onBlur={onBlur}
             onChangeText={onChange}
             error={errors.equipment?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="notes"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <Textarea
+            label="Notes (optional)"
+            placeholder="Cues, grip width, stance, etc."
+            value={value ?? ""}
+            onBlur={onBlur}
+            onChangeText={onChange}
+            error={errors.notes?.message}
           />
         )}
       />

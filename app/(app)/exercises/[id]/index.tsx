@@ -1,13 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 
 import { confirmDelete } from "~/components/confirm-delete";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
 import {
   useExercise,
   useSoftDeleteExercise,
@@ -18,6 +19,7 @@ const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Too long"),
   primary_muscle: z.string().trim().max(40).optional().or(z.literal("")),
   equipment: z.string().trim().max(40).optional().or(z.literal("")),
+  notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -36,7 +38,7 @@ export default function EditExerciseScreen() {
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", primary_muscle: "", equipment: "" },
+    defaultValues: { name: "", primary_muscle: "", equipment: "", notes: "" },
   });
 
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function EditExerciseScreen() {
         name: data.name,
         primary_muscle: data.primary_muscle ?? "",
         equipment: data.equipment ?? "",
+        notes: data.notes ?? "",
       });
     }
   }, [data, reset]);
@@ -58,6 +61,7 @@ export default function EditExerciseScreen() {
           name: values.name,
           primary_muscle: values.primary_muscle ? values.primary_muscle : null,
           equipment: values.equipment ? values.equipment : null,
+          notes: values.notes ? values.notes : null,
         },
       });
       router.back();
@@ -152,6 +156,21 @@ export default function EditExerciseScreen() {
         )}
       />
 
+      <Controller
+        control={control}
+        name="notes"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <Textarea
+            label="Notes (optional)"
+            placeholder="Cues, grip width, stance, etc."
+            value={value ?? ""}
+            onBlur={onBlur}
+            onChangeText={onChange}
+            error={errors.notes?.message}
+          />
+        )}
+      />
+
       {update.isError ? (
         <Text className="mb-3 text-sm text-red-500">
           {update.error instanceof Error
@@ -159,6 +178,17 @@ export default function EditExerciseScreen() {
             : "Failed to save"}
         </Text>
       ) : null}
+
+      <Link href={`/exercises/${id}/progress`} asChild>
+        <Pressable
+          accessibilityRole="button"
+          className="mb-4 rounded-lg border border-blue-500 py-3"
+        >
+          <Text className="text-center text-base font-medium text-blue-500">
+            View progress
+          </Text>
+        </Pressable>
+      </Link>
 
       <View className="mt-2 gap-3">
         <Button

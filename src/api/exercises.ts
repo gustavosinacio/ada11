@@ -5,6 +5,7 @@ export type ExerciseInput = {
   name: string;
   primary_muscle?: string | null;
   equipment?: string | null;
+  notes?: string | null;
 };
 
 export async function listExercises(): Promise<ExerciseRow[]> {
@@ -40,6 +41,7 @@ export async function createExercise(input: ExerciseInput): Promise<ExerciseRow>
       name: input.name,
       primary_muscle: input.primary_muscle ?? null,
       equipment: input.equipment ?? null,
+      notes: input.notes ?? null,
     })
     .select()
     .single();
@@ -57,6 +59,7 @@ export async function updateExercise(
       name: patch.name,
       primary_muscle: patch.primary_muscle ?? null,
       equipment: patch.equipment ?? null,
+      notes: patch.notes ?? null,
     })
     .eq("id", id)
     .select()

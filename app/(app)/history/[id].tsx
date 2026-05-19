@@ -178,20 +178,27 @@ function ExerciseGroup({
         {sets.map((s) => {
           const w = s.weight ? parseFloat(s.weight) : null;
           return (
-            <View key={s.id} className="flex-row items-center gap-2 py-1">
-              <View
-                className={`h-6 w-6 items-center justify-center rounded-full ${SET_TYPE_COLOR[s.set_type]}`}
-              >
-                <Text className="text-xs font-semibold">
-                  {SET_TYPE_LABEL[s.set_type]}
+            <View key={s.id}>
+              <View className="flex-row items-center gap-2 py-1">
+                <View
+                  className={`h-6 w-6 items-center justify-center rounded-full ${SET_TYPE_COLOR[s.set_type]}`}
+                >
+                  <Text className="text-xs font-semibold">
+                    {SET_TYPE_LABEL[s.set_type]}
+                  </Text>
+                </View>
+                <Text className="w-6 text-sm text-gray-500">{s.set_number}</Text>
+                <Text className="flex-1 text-sm text-black dark:text-white">
+                  {w != null ? formatWeight(w, unit) : "—"} ×{" "}
+                  {s.reps ?? "—"} reps
+                  {s.rpe ? ` @ RPE ${s.rpe}` : ""}
                 </Text>
               </View>
-              <Text className="w-6 text-sm text-gray-500">{s.set_number}</Text>
-              <Text className="flex-1 text-sm text-black dark:text-white">
-                {w != null ? formatWeight(w, unit) : "—"} ×{" "}
-                {s.reps ?? "—"} reps
-                {s.rpe ? ` @ RPE ${s.rpe}` : ""}
-              </Text>
+              {s.notes ? (
+                <View className="ml-14 pb-1">
+                  <Text className="text-xs italic text-gray-500">{s.notes}</Text>
+                </View>
+              ) : null}
             </View>
           );
         })}

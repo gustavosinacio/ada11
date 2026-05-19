@@ -9,12 +9,14 @@ export type LogSetInput = {
   reps?: number | null;
   weight?: string | null;
   rpe?: string | null;
+  notes?: string | null;
 };
 
 export type UpdateSetInput = {
   reps?: number | null;
   weight?: string | null;
   rpe?: string | null;
+  notes?: string | null;
 };
 
 export async function listSetsForSession(sessionId: string): Promise<SetRow[]> {
@@ -57,6 +59,7 @@ export async function logSet(input: LogSetInput): Promise<SetRow> {
       rpe: input.rpe ?? null,
       set_type: input.set_type,
       parent_set_id: input.parent_set_id ?? null,
+      notes: input.notes ?? null,
       completed_at: new Date().toISOString(),
     })
     .select()
@@ -75,6 +78,7 @@ export async function updateSet(
       reps: patch.reps ?? null,
       weight: patch.weight ?? null,
       rpe: patch.rpe ?? null,
+      notes: patch.notes ?? null,
     })
     .eq("id", id)
     .select()

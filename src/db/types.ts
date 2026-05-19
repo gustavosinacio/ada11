@@ -38,6 +38,7 @@ export type ExerciseRow = {
   name: string;
   primary_muscle: string | null;
   equipment: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -92,6 +93,7 @@ export type SetRow = {
   rpe: string | null;
   set_type: SetType;
   parent_set_id: string | null;
+  notes: string | null;
   completed_at: string;
   created_at: string;
   updated_at: string;

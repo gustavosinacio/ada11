@@ -8,6 +8,13 @@
       "when": 1777749446419,
       "tag": "0000_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779140143189,
+      "tag": "0002_add_notes_columns",
+      "breakpoints": true
     }
   ]
 }
