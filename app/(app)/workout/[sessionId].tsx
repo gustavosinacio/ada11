@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { Calculator, Plus } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,10 +11,11 @@ import {
 
 import { ExerciseBlock } from "~/components/exercise-block";
 import { ExercisePicker } from "~/components/exercise-picker";
+import { PlateCalculator } from "~/components/plate-calculator";
 import { RestTimerOverlay } from "~/components/rest-timer-overlay";
 import { SessionHeader } from "~/components/session-header";
 import { confirmDelete } from "~/components/confirm-delete";
-import type { ExerciseRow } from "~/db/types";
+import type { ExerciseRow, SetRow } from "~/db/types";
 import { useExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useRestTimer } from "~/hooks/use-rest-timer";
@@ -40,6 +41,7 @@ export default function LiveWorkoutScreen() {
   const restTimer = useRestTimer();
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [plateCalcOpen, setPlateCalcOpen] = useState(false);
   const [adHocExerciseIds, setAdHocExerciseIds] = useState<string[]>([]);
 
   // Map exercise_id -> target_rest_seconds (from the routine, if any).
@@ -98,7 +100,7 @@ export default function LiveWorkoutScreen() {
   }, [exercisesQ.data, routineExercisesQ.data, setsQ.data, adHocExerciseIds]);
 
   const setsByExercise = useMemo(() => {
-    const map = new Map<string, typeof setsQ.data>();
+    const map = new Map<string, SetRow[]>();
     for (const s of setsQ.data ?? []) {
       const list = map.get(s.exercise_id) ?? [];
       list.push(s);
@@ -207,7 +209,7 @@ export default function LiveWorkoutScreen() {
           ))
         )}
 
-        <View className="mt-4 px-4">
+        <View className="mt-4 gap-2 px-4">
           <Pressable
             onPress={() => setPickerOpen(true)}
             accessibilityRole="button"
@@ -216,6 +218,16 @@ export default function LiveWorkoutScreen() {
             <Plus color="#6b7280" size={18} />
             <Text className="ml-2 text-base text-black dark:text-white">
               Add exercise
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setPlateCalcOpen(true)}
+            accessibilityRole="button"
+            className="flex-row items-center justify-center rounded-lg border border-gray-300 py-3 dark:border-gray-700"
+          >
+            <Calculator color="#6b7280" size={18} />
+            <Text className="ml-2 text-base text-black dark:text-white">
+              Plate calculator
             </Text>
           </Pressable>
         </View>
@@ -231,6 +243,12 @@ export default function LiveWorkoutScreen() {
           );
           setPickerOpen(false);
         }}
+      />
+
+      <PlateCalculator
+        visible={plateCalcOpen}
+        onClose={() => setPlateCalcOpen(false)}
+        unit={unit}
       />
 
       <RestTimerOverlay />
