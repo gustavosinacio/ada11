@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react-native";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -23,6 +23,8 @@ type Props = {
     patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null },
   ) => void;
   onDeleteSet: (id: string) => void;
+  onRemove?: () => void;
+  removeDisabled?: boolean;
 };
 
 export function ExerciseBlock({
@@ -36,6 +38,8 @@ export function ExerciseBlock({
   onAddSet,
   onUpdateSet,
   onDeleteSet,
+  onRemove,
+  removeDisabled,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -76,7 +80,7 @@ export function ExerciseBlock({
     return map;
   }, [sets, lastFromHistory.data]);
 
-  const showReorder = !!onMoveUp || !!onMoveDown;
+  const showActions = !!onMoveUp || !!onMoveDown || !!onRemove;
 
   return (
     <View className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-black">
@@ -98,26 +102,41 @@ export function ExerciseBlock({
             </Text>
           )}
         </View>
-        {showReorder && (
+        {showActions && (
           <View className="flex-row items-center">
-            <Pressable
-              onPress={onMoveUp}
-              disabled={!onMoveUp || isFirst}
-              accessibilityLabel={`Move ${exercise.name} up`}
-              accessibilityRole="button"
-              className={`rounded p-2 ${!onMoveUp || isFirst ? "opacity-30" : ""}`}
-            >
-              <ChevronUp color="#6b7280" size={20} />
-            </Pressable>
-            <Pressable
-              onPress={onMoveDown}
-              disabled={!onMoveDown || isLast}
-              accessibilityLabel={`Move ${exercise.name} down`}
-              accessibilityRole="button"
-              className={`rounded p-2 ${!onMoveDown || isLast ? "opacity-30" : ""}`}
-            >
-              <ChevronDown color="#6b7280" size={20} />
-            </Pressable>
+            {(onMoveUp || onMoveDown) && (
+              <>
+                <Pressable
+                  onPress={onMoveUp}
+                  disabled={!onMoveUp || isFirst}
+                  accessibilityLabel={`Move ${exercise.name} up`}
+                  accessibilityRole="button"
+                  className={`rounded p-2 ${!onMoveUp || isFirst ? "opacity-30" : ""}`}
+                >
+                  <ChevronUp color="#6b7280" size={20} />
+                </Pressable>
+                <Pressable
+                  onPress={onMoveDown}
+                  disabled={!onMoveDown || isLast}
+                  accessibilityLabel={`Move ${exercise.name} down`}
+                  accessibilityRole="button"
+                  className={`rounded p-2 ${!onMoveDown || isLast ? "opacity-30" : ""}`}
+                >
+                  <ChevronDown color="#6b7280" size={20} />
+                </Pressable>
+              </>
+            )}
+            {onRemove && (
+              <Pressable
+                onPress={onRemove}
+                disabled={!!removeDisabled}
+                accessibilityLabel={`Remove ${exercise.name} from workout`}
+                accessibilityRole="button"
+                className={`rounded p-2 ${removeDisabled ? "opacity-30" : ""}`}
+              >
+                <Trash2 color="#ef4444" size={18} />
+              </Pressable>
+            )}
           </View>
         )}
       </View>

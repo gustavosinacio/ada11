@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  bulkSoftDeleteSetsForExerciseInSession,
   getLastWorkingSetForExercise,
   listSetsForSession,
   logSet,
@@ -61,6 +62,21 @@ export function useDeleteSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => softDeleteSet(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}
+
+export function useRemoveExerciseFromSession(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (exerciseId: string) =>
+      bulkSoftDeleteSetsForExerciseInSession({
+        sessionId,
+        exerciseId,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });

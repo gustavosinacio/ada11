@@ -123,3 +123,25 @@ export async function softDeleteSet(id: string): Promise<void> {
     .eq("id", id);
   if (error) throw error;
 }
+
+export type BulkSoftDeleteSetsInput = {
+  sessionId: string;
+  exerciseId: string;
+};
+
+/**
+ * Soft-deletes every non-deleted set in this (session, exercise) pair.
+ * One PostgREST round-trip. RLS allows because every row's user_id
+ * matches the authed user.
+ */
+export async function bulkSoftDeleteSetsForExerciseInSession(
+  input: BulkSoftDeleteSetsInput,
+): Promise<void> {
+  const { error } = await supabase
+    .from("sets")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("session_id", input.sessionId)
+    .eq("exercise_id", input.exerciseId)
+    .is("deleted_at", null);
+  if (error) throw error;
+}

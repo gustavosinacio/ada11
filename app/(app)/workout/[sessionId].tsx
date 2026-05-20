@@ -21,7 +21,13 @@ import { useWeightUnit } from "~/hooks/use-preferences";
 import { useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
 import { useFinishSession, useSession } from "~/hooks/use-sessions";
-import { useDeleteSet, useLogSet, useSetsForSession, useUpdateSet } from "~/hooks/use-sets";
+import {
+  useDeleteSet,
+  useLogSet,
+  useRemoveExerciseFromSession,
+  useSetsForSession,
+  useUpdateSet,
+} from "~/hooks/use-sets";
 
 export default function LiveWorkoutScreen() {
   const router = useRouter();
@@ -35,6 +41,7 @@ export default function LiveWorkoutScreen() {
   const logSet = useLogSet(sessionId ?? "");
   const updateSet = useUpdateSet(sessionId ?? "");
   const deleteSet = useDeleteSet(sessionId ?? "");
+  const removeExerciseFromSession = useRemoveExerciseFromSession(sessionId ?? "");
   const unit = useWeightUnit();
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
@@ -51,6 +58,12 @@ export default function LiveWorkoutScreen() {
   const [exerciseOrderOverride, setExerciseOrderOverride] = useState<
     string[] | null
   >(null);
+  // Client-only suppression of exercises the user removed mid-session.
+  // Not persisted: a reload re-exposes routine-sourced exercises with no sets.
+  // Same lifecycle as adHocExerciseIds / exerciseOrderOverride.
+  const [removedExerciseIds, setRemovedExerciseIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Map exercise_id -> target_rest_seconds (from the routine, if any).
   const restByExercise = useMemo(() => {
@@ -104,30 +117,34 @@ export default function LiveWorkoutScreen() {
       }
     }
 
+    // Client-side removals are session-local, not persisted.
+    const filtered = out.filter((e) => !removedExerciseIds.has(e.id));
+
     // Apply user-controlled reorder: items present in the override come
     // first in override order; any items not in the override (newly added
     // since the reorder) keep their default position appended.
     if (exerciseOrderOverride) {
       const overrideSet = new Set(exerciseOrderOverride);
-      const byId = new Map(out.map((e) => [e.id, e]));
+      const byId = new Map(filtered.map((e) => [e.id, e]));
       const reordered: ExerciseRow[] = [];
       for (const id of exerciseOrderOverride) {
         const ex = byId.get(id);
         if (ex) reordered.push(ex);
       }
-      for (const ex of out) {
+      for (const ex of filtered) {
         if (!overrideSet.has(ex.id)) reordered.push(ex);
       }
       return reordered;
     }
 
-    return out;
+    return filtered;
   }, [
     exercisesQ.data,
     routineExercisesQ.data,
     setsQ.data,
     adHocExerciseIds,
     exerciseOrderOverride,
+    removedExerciseIds,
   ]);
 
   const moveExercise = (exerciseId: string, direction: "up" | "down") => {
@@ -150,6 +167,34 @@ export default function LiveWorkoutScreen() {
     }
     return map;
   }, [setsQ.data]);
+
+  const handleRemoveExercise = async (ex: ExerciseRow, setCount: number) => {
+    if (!sessionId) return;
+    if (logSet.isPending) return;
+
+    const ok = await confirmDelete({
+      title: `Remove ${ex.name}?`,
+      message:
+        setCount > 0
+          ? `${setCount} logged set${setCount === 1 ? "" : "s"} for this exercise will be removed from this workout. This can't be undone.`
+          : `This exercise will be removed from this workout.`,
+      confirmLabel: "Remove",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+    try {
+      if (setCount > 0) {
+        await removeExerciseFromSession.mutateAsync(ex.id);
+      }
+      setRemovedExerciseIds((prev) => {
+        const next = new Set(prev);
+        next.add(ex.id);
+        return next;
+      });
+    } catch (err) {
+      console.warn("Remove exercise failed", err);
+    }
+  };
 
   const onFinish = async () => {
     if (!sessionId) return;
@@ -251,6 +296,13 @@ export default function LiveWorkoutScreen() {
                   console.warn("Delete set failed", err);
                 }
               }}
+              onRemove={() =>
+                handleRemoveExercise(
+                  ex,
+                  (setsByExercise.get(ex.id) ?? []).length,
+                )
+              }
+              removeDisabled={logSet.isPending}
             />
           ))
         )}
