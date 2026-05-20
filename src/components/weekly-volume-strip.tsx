@@ -1,5 +1,7 @@
+import { format } from "date-fns";
+import { useRouter } from "expo-router";
 import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import type { WeeklyVolumeRow } from "~/api/stats";
 import { useWeightUnit } from "~/hooks/use-preferences";
@@ -12,6 +14,8 @@ type Bucket = {
   label: string;
   totalKg: number;
   isCurrent: boolean;
+  /** Monday of this week — used to build the drill-down URL segment. */
+  start: Date;
 };
 
 type StripModel = {
@@ -51,6 +55,7 @@ function computeStripModel(data: WeeklyVolumeRow[]): StripModel {
     label: wk.label,
     totalKg: totals.get(wk.key) ?? 0,
     isCurrent: idx === weeks.length - 1,
+    start: wk.start,
   }));
 
   const maxKg = buckets.reduce((m, b) => (b.totalKg > m ? b.totalKg : m), 0);
@@ -60,6 +65,7 @@ function computeStripModel(data: WeeklyVolumeRow[]): StripModel {
 }
 
 export function WeeklyVolumeStrip(): React.JSX.Element | null {
+  const router = useRouter();
   const { data, isLoading, isError } = useWeeklyVolume();
   const unit = useWeightUnit();
 
@@ -88,7 +94,9 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
   if (!model) return null;
   if (model.maxKg === 0) return null;
 
-  // BRANCH 3: data — wrapper + bars + labels.
+  // BRANCH 3: data — wrapper + per-column pressables. Each column owns the
+  // bar (top, baseline-aligned via marginTop) and the date label (bottom),
+  // so the whole column is the tap target.
   return (
     <View className="border-b border-gray-200 px-4 py-5 dark:border-gray-800">
       <Text className="text-xs uppercase tracking-wide text-gray-500">
@@ -98,7 +106,7 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
         {formatVolume(model.currentWeekKg, unit)}
       </Text>
 
-      <View className="mt-4 h-24 flex-row items-end gap-1.5">
+      <View className="mt-4 flex-row gap-1.5">
         {model.buckets.map((b) => {
           const h =
             model.maxKg === 0
@@ -107,25 +115,31 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
                   MIN_BAR_HEIGHT,
                   Math.round((b.totalKg / model.maxKg) * PLOT_HEIGHT),
                 );
-          const cls =
+          const barCls =
             b.totalKg === 0
-              ? "flex-1 rounded-sm bg-gray-200 dark:bg-gray-800"
+              ? "rounded-sm bg-gray-200 dark:bg-gray-800"
               : b.isCurrent
-                ? "flex-1 rounded-sm bg-blue-500 dark:bg-blue-400"
-                : "flex-1 rounded-sm bg-gray-300 dark:bg-gray-700";
-          return <View key={b.key} style={{ height: h }} className={cls} />;
+                ? "rounded-sm bg-blue-500 dark:bg-blue-400"
+                : "rounded-sm bg-gray-300 dark:bg-gray-700";
+          const segment = format(b.start, "yyyy-MM-dd");
+          return (
+            <Pressable
+              key={b.key}
+              onPress={() => router.push(`/(app)/history/week/${segment}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`View week of ${b.label}`}
+              className="flex-1 active:opacity-70"
+            >
+              <View
+                style={{ height: h, marginTop: PLOT_HEIGHT - h }}
+                className={barCls}
+              />
+              <Text className="mt-1 text-center text-[10px] text-gray-500">
+                {b.label}
+              </Text>
+            </Pressable>
+          );
         })}
-      </View>
-
-      <View className="mt-1 flex-row gap-1.5">
-        {model.buckets.map((b) => (
-          <Text
-            key={b.key}
-            className="flex-1 text-center text-[10px] text-gray-500"
-          >
-            {b.label}
-          </Text>
-        ))}
       </View>
     </View>
   );
