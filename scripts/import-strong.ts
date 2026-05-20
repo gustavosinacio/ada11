@@ -250,6 +250,15 @@ function isCardioRow(r: StrongRow): boolean {
     (Number.isFinite(secs) && secs > 0);
 }
 
+// Build a session lookup key from a started_at + name pair. Normalizes
+// timestamps via Date.getTime() so that PostgREST's '2024-03-18T15:56:33+00:00'
+// format and the script's Date.toISOString() '2024-03-18T15:56:33.000Z' format
+// produce the same key. Without this, set inserts cannot resolve session ids
+// and dedup against existing imports fails.
+function tsKey(startedAt: string, name: string | null): string {
+  return `${new Date(startedAt).getTime()}|${name ?? ""}`;
+}
+
 async function fetchExercises(
   supabase: ReturnType<typeof getSupabase>,
   userId: string,
@@ -408,19 +417,62 @@ async function importCommand(
         }
       }
     } else {
-      console.log(`Creating ${toCreate.length} new exercises...`);
-      const { data: created, error } = await supabase
-        .from("exercises")
-        .insert(toCreate)
-        .select("id,name");
-      if (error) throw error;
-      for (const e of (created ?? []) as ExerciseSummary[]) {
-        const m = mapping.get(e.name);
-        if (m) {
-          m.action = "map";
-          m.ada11_exercise_id = e.id;
-          m.ada11_exercise_name = e.name;
+      // Phase 1 idempotency: check for already-existing strong-tagged
+      // exercises by name (from a prior partial run) and reuse their ids
+      // instead of inserting duplicates. The exercises table has no
+      // unique(user_id, name) so naive re-insert would silently create
+      // duplicates.
+      const names = toCreate.map((e) => e.name);
+      const existing: ExerciseSummary[] = [];
+      for (let i = 0; i < names.length; i += 100) {
+        const slice = names.slice(i, i + 100);
+        const { data, error } = await supabase
+          .from("exercises")
+          .select("id,name")
+          .eq("user_id", userId)
+          .eq("source", SOURCE_KEY)
+          .in("name", slice);
+        if (error) throw error;
+        existing.push(...((data ?? []) as ExerciseSummary[]));
+      }
+      const existingByName = new Map(existing.map((e) => [e.name, e.id]));
+
+      const inserts = toCreate.filter((e) => !existingByName.has(e.name));
+      const reused = toCreate.length - inserts.length;
+
+      // Flip reused entries to map immediately.
+      for (const m of mapping.values()) {
+        if (m.action === "create-new") {
+          const existingId = existingByName.get(m.strong_name);
+          if (existingId) {
+            m.action = "map";
+            m.ada11_exercise_id = existingId;
+            m.ada11_exercise_name = m.strong_name;
+          }
         }
+      }
+
+      if (inserts.length > 0) {
+        console.log(
+          `Creating ${inserts.length} new exercises${reused > 0 ? ` (${reused} already exist from a prior run, reusing)` : ""}...`,
+        );
+        const { data: created, error } = await supabase
+          .from("exercises")
+          .insert(inserts)
+          .select("id,name");
+        if (error) throw error;
+        for (const e of (created ?? []) as ExerciseSummary[]) {
+          const m = mapping.get(e.name);
+          if (m) {
+            m.action = "map";
+            m.ada11_exercise_id = e.id;
+            m.ada11_exercise_name = e.name;
+          }
+        }
+      } else {
+        console.log(
+          `All ${toCreate.length} create-new exercises already exist from a prior run; reusing.`,
+        );
       }
     }
   }
@@ -449,7 +501,7 @@ async function importCommand(
           ).toISOString()
         : null;
 
-    const key = `${startedAt}|${workoutName}`;
+    const key = tsKey(startedAt, workoutName);
     let group = groups.get(key);
     if (!group) {
       group = {
@@ -514,25 +566,36 @@ async function importCommand(
 
   const existingMap = new Map<string, string>();
   for (const s of existingSessions ?? []) {
-    existingMap.set(`${s.started_at}|${s.name ?? ""}`, s.id);
+    existingMap.set(tsKey(s.started_at, s.name), s.id);
   }
 
   const setCountByExisting = new Map<string, number>();
   const existingIds = [...existingMap.values()];
-  // Supabase's PostgREST .in() handles up to a few thousand IDs comfortably,
-  // but we slice defensively for safety.
-  for (let i = 0; i < existingIds.length; i += 1000) {
-    const slice = existingIds.slice(i, i + 1000);
+  // Batch size 20 sessions (~3.7KB URL of UUIDs) and paginate within each
+  // batch. Supabase's default max-rows-per-response is 1000, so without
+  // pagination a batch of N sessions × M sets each silently clips to 1000
+  // total and undercounts every session past the cutoff. Paginating via
+  // .range() until the page is smaller than pageSize guarantees a full read.
+  const pageSize = 1000;
+  for (let i = 0; i < existingIds.length; i += 20) {
+    const slice = existingIds.slice(i, i + 20);
     if (slice.length === 0) break;
-    const { data: setRows, error: scErr } = await supabase
-      .from("sets")
-      .select("session_id")
-      .in("session_id", slice)
-      .is("deleted_at", null);
-    if (scErr) throw scErr;
-    for (const row of setRows ?? []) {
-      const sid = (row as { session_id: string }).session_id;
-      setCountByExisting.set(sid, (setCountByExisting.get(sid) ?? 0) + 1);
+    let from = 0;
+    while (true) {
+      const { data: setRows, error: scErr } = await supabase
+        .from("sets")
+        .select("session_id")
+        .in("session_id", slice)
+        .is("deleted_at", null)
+        .range(from, from + pageSize - 1);
+      if (scErr) throw scErr;
+      const rows = setRows ?? [];
+      for (const row of rows) {
+        const sid = (row as { session_id: string }).session_id;
+        setCountByExisting.set(sid, (setCountByExisting.get(sid) ?? 0) + 1);
+      }
+      if (rows.length < pageSize) break;
+      from += pageSize;
     }
   }
 
@@ -570,17 +633,22 @@ async function importCommand(
     return;
   }
 
-  // Phase 4: delete partial sessions (sets cascade via FK onDelete='cascade')
+  // Phase 4: delete partial sessions (sets cascade via FK onDelete='cascade').
+  // Batched at 100 ids per call — same URL-length constraint as the SELECT
+  // .in() above.
   if (toReinsert.length > 0) {
     const ids = toReinsert.map((r) => r.existing_id);
-    const { error: delErr } = await supabase
-      .from("sessions")
-      .delete()
-      .in("id", ids);
-    if (delErr) throw delErr;
-    console.log(
-      `Deleted ${ids.length} partial sessions (sets cascaded).`,
-    );
+    let deleted = 0;
+    for (let i = 0; i < ids.length; i += 100) {
+      const slice = ids.slice(i, i + 100);
+      const { error: delErr } = await supabase
+        .from("sessions")
+        .delete()
+        .in("id", slice);
+      if (delErr) throw delErr;
+      deleted += slice.length;
+    }
+    console.log(`Deleted ${deleted} partial sessions (sets cascaded).`);
   }
 
   // Phase 5: insert sessions in batches
@@ -612,7 +680,7 @@ async function importCommand(
   // Phase 6: insert sets, keyed off inserted session id
   const sessionIdByKey = new Map<string, string>();
   for (const s of insertedSessions) {
-    sessionIdByKey.set(`${s.started_at}|${s.name ?? ""}`, s.id);
+    sessionIdByKey.set(tsKey(s.started_at, s.name), s.id);
   }
 
   type SetInsert = {
@@ -631,7 +699,7 @@ async function importCommand(
 
   const allSets: SetInsert[] = [];
   for (const g of allToInsert) {
-    const key = `${g.started_at}|${g.name}`;
+    const key = tsKey(g.started_at, g.name);
     const sessionId = sessionIdByKey.get(key);
     if (!sessionId) {
       console.warn(
