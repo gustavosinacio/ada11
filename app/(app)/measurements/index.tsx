@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { MeasurementListItem } from "~/components/measurement-list-item";
+import { MeasurementsProgressStrip } from "~/components/measurements-progress-strip";
 import { useLengthUnit, useWeightUnit } from "~/hooks/use-preferences";
 import { useMeasurements } from "~/hooks/use-measurements";
 
@@ -72,6 +73,7 @@ export default function MeasurementsList() {
         <FlatList
           data={data}
           keyExtractor={(e) => e.id}
+          ListHeaderComponent={<MeasurementsProgressStrip />}
           renderItem={({ item }) => (
             <MeasurementListItem
               entry={item}

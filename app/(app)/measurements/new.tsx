@@ -10,6 +10,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 
 import { DuplicateMeasurementDateError } from "~/api/measurements";
+import type { MeasurementEntryRow } from "~/db/types";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
@@ -82,17 +83,17 @@ export default function NewMeasurementScreen() {
     if (!duplicateError) return;
     setLookupNotice(null);
     const target = duplicateError.existingDateIso;
-    const findRow = () =>
-      (list.data ?? []).find((r) => r.measured_at.slice(0, 10) === target);
+    const findIn = (rows: readonly MeasurementEntryRow[]) =>
+      rows.find((r) => r.measured_at.slice(0, 10) === target);
 
-    let row = findRow();
+    let row = findIn(list.data ?? []);
     if (!row) {
       try {
-        await list.refetch();
+        const result = await list.refetch();
+        row = findIn(result.data ?? []);
       } catch {
         // fall through — we'll show the inline notice below
       }
-      row = findRow();
     }
     if (!row) {
       setLookupNotice(
@@ -100,7 +101,7 @@ export default function NewMeasurementScreen() {
       );
       return;
     }
-    router.replace(`/(app)/measurements/${row.id}`);
+    router.replace(`/(app)/measurements/${row.id}/edit`);
   };
 
   return (

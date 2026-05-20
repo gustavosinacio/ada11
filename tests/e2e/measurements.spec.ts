@@ -121,13 +121,31 @@ test.describe("Measurements feature (web)", () => {
       await expect(page.getByText("first entry").first()).toBeVisible();
 
       await page.getByText(/80\.0 kg/).first().click();
-      await page.waitForURL(/\/measurements\/[0-9a-f-]+/, { timeout: 10_000 });
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+$/, { timeout: 10_000 });
+      // View screen renders read-only value (no <input> element); the inline
+      // "Edit measurement" CTA promotes to the edit form. Use the headerRight
+      // pencil's accessibilityLabel — unique to the view screen (the list and
+      // edit screens don't expose this label, so it's a more discriminating
+      // selector than the per-screen weight text).
+      await expect(page.getByLabel("Edit measurement")).toBeVisible();
+
+      // Header-button coverage (accessibilityLabel → aria-label on web).
+      await page.getByLabel("Edit measurement").click();
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+\/edit$/, { timeout: 10_000 });
+      // Bounce back to view, then click the inline CTA to exercise both paths.
+      await page.goBack();
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+$/, { timeout: 10_000 });
+      await page.getByText("Edit measurement", { exact: true }).click();
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+\/edit$/, { timeout: 10_000 });
       await expect(page.locator("input").nth(IDX.weight)).toHaveValue("80.0");
 
       await fillInput(page, IDX.weight, "80.5");
       await page.getByText("Save changes", { exact: true }).last().click();
       await page.waitForURL(/\/measurements$/, { timeout: 10_000 });
-      await expect(page.getByText(/80\.5 kg/).first()).toBeVisible({ timeout: 10_000 });
+      // After `router.replace`, prior stack routes remain hidden in the DOM;
+      // the list row text may resolve in both the stale and the new mount.
+      // `.last()` picks the most recently pushed (visible) one.
+      await expect(page.getByText(/80\.5 kg/).last()).toBeVisible({ timeout: 10_000 });
     } finally {
       await deleteUserSafe(userId);
     }
@@ -208,6 +226,9 @@ test.describe("Measurements feature (web)", () => {
 
       await expect(page.getByText(/You already have a measurement for/)).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText("Open existing entry")).toBeVisible();
+
+      await page.getByText("Open existing entry").click();
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+\/edit$/, { timeout: 10_000 });
     } finally {
       await deleteUserSafe(userId);
     }
@@ -266,22 +287,31 @@ test.describe("Measurements feature (web)", () => {
       await page.waitForURL(/\/measurements$/, { timeout: 10_000 });
 
       await page.getByText(/80\.0 kg/).first().click();
-      await page.waitForURL(/\/measurements\/[0-9a-f-]+/, { timeout: 10_000 });
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+$/, { timeout: 10_000 });
 
       page.on("dialog", (d) => void d.accept());
+      await page.getByText("Edit measurement", { exact: true }).click();
+      await page.waitForURL(/\/measurements\/[0-9a-f-]+\/edit$/, { timeout: 10_000 });
       await page.getByText("Delete measurement", { exact: false }).last().click();
 
       await page.waitForURL(/\/measurements$/, { timeout: 10_000 });
+      // After `router.replace`, the prior route (edit screen's parent stack)
+      // remains hidden in the DOM with its own empty-state rendered (the
+      // list query cache is now empty too), so the empty-state text appears
+      // twice — the older (hidden) one is DOM-order first, the new visible
+      // one is DOM-order last. Assert on `.last()`.
       await expect(
-        page.getByText("No measurements logged yet. Log your first to start tracking progress."),
+        page.getByText("No measurements logged yet. Log your first to start tracking progress.").last(),
       ).toBeVisible({ timeout: 10_000 });
 
-      await page.getByText("Log measurement", { exact: true }).first().click();
+      // `.last()` for the same reason — the older Log measurement button
+      // from the prior stack route is still mounted but hidden.
+      await page.getByText("Log measurement", { exact: true }).last().click();
       await page.waitForURL(/\/measurements\/new/, { timeout: 10_000 });
       await fillInput(page, IDX.weight, "82");
       await page.getByText("Save measurement").last().click();
       await page.waitForURL(/\/measurements$/, { timeout: 10_000 });
-      await expect(page.getByText(/82\.0 kg/).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(/82\.0 kg/).last()).toBeVisible({ timeout: 10_000 });
     } finally {
       await deleteUserSafe(userId);
     }

@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 
 import { DuplicateMeasurementDateError } from "~/api/measurements";
+import type { MeasurementEntryRow } from "~/db/types";
 import { confirmDelete } from "~/components/confirm-delete";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -92,7 +93,7 @@ export default function EditMeasurementScreen() {
     }
     try {
       await update.mutateAsync({ id, patch: payload });
-      router.back();
+      router.replace("/(app)/measurements");
     } catch (e) {
       if (e instanceof DuplicateMeasurementDateError) {
         setDuplicateError(e);
@@ -111,7 +112,7 @@ export default function EditMeasurementScreen() {
     if (!ok) return;
     try {
       await remove.mutateAsync(id);
-      router.back();
+      router.replace("/(app)/measurements");
     } catch (err) {
       // surface inline via remove.isError below
       console.warn("Failed to delete measurement", err);
@@ -122,19 +123,19 @@ export default function EditMeasurementScreen() {
     if (!duplicateError) return;
     setLookupNotice(null);
     const target = duplicateError.existingDateIso;
-    const findRow = () =>
-      (list.data ?? []).find(
+    const findIn = (rows: readonly MeasurementEntryRow[]) =>
+      rows.find(
         (r) => r.id !== id && r.measured_at.slice(0, 10) === target,
       );
 
-    let row = findRow();
+    let row = findIn(list.data ?? []);
     if (!row) {
       try {
-        await list.refetch();
+        const result = await list.refetch();
+        row = findIn(result.data ?? []);
       } catch {
         // fall through
       }
-      row = findRow();
     }
     if (!row) {
       setLookupNotice(
@@ -142,7 +143,7 @@ export default function EditMeasurementScreen() {
       );
       return;
     }
-    router.replace(`/(app)/measurements/${row.id}`);
+    router.replace(`/(app)/measurements/${row.id}/edit`);
   };
 
   if (isLoading) {
