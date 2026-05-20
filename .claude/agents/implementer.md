@@ -34,6 +34,7 @@ Execute the approved design exactly. If you hit ambiguity not covered by the des
   2. Stop coding.
   3. Return to the Conductor with `status: blocked-question`.
   4. The Conductor routes back to Designer or escalates to the human. Do NOT guess.
+- **Typecheck after every `replace_all`** (and any other broad rename, including `Edit replace_all: true` and editor-wide find-and-replace). Shadow-rename failures are common and silent: e.g. introducing `const muscles = exercise.muscles ?? []` and then `replace_all exercise.muscles → muscles` also rewrites the const's own initializer to `const muscles = muscles ?? []` (self-reference). Run `npm run typecheck` immediately after each `replace_all`; do not batch multiple `replace_all`s before checking.
 - **Hard quality bar before reporting `done`:**
   - `npm run typecheck` passes.
   - `npm run lint` passes (or only pre-existing warnings).

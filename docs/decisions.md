@@ -170,6 +170,30 @@ When you change an architectural decision, append a new entry at the bottom unde
 
 ---
 
+## Decision 9 — Persisted query cache versioning
+
+**Question**: How does the client handle a TanStack Query persisted cache that was written by an older app build whose data shape no longer matches the current runtime?
+
+**Decided**: A single `queryCacheBuster` string exported from `src/lib/query-client.ts` and passed as `persistOptions.buster` to `<PersistQueryClientProvider>`. When the buster string changes, TanStack discards the persisted blob on first launch and queries refetch fresh from the server. Bump the buster string in the same commit as any schema change that adds, renames, or removes a column read by a persisted query.
+
+**Why this matters**: Without a buster, cached rows from before a schema change rehydrate verbatim — fields that the new runtime expects (and the TS type promises) are simply missing, surfacing as `Cannot read property 'X' of undefined` in any consumer that trusts the type. This happened once (see run `2026-05-20_0042_exercise-block-undefined-muscles`): iOS-only because the user's PWA had been freshly reinstalled today but the iOS native dev build retained AsyncStorage cache from before the `muscles` migration. Defensive reads in consumers patch the symptom; the buster prevents recurrence on the next migration.
+
+**When to bump**:
+- Migration ADDs a required column read by a persisted query.
+- Migration RENAMES or REMOVES a column read by a persisted query.
+- API response shape changes for any query that is persisted.
+
+**Naming convention**: `schema-YYYY-MM-DD-<short-slug>` (e.g. `schema-2026-05-19-muscles`). Date marks the migration; slug names the change.
+
+**What was rejected**:
+- **No buster, rely on defensive reads everywhere**: pushes the responsibility into every consumer; brittle, accumulates noise, easy to forget.
+- **Hash of the schema file as the buster**: would auto-invalidate on every schema change, including additive changes that don't touch persisted queries. Too aggressive — every schema migration would force every user into a refetch storm.
+- **Per-query versioning**: TanStack persister is global; per-query versioning would need a wrapper layer. Not justified for ada11's scale.
+
+**Confidence: HIGH. Risk: LOW** — the bust on schema change costs one refetch per user; the alternative (consumer crashes) is much worse.
+
+---
+
 ## Revisions
 
 _None yet. When a decision changes, add an entry below with the date and what changed._

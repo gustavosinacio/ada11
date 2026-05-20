@@ -135,6 +135,8 @@ Patterns across retros drive updates to this playbook and the agent definitions 
 
 For these, use Claude Code directly — the pipeline overhead is not justified.
 
+For **bugs** (vague repro, regression risk, multi-file potential, UI symptoms), use the **bug-fix pipeline** in `docs/playbook-fix.md` (skill: `/pipeline-fix`) instead.
+
 ## Reference
 
 - Project overview — `docs/README.md`.
