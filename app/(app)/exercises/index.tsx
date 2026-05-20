@@ -61,7 +61,7 @@ export default function ExercisesList() {
           renderItem={({ item }) => (
             <ExerciseListItem
               exercise={item}
-              onPress={() => router.push(`/(app)/exercises/${item.id}`)}
+              onPress={() => router.push(`/(app)/exercises/${item.id}/progress`)}
             />
           )}
           refreshing={isRefetching}

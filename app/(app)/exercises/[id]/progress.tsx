@@ -1,6 +1,15 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Pencil } from "lucide-react-native";
 import { useMemo } from "react";
-import { ActivityIndicator, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { useExercise } from "~/hooks/use-exercises";
@@ -20,11 +29,32 @@ function shortDate(iso: string): string {
 
 export default function ExerciseProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const colorScheme = useColorScheme();
   const exercise = useExercise(id);
   const progressQ = useExerciseProgress(id);
   const unit = useWeightUnit();
   const { width: screenWidth } = useWindowDimensions();
   const chartWidth = Math.min(screenWidth - 48, 500);
+
+  const screenHeader = (
+    <Stack.Screen
+      options={{
+        title: exercise.data?.name ?? "Progress",
+        headerShown: true,
+        headerRight: () => (
+          <Pressable
+            onPress={() => router.push(`/(app)/exercises/${id}`)}
+            accessibilityLabel="Edit exercise"
+            accessibilityRole="button"
+            className="px-3 py-1"
+          >
+            <Pencil color={colorScheme === "dark" ? "#fff" : "#000"} size={20} />
+          </Pressable>
+        ),
+      }}
+    />
+  );
 
   const { e1rmData, volumeData, bestE1rm, totalSessions } = useMemo(() => {
     const sessions = progressQ.data ?? [];
@@ -70,7 +100,7 @@ export default function ExerciseProgressScreen() {
   if (exercise.isLoading || progressQ.isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-black">
-        <Stack.Screen options={{ title: "Progress", headerShown: true }} />
+        {screenHeader}
         <ActivityIndicator />
       </View>
     );
@@ -81,9 +111,7 @@ export default function ExerciseProgressScreen() {
       className="flex-1 bg-white dark:bg-black"
       contentContainerClassName="px-6 py-6 pb-12"
     >
-      <Stack.Screen
-        options={{ title: exercise.data?.name ?? "Progress", headerShown: true }}
-      />
+      {screenHeader}
 
       <Text className="mb-1 text-2xl font-semibold text-black dark:text-white">
         {exercise.data?.name}

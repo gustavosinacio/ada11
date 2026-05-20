@@ -59,6 +59,7 @@ export function useFinishSession() {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.setQueryData(KEYS.detail(row.id), row);
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }

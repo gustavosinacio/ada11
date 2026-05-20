@@ -1,8 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 
 import { confirmDelete } from "~/components/confirm-delete";
@@ -84,7 +84,7 @@ export default function EditExerciseScreen() {
     if (!ok) return;
     try {
       await remove.mutateAsync(id);
-      router.back();
+      router.replace("/(app)/exercises");
     } catch (err) {
       console.warn("Failed to delete exercise", err);
     }
@@ -181,17 +181,6 @@ export default function EditExerciseScreen() {
             : "Failed to save"}
         </Text>
       ) : null}
-
-      <Link href={`/exercises/${id}/progress`} asChild>
-        <Pressable
-          accessibilityRole="button"
-          className="mb-4 rounded-lg border border-blue-500 py-3"
-        >
-          <Text className="text-center text-base font-medium text-blue-500">
-            View progress
-          </Text>
-        </Pressable>
-      </Link>
 
       <View className="mt-2 gap-3">
         <Button
