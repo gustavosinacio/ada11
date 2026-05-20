@@ -85,6 +85,51 @@ async function main() {
       .select();
     if ((bDel ?? []).length > 0) throw new Error("FAIL: B deleted A's exercise");
 
+    // -------------------------------------------------------------------
+    // measurement_entries — same RLS pattern, different table.
+    // -------------------------------------------------------------------
+    const { data: aMeas, error: mInsErr } = await clientA
+      .from("measurement_entries")
+      .insert({
+        user_id: a.user.id,
+        measured_at: new Date().toISOString(),
+        weight_kg: "80",
+      })
+      .select()
+      .single();
+    if (mInsErr || !aMeas) {
+      throw new Error(`A measurement insert failed: ${mInsErr?.message}`);
+    }
+
+    // B reads.
+    const { data: bMRead } = await clientB
+      .from("measurement_entries")
+      .select("*")
+      .eq("id", aMeas.id);
+    if ((bMRead ?? []).length > 0) {
+      throw new Error("FAIL: B can read A's measurement");
+    }
+
+    // B updates.
+    const { data: bMUpd } = await clientB
+      .from("measurement_entries")
+      .update({ weight_kg: "1" })
+      .eq("id", aMeas.id)
+      .select();
+    if ((bMUpd ?? []).length > 0) {
+      throw new Error("FAIL: B updated A's measurement");
+    }
+
+    // B deletes.
+    const { data: bMDel } = await clientB
+      .from("measurement_entries")
+      .delete()
+      .eq("id", aMeas.id)
+      .select();
+    if ((bMDel ?? []).length > 0) {
+      throw new Error("FAIL: B deleted A's measurement");
+    }
+
     console.log("✅ RLS test passed — B cannot read/update/delete A's data.");
   } finally {
     await admin.auth.admin.deleteUser(a.user.id);

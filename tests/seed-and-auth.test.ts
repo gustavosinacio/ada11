@@ -33,7 +33,7 @@ async function main() {
     // Admin queries (bypasses RLS) — verify the trigger ran.
     const { data: prefs, error: pErr } = await admin
       .from("user_preferences")
-      .select("user_id, weight_unit")
+      .select("user_id, weight_unit, length_unit")
       .eq("user_id", userId);
     if (pErr) throw new Error(`prefs query: ${pErr.message}`);
     if (!prefs || prefs.length !== 1) {
@@ -42,7 +42,12 @@ async function main() {
     if (prefs[0]!.weight_unit !== "kg") {
       throw new Error(`FAIL: default weight_unit should be 'kg', got '${prefs[0]!.weight_unit}'`);
     }
-    console.log(`✅ user_preferences seeded (weight_unit=${prefs[0]!.weight_unit})`);
+    if (prefs[0]!.length_unit !== "cm") {
+      throw new Error(`FAIL: default length_unit should be 'cm', got '${prefs[0]!.length_unit}'`);
+    }
+    console.log(
+      `✅ user_preferences seeded (weight_unit=${prefs[0]!.weight_unit}, length_unit=${prefs[0]!.length_unit})`,
+    );
 
     const { data: exercises, error: eErr } = await admin
       .from("exercises")
