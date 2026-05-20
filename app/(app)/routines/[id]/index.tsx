@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useColorScheme,
   View,
 } from "react-native";
 import { z } from "zod";
@@ -40,6 +41,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function RoutineBuilderScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, isLoading, isError, error } = useRoutine(id);
   const update = useUpdateRoutine();
@@ -187,7 +189,7 @@ export default function RoutineBuilderScreen() {
             accessibilityLabel="Add exercise"
             className="flex-row items-center rounded-lg bg-black px-3 py-2 dark:bg-white"
           >
-            <Plus color="#fff" size={16} />
+            <Plus color={colorScheme === "dark" ? "#000" : "#fff"} size={16} />
             <Text className="ml-1 text-sm font-medium text-white dark:text-black">
               Add
             </Text>

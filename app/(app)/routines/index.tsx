@@ -1,12 +1,13 @@
 import { Stack, useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
-import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, useColorScheme, View } from "react-native";
 
 import { RoutineListItem } from "~/components/routine-list-item";
 import { useRoutines } from "~/hooks/use-routines";
 
 export default function RoutinesList() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
   const { data, isLoading, isError, error, refetch, isRefetching } = useRoutines();
 
   return (
@@ -22,7 +23,7 @@ export default function RoutinesList() {
               accessibilityRole="button"
               className="px-3 py-1"
             >
-              <Plus color="#000" size={22} />
+              <Plus color={colorScheme === "dark" ? "#fff" : "#000"} size={22} />
             </Pressable>
           ),
         }}
