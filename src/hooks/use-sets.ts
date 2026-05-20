@@ -38,8 +38,10 @@ export function useLogSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: LogSetInput) => logSet(input),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+    },
   });
 }
 
@@ -48,8 +50,10 @@ export function useUpdateSet(sessionId: string) {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateSetInput }) =>
       updateSet(id, patch),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+    },
   });
 }
 
@@ -57,7 +61,9 @@ export function useDeleteSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => softDeleteSet(id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+    },
   });
 }

@@ -58,6 +58,7 @@ export function useFinishSession() {
       qc.setQueryData(KEYS.active, null);
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.setQueryData(KEYS.detail(row.id), row);
+      qc.invalidateQueries({ queryKey: ["stats"] });
     },
   });
 }
@@ -93,6 +94,7 @@ export function useSoftDeleteSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.invalidateQueries({ queryKey: KEYS.active });
+      qc.invalidateQueries({ queryKey: ["stats"] });
     },
   });
 }

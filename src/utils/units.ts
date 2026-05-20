@@ -21,3 +21,26 @@ export function parseWeightToKg(input: string, unit: WeightUnit): number | null 
   if (Number.isNaN(value)) return null;
   return unit === "kg" ? value : lbsToKg(value);
 }
+
+/**
+ * Aggregate-volume formatter. Distinct from `formatWeight` because volume
+ * readouts (a) abbreviate above 1000 with one decimal (`"12.4k kg"`), and
+ * (b) drop decimals for whole values (`"840 kg"`) so the eye can scan at a
+ * glance. Per-set displays should keep using `formatWeight`.
+ *
+ * Boundary rule (MIN-3): we round-then-compare. 999.5 kg rounds to 1000 and
+ * renders as `"1.0k kg"`, avoiding the kg-vs-lbs asymmetry where the same
+ * underlying volume would abbreviate in one unit and not the other.
+ */
+export function formatVolume(
+  kg: number | null | undefined,
+  unit: WeightUnit,
+): string {
+  if (kg == null) return "—";
+  const value = unit === "kg" ? kg : kgToLbs(kg);
+  const rounded = Math.round(value);
+  if (rounded >= 1000) {
+    return `${(value / 1000).toFixed(1)}k ${unit}`;
+  }
+  return `${rounded} ${unit}`;
+}
