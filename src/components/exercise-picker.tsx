@@ -33,7 +33,7 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
     return list.filter((e) => {
       return (
         e.name.toLowerCase().includes(q) ||
-        e.muscles.some((m) => m.toLowerCase().includes(q)) ||
+        (e.muscles ?? []).some((m) => m.toLowerCase().includes(q)) ||
         (e.equipment ?? "").toLowerCase().includes(q)
       );
     });
@@ -92,6 +92,7 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
             }
             renderItem={({ item }) => {
               const already = exclude.has(item.id);
+              const muscles = item.muscles ?? [];
               return (
                 <Pressable
                   onPress={() => {
@@ -108,11 +109,11 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
                     >
                       {item.name}
                     </Text>
-                    {(item.muscles.length > 0 || item.equipment) && (
+                    {(muscles.length > 0 || item.equipment) && (
                       <Text className="mt-0.5 text-sm text-gray-500">
                         {[
-                          item.muscles.length > 0
-                            ? item.muscles.join(", ")
+                          muscles.length > 0
+                            ? muscles.join(", ")
                             : null,
                           item.equipment,
                         ]

@@ -54,6 +54,8 @@ export function RoutineExerciseRow({
     setRest(entry.target_rest_seconds?.toString() ?? "");
   }, [entry.target_sets, entry.target_reps, entry.target_weight, entry.target_rest_seconds]);
 
+  const muscles = entry.exercise.muscles ?? [];
+
   return (
     <View className="border-b border-gray-100 bg-white px-4 py-3 dark:border-gray-900 dark:bg-black">
       <View className="flex-row items-center justify-between">
@@ -61,11 +63,11 @@ export function RoutineExerciseRow({
           <Text className="text-base font-medium text-black dark:text-white">
             {entry.exercise.name}
           </Text>
-          {(entry.exercise.muscles.length > 0 || entry.exercise.equipment) && (
+          {(muscles.length > 0 || entry.exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">
               {[
-                entry.exercise.muscles.length > 0
-                  ? entry.exercise.muscles.join(", ")
+                muscles.length > 0
+                  ? muscles.join(", ")
                   : null,
                 entry.exercise.equipment,
               ]

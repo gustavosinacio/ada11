@@ -39,6 +39,8 @@ export function ExerciseBlock({
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const muscles = exercise.muscles ?? [];
+
   // Last working set in chronological order — drop sets stack onto it.
   const lastWorkingSet = useMemo(() => {
     for (let i = sets.length - 1; i >= 0; i--) {
@@ -83,11 +85,11 @@ export function ExerciseBlock({
           <Text className="text-lg font-semibold text-black dark:text-white">
             {exercise.name}
           </Text>
-          {(exercise.muscles.length > 0 || exercise.equipment) && (
+          {(muscles.length > 0 || exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">
               {[
-                exercise.muscles.length > 0
-                  ? exercise.muscles.join(", ")
+                muscles.length > 0
+                  ? muscles.join(", ")
                   : null,
                 exercise.equipment,
               ]

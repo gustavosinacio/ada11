@@ -9,7 +9,7 @@ import { useColorScheme } from "react-native";
 import "react-native-reanimated";
 
 import { AuthProvider, useAuth } from "~/lib/auth-context";
-import { queryClient, queryPersister } from "~/lib/query-client";
+import { queryCacheBuster, queryClient, queryPersister } from "~/lib/query-client";
 
 function AuthGate() {
   const { session, loading } = useAuth();
@@ -40,7 +40,11 @@ export default function RootLayout() {
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister: queryPersister, maxAge: 1000 * 60 * 60 * 24 * 7 }}
+      persistOptions={{
+        persister: queryPersister,
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+        buster: queryCacheBuster,
+      }}
     >
       <AuthProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

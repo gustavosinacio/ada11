@@ -20,3 +20,8 @@ export const queryPersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: "ada11-query-cache",
 });
+
+// Bump when a schema change makes previously persisted query data
+// incompatible with the current runtime (e.g. new required field added).
+// The PersistQueryClientProvider invalidates persisted cache when this changes.
+export const queryCacheBuster = "schema-2026-05-19-muscles";
