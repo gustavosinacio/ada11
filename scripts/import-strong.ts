@@ -399,6 +399,14 @@ async function importCommand(
   if (toCreate.length > 0) {
     if (dryRun) {
       console.log(`[dry-run] would create ${toCreate.length} exercises`);
+      // Assign placeholder ids so Phase 2 can process create-new rows and
+      // produce accurate session/set counts. The placeholder is never
+      // inserted because dry-run short-circuits before any writes.
+      for (const m of mapping.values()) {
+        if (m.action === "create-new") {
+          m.ada11_exercise_id = "dry-run-placeholder";
+        }
+      }
     } else {
       console.log(`Creating ${toCreate.length} new exercises...`);
       const { data: created, error } = await supabase
@@ -430,7 +438,6 @@ async function importCommand(
     const m = mapping.get(strongExerciseName);
     if (!m) continue;
     if (m.action === "drop") continue;
-    if (m.action === "create-new" && dryRun) continue; // no id yet in dry-run
     if (!m.ada11_exercise_id) continue;
 
     const startedAt = parseStrongDateToUtc(strongDate).toISOString();
