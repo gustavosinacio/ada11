@@ -98,6 +98,20 @@ export async function updateSessionName(
   return data as SessionRow;
 }
 
+export async function updateSessionTimes(
+  id: string,
+  times: { started_at: string; ended_at: string },
+): Promise<SessionRow> {
+  const { data, error } = await supabase
+    .from("sessions")
+    .update({ started_at: times.started_at, ended_at: times.ended_at })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SessionRow;
+}
+
 export async function softDeleteSession(id: string): Promise<void> {
   const { error } = await supabase
     .from("sessions")

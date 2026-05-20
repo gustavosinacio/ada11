@@ -12,6 +12,7 @@ import {
 
 import { ExerciseBlock } from "~/components/exercise-block";
 import { ExercisePicker } from "~/components/exercise-picker";
+import { SessionTimesEditor } from "~/components/session-times-editor";
 import { Button } from "~/components/ui/button";
 import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow, SetRow } from "~/db/types";
@@ -21,6 +22,7 @@ import {
   useSession,
   useSoftDeleteSession,
   useUpdateSessionName,
+  useUpdateSessionTimes,
 } from "~/hooks/use-sessions";
 import {
   useDeleteSet,
@@ -29,29 +31,6 @@ import {
   useUpdateSet,
 } from "~/hooks/use-sets";
 import { formatWeight } from "~/utils/units";
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function formatDuration(startIso: string, endIso: string | null): string {
-  if (!endIso) return "—";
-  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
 export default function SessionDetailScreen() {
   const router = useRouter();
@@ -66,6 +45,7 @@ export default function SessionDetailScreen() {
   const updateSet = useUpdateSet(id ?? "");
   const deleteSet = useDeleteSet(id ?? "");
   const updateName = useUpdateSessionName();
+  const updateTimes = useUpdateSessionTimes();
   const softDelete = useSoftDeleteSession();
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -214,12 +194,23 @@ export default function SessionDetailScreen() {
             </Text>
           ) : null}
 
-          <Text className="mt-3 text-sm text-gray-500">
-            {formatDateTime(session.data.started_at)}
-          </Text>
-          <Text className="mt-0.5 text-sm text-gray-500">
-            Duration: {formatDuration(session.data.started_at, session.data.ended_at)}
-          </Text>
+          <SessionTimesEditor
+            startedAt={session.data.started_at}
+            endedAt={session.data.ended_at!}
+            setsCompletedAt={(setsQ.data ?? []).map((s) => s.completed_at)}
+            isSubmitting={updateTimes.isPending}
+            submitError={
+              updateTimes.isError
+                ? updateTimes.error instanceof Error
+                  ? updateTimes.error.message
+                  : "Failed to update session times"
+                : null
+            }
+            onSubmit={(times) =>
+              updateTimes.mutate({ id: session.data!.id, ...times })
+            }
+            onCancel={() => updateTimes.reset()}
+          />
           <Text className="mt-0.5 text-sm text-gray-500">
             Total: {totals.totalSets} {totals.totalSets === 1 ? "set" : "sets"} ·{" "}
             {totals.totalVolumeKg > 0

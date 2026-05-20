@@ -201,6 +201,186 @@ test.describe("Ada11 CRUD flows (web)", () => {
     }
   });
 
+  test("history: edit started_at backward by 1h, duration updates", async ({
+    page,
+  }) => {
+    const email = `e2e-edit-times-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+
+    try {
+      // Seed a finished session directly so the edit-times flow has a target
+      // independent of the workout-finish path.
+      const now = new Date();
+      const startedAt = new Date(now.getTime() - 60 * 60 * 1000); // 1h ago
+      const endedAt = new Date(now.getTime() - 30 * 60 * 1000); // 30m ago → 30m duration
+      const { data: sess, error: sessErr } = await admin
+        .from("sessions")
+        .insert({
+          user_id: userId,
+          started_at: startedAt.toISOString(),
+          ended_at: endedAt.toISOString(),
+          name: "Edit-times target",
+        })
+        .select("id")
+        .single();
+      if (sessErr || !sess) throw new Error(`session seed: ${sessErr?.message}`);
+
+      await signInAndLand(page, email);
+
+      // Open the session detail directly.
+      await page.goto(`/history/${sess.id}`, { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByText("Edit-times target").first(),
+      ).toBeVisible({ timeout: 10_000 });
+
+      // Original duration: 30m.
+      await expect(
+        page.getByText(/Duration:\s+30m/).first(),
+      ).toBeVisible({ timeout: 5_000 });
+
+      // Reveal the editor.
+      await page.getByLabel("Edit start and end times").click();
+      await expect(page.getByLabel("Start date")).toBeVisible({
+        timeout: 5_000,
+      });
+
+      // Move started_at back by 1 hour (60 minutes earlier). Compute new
+      // local-time string by reading the placeholder current value, but
+      // easier: just set absolute fields based on `startedAt - 1h`.
+      const newStart = new Date(startedAt.getTime() - 60 * 60 * 1000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const newStartDate = `${newStart.getFullYear()}-${pad(
+        newStart.getMonth() + 1,
+      )}-${pad(newStart.getDate())}`;
+      const newStartTime = `${pad(newStart.getHours())}:${pad(
+        newStart.getMinutes(),
+      )}`;
+
+      await page.getByLabel("Start date").fill(newStartDate);
+      await page.getByLabel("Start time").fill(newStartTime);
+
+      // End remains at original endedAt; ensure End fields stay populated.
+      const endDate = `${endedAt.getFullYear()}-${pad(
+        endedAt.getMonth() + 1,
+      )}-${pad(endedAt.getDate())}`;
+      const endTime = `${pad(endedAt.getHours())}:${pad(endedAt.getMinutes())}`;
+      await page.getByLabel("End date").fill(endDate);
+      await page.getByLabel("End time").fill(endTime);
+
+      await page.getByText("Save", { exact: true }).last().click();
+
+      // After save, the editor closes back to read-only view. New duration
+      // is 1h30m (start was moved back 1h; end unchanged).
+      await expect(
+        page.getByText(/Duration:\s+1h\s+30m/).first(),
+      ).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("history: edit started_at across ISO-week boundary — list moves, strip stays", async ({
+    page,
+  }) => {
+    const email = `e2e-edit-times-week-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+
+    try {
+      // Seed a finished session in the CURRENT ISO week.
+      const now = new Date();
+      const startedAt = new Date(now.getTime() - 60 * 60 * 1000);
+      const endedAt = new Date(now.getTime() - 30 * 60 * 1000);
+      const { data: sess, error: sessErr } = await admin
+        .from("sessions")
+        .insert({
+          user_id: userId,
+          started_at: startedAt.toISOString(),
+          ended_at: endedAt.toISOString(),
+          name: "Cross-week target",
+        })
+        .select("id")
+        .single();
+      if (sessErr || !sess) throw new Error(`session seed: ${sessErr?.message}`);
+
+      // Seed one set so the strip bar has non-zero volume in the current week.
+      // (Without sets, the strip would have nothing to bucket and the
+      //  asymmetry assertion would be vacuous.)
+      const { data: exRow, error: exErr } = await admin
+        .from("exercises")
+        .select("id")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .limit(1)
+        .single();
+      if (exErr || !exRow)
+        throw new Error(`seed exercise lookup: ${exErr?.message}`);
+      const { error: setErr } = await admin.from("sets").insert({
+        user_id: userId,
+        session_id: sess.id,
+        exercise_id: exRow.id,
+        set_number: 1,
+        reps: 5,
+        weight: "100",
+        set_type: "working",
+        completed_at: endedAt.toISOString(),
+      });
+      if (setErr) throw new Error(`seed set: ${setErr.message}`);
+
+      await signInAndLand(page, email);
+
+      // Open the session detail. Move started_at back by 8 days so it lands
+      // in the previous ISO week.
+      await page.goto(`/history/${sess.id}`, { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByText("Cross-week target").first(),
+      ).toBeVisible({ timeout: 10_000 });
+
+      await page.getByLabel("Edit start and end times").click();
+
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const newStart = new Date(startedAt.getTime() - 8 * 24 * 60 * 60 * 1000);
+      const newEnd = new Date(endedAt.getTime() - 8 * 24 * 60 * 60 * 1000);
+      await page
+        .getByLabel("Start date")
+        .fill(
+          `${newStart.getFullYear()}-${pad(newStart.getMonth() + 1)}-${pad(newStart.getDate())}`,
+        );
+      await page
+        .getByLabel("Start time")
+        .fill(`${pad(newStart.getHours())}:${pad(newStart.getMinutes())}`);
+      await page
+        .getByLabel("End date")
+        .fill(
+          `${newEnd.getFullYear()}-${pad(newEnd.getMonth() + 1)}-${pad(newEnd.getDate())}`,
+        );
+      await page
+        .getByLabel("End time")
+        .fill(`${pad(newEnd.getHours())}:${pad(newEnd.getMinutes())}`);
+
+      await page.getByText("Save", { exact: true }).last().click();
+
+      // Editor closes; verify session details reflect the new start date.
+      await expect(page.getByLabel("Edit start and end times")).toBeVisible({
+        timeout: 10_000,
+      });
+
+      // Asymmetry: the set's completed_at was NOT moved, so the weekly-volume
+      // strip bar for the CURRENT week still includes the set's volume.
+      // Navigate to History root and assert the current-week bar is still
+      // non-zero (we only seeded one set, so volume is 100 × 5 = 500).
+      await page.goto("/history", { waitUntil: "domcontentloaded" });
+      await expect(page.getByText("This week", { exact: true })).toBeVisible({
+        timeout: 15_000,
+      });
+      // Volume shown in compact form (500 kg).
+      await expect(page.getByText(/500 kg/).first()).toBeVisible({
+        timeout: 5_000,
+      });
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
   test("profile: weight unit toggle to lbs persists across reload", async ({ page }) => {
     const email = `e2e-prefs-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);

@@ -4,6 +4,7 @@
 
 ## Done
 
+[x] Edit a workout's start and end time from the history detail screen — e.g. fix a session that was finished hours late, or one started before the user remembered to tap "Quick start".
 [x] Allow user to remove exercise from current session in progress.
 [x] Measurements screen does not need to live on the bottom bar. It can be moved to the profile page as a button in the page itself
 [x] Tela de iniciar treino pode ser unificada com a tela de rotinas, como no strong

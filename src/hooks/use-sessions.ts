@@ -9,6 +9,7 @@ import {
   startSession,
   updateSessionName,
   updateSessionNotes,
+  updateSessionTimes,
 } from "~/api/sessions";
 
 const KEYS = {
@@ -84,6 +85,28 @@ export function useUpdateSessionName() {
     onSuccess: (row) => {
       qc.setQueryData(KEYS.detail(row.id), row);
       qc.invalidateQueries({ queryKey: KEYS.all });
+    },
+  });
+}
+
+export function useUpdateSessionTimes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      started_at,
+      ended_at,
+    }: {
+      id: string;
+      started_at: string;
+      ended_at: string;
+    }) => updateSessionTimes(id, { started_at, ended_at }),
+    onSuccess: (row) => {
+      qc.setQueryData(KEYS.detail(row.id), row);
+      qc.invalidateQueries({ queryKey: KEYS.all });
+      qc.invalidateQueries({ queryKey: KEYS.active });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }
