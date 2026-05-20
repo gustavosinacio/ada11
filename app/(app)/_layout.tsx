@@ -2,7 +2,6 @@ import { Tabs } from "expo-router";
 import {
   Dumbbell,
   History,
-  Ruler,
   User,
   Wrench,
 } from "lucide-react-native";
@@ -42,10 +41,7 @@ export default function AppLayout() {
         />
         <Tabs.Screen
           name="measurements"
-          options={{
-            title: "Measurements",
-            tabBarIcon: ({ color, size }) => <Ruler color={color} size={size} />,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="profile"

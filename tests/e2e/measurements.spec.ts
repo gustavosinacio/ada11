@@ -72,7 +72,9 @@ async function signInAndLand(page: Page, email: string) {
 }
 
 async function goToMeasurements(page: Page) {
-  await page.getByText("Measurements", { exact: true }).first().click();
+  await page.getByText("Profile", { exact: true }).first().click();
+  await page.waitForURL(/\/profile/, { timeout: 10_000 });
+  await page.getByLabel("Measurements").click();
   await page.waitForURL(/\/measurements/, { timeout: 10_000 });
 }
 
@@ -317,16 +319,16 @@ test.describe("Measurements feature (web)", () => {
     }
   });
 
-  test("regression: 5 tabs render, no Routines tab, Profile shows weight + length unit toggles", async ({ page }) => {
+  test("regression: 4 tabs render, no Routines or Measurements tab, Profile shows weight + length unit toggles + Measurements row", async ({ page }) => {
     const email = `e2e-measure-regression-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
     try {
       await signInAndLand(page, email);
       await expect(page.getByText("Workout", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Routines", { exact: true })).not.toBeVisible();
+      await expect(page.getByText("Measurements", { exact: true })).not.toBeVisible();
       await expect(page.getByText("Exercises", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("History", { exact: true }).first()).toBeVisible();
-      await expect(page.getByText("Measurements", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Profile", { exact: true }).first()).toBeVisible();
 
       await page.getByText("History", { exact: true }).first().click();
@@ -336,6 +338,7 @@ test.describe("Measurements feature (web)", () => {
       await page.waitForURL(/\/profile/, { timeout: 10_000 });
       await expect(page.getByText("Weight unit").first()).toBeVisible();
       await expect(page.getByText("Length unit").first()).toBeVisible();
+      await expect(page.getByLabel("Measurements")).toBeVisible();
     } finally {
       await deleteUserSafe(userId);
     }

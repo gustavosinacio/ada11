@@ -63,17 +63,17 @@ test.afterAll(async () => {
 });
 
 test.describe("Strong-style unify — probes", () => {
-  test("5-tab IA: tab bar shows Workout/Exercises/History/Measurements/Profile (no Routines)", async ({ page }) => {
-    const email = `e2e-probe-5tabs-${Date.now()}@test.com`;
+  test("4-tab IA: tab bar shows Workout/Exercises/History/Profile (no Routines, no Measurements)", async ({ page }) => {
+    const email = `e2e-probe-4tabs-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
     try {
       await signInAndLand(page, email);
       await expect(page.getByText("Workout", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Exercises", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("History", { exact: true }).first()).toBeVisible();
-      await expect(page.getByText("Measurements", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Profile", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Routines", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Measurements", { exact: true })).toHaveCount(0);
     } finally { await deleteUserSafe(userId); }
   });
 
@@ -124,10 +124,6 @@ test.describe("Strong-style unify — probes", () => {
 
       await page.getByText("History", { exact: true }).first().click();
       await page.waitForURL(/\/history/, { timeout: 10_000 });
-      await expect(page.getByLabel("Resume workout in progress")).toBeVisible();
-
-      await page.getByText("Measurements", { exact: true }).first().click();
-      await page.waitForURL(/\/measurements/, { timeout: 10_000 });
       await expect(page.getByLabel("Resume workout in progress")).toBeVisible();
 
       await page.getByText("Profile", { exact: true }).first().click();

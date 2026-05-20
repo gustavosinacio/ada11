@@ -1,4 +1,5 @@
-import { ChevronRight } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { ChevronRight, Ruler } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Button } from "~/components/ui/button";
@@ -11,6 +12,7 @@ import {
 } from "~/hooks/use-preferences";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const prefs = usePreferences();
   const setUnit = useSetWeightUnit();
@@ -118,6 +120,19 @@ export default function ProfileScreen() {
           ) : null}
         </View>
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Measurements"
+        onPress={() => router.push("/(app)/measurements")}
+        className="mb-6 flex-row items-center justify-between rounded-lg border border-gray-200 px-4 py-4 dark:border-gray-800"
+      >
+        <View className="flex-row items-center">
+          <Ruler color="#9ca3af" size={20} />
+          <Text className="ml-3 text-base text-black dark:text-white">Measurements</Text>
+        </View>
+        <ChevronRight color="#9ca3af" size={20} />
+      </Pressable>
 
       <Text className="mb-2 text-sm font-medium uppercase text-gray-500">
         About
