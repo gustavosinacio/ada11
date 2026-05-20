@@ -133,16 +133,14 @@ Two passes:
 
 1. **Analyze** — emit a mapping file next to the CSV, with one row per unique Strong exercise name and a suggested action (`map` to an existing ada11 exercise, `create-new`, or `drop`):
    ```bash
-   set -a && . ./.env.local && set +a && \
-     npm run import:strong -- analyze \
+   npm run import:strong -- analyze \
      "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong_workouts_may_2026.csv"
    ```
    This writes `strong-mapping.csv` next to the CSV. Open it, review the suggestions, and adjust `action` columns as needed.
 
 2. **Import** — group CSV rows into sessions and bulk-insert, using the mapping file:
    ```bash
-   set -a && . ./.env.local && set +a && \
-     npm run import:strong -- import \
+   npm run import:strong -- import \
      "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong_workouts_may_2026.csv" \
      "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong-mapping.csv"
    ```
@@ -156,11 +154,13 @@ Conventions:
 - Inserted rows are flagged `source = 'strong'`.
 - Re-runs are safe: existing sessions are matched on `(user_id, started_at, name)`. If an existing session has a different set count than the CSV expects, it is deleted (sets cascade) and reinserted — recovers from partial-failure runs.
 
-Required env (read from `.env.local`):
+Required env (auto-loaded from `.env.local` by the script):
 
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_EMAIL` — resolves to the target user_id.
+
+If `ADMIN_EMAIL` is missing the script aborts with a helpful message; add the line to your `.env.local` (or pass it inline: `ADMIN_EMAIL=you@example.com npm run import:strong -- ...`).
 
 ## Auth setup (Google + Apple)
 

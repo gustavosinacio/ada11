@@ -41,7 +41,14 @@ import path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 import { fromZonedTime } from "date-fns-tz";
+import { config as loadEnv } from "dotenv";
 import Papa from "papaparse";
+
+// Auto-load .env.local from the repo root. `npm run` sets cwd to the repo
+// root, so this works without the user having to `set -a && . ./.env.local`
+// first. Other scripts (e.g. scripts/create-user.ts) still expect explicit
+// env sourcing per their docs — they can adopt this pattern later.
+loadEnv({ path: ".env.local" });
 
 // =============================================================================
 // Constants
@@ -145,7 +152,11 @@ function getSupabase() {
 async function resolveUserId(): Promise<string> {
   const email = process.env.ADMIN_EMAIL;
   if (!email) {
-    throw new Error("Set ADMIN_EMAIL to identify the import target user");
+    throw new Error(
+      "ADMIN_EMAIL is required to identify the import target user.\n" +
+        "  Add to .env.local:  ADMIN_EMAIL=your-account@example.com\n" +
+        "  Or pass inline:     ADMIN_EMAIL=your-account@example.com npm run import:strong -- ...",
+    );
   }
   const supabase = getSupabase();
   // listUsers() returns up to 50 users by default; for a personal account
