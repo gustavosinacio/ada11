@@ -179,7 +179,7 @@ test.describe("Exercise progress IA (web)", () => {
       // Start an ad-hoc workout via direct URL navigation, then finish via UI.
       await page.goto("/(app)/workout", { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/workout$/, { timeout: 10_000 });
-      await page.getByText("Start ad-hoc workout").last().click();
+      await page.getByText("Quick start workout").last().click();
       await page.waitForURL(/\/workout\/[0-9a-f-]+/, { timeout: 15_000 });
 
       page.on("dialog", (d) => void d.accept());

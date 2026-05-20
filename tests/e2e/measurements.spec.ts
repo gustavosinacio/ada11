@@ -317,13 +317,13 @@ test.describe("Measurements feature (web)", () => {
     }
   });
 
-  test("regression: 6 tabs render, Profile shows weight + length unit toggles", async ({ page }) => {
+  test("regression: 5 tabs render, no Routines tab, Profile shows weight + length unit toggles", async ({ page }) => {
     const email = `e2e-measure-regression-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
     try {
       await signInAndLand(page, email);
       await expect(page.getByText("Workout", { exact: true }).first()).toBeVisible();
-      await expect(page.getByText("Routines", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("Routines", { exact: true })).not.toBeVisible();
       await expect(page.getByText("Exercises", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("History", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Measurements", { exact: true }).first()).toBeVisible();

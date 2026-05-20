@@ -85,11 +85,11 @@ test.describe("Ada11 CRUD flows (web)", () => {
     try {
       await signInAndLand(page, email);
 
-      // Navigate to Routines tab.
-      await page.getByText("Routines", { exact: true }).first().click();
-      await page.waitForURL(/\/routines/, { timeout: 10_000 });
+      // Strong-style IA: Workout home is the routines hub. Ensure we're there.
+      await page.getByText("Workout", { exact: true }).first().click();
+      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
 
-      // Empty state shows "Create routine" button.
+      // Empty state on the Workout home shows a "Create routine" button.
       await expect(page.getByText("Create routine").first()).toBeVisible({
         timeout: 10_000,
       });
@@ -105,12 +105,12 @@ test.describe("Ada11 CRUD flows (web)", () => {
         .fill("Heavy bench focus");
       await page.getByText("Save routine").last().click();
 
-      // Back to /routines, the new routine appears.
-      await page.waitForURL(/\/routines$/, { timeout: 10_000 });
+      // Back to /workout (the unified home), the new routine appears.
+      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
       await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 });
 
-      // Tap into detail.
-      await page.getByText(name).first().click();
+      // Open the routine builder via the Edit pill on the row.
+      await page.getByLabel(`Edit routine: ${name}`).click();
       await page.waitForURL(/\/routines\/[0-9a-f-]+/, { timeout: 10_000 });
 
       // Cross-platform confirmDelete uses window.confirm on web. Register the
@@ -120,8 +120,8 @@ test.describe("Ada11 CRUD flows (web)", () => {
       // Delete the routine.
       await page.getByText("Delete routine").last().click();
 
-      // Should pop back to /routines.
-      await page.waitForURL(/\/routines$/, { timeout: 10_000 });
+      // Should pop back to /workout (router.back() returns to the push origin).
+      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
       await expect(page.getByText(name)).not.toBeVisible({ timeout: 5_000 });
     } finally {
       await deleteUserSafe(userId);
@@ -166,13 +166,13 @@ test.describe("Ada11 CRUD flows (web)", () => {
     try {
       await signInAndLand(page, email);
 
-      // Auto-lands on /workout. Start ad-hoc.
-      await expect(page.getByText("Start ad-hoc workout").last()).toBeVisible({
+      // Auto-lands on /workout. Quick start.
+      await expect(page.getByText("Quick start workout").last()).toBeVisible({
         timeout: 10_000,
       });
 
       // Capture the session id from URL.
-      const adHocBtn = page.getByText("Start ad-hoc workout").last();
+      const adHocBtn = page.getByText("Quick start workout").last();
       await adHocBtn.click();
       await page.waitForURL(/\/workout\/[0-9a-f-]+/, { timeout: 15_000 });
 
