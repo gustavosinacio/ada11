@@ -50,6 +50,7 @@ export const exercises = pgTable(
     muscles: text("muscles").array().notNull().default(sql`'{}'::text[]`),
     equipment: text("equipment"),
     notes: text("notes"),
+    source: text("source"),
     ...timestamps,
   },
   (t) => ({
@@ -117,6 +118,7 @@ export const sessions = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     notes: text("notes"),
+    source: text("source"),
     ...timestamps,
   },
   (t) => ({

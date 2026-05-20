@@ -63,6 +63,7 @@ export type ExerciseRow = {
   muscles: string[];
   equipment: string | null;
   notes: string | null;
+  source: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -102,6 +103,7 @@ export type SessionRow = {
   started_at: string;
   ended_at: string | null;
   notes: string | null;
+  source: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

@@ -125,6 +125,43 @@ npx supabase start
 
 Spins up local Postgres at `localhost:54322` and a Supabase Studio UI at `localhost:54323`. Useful when iterating on migrations without touching the hosted project. Run `npx supabase stop` when done.
 
+## Importing from Strong
+
+The repo includes a CLI importer that ingests a Strong-app CSV export into the owner's Supabase account. The full design lives in `docs/runs/2026-05-20_0127_import-strong-csv/`.
+
+Two passes:
+
+1. **Analyze** — emit a mapping file next to the CSV, with one row per unique Strong exercise name and a suggested action (`map` to an existing ada11 exercise, `create-new`, or `drop`):
+   ```bash
+   set -a && . ./.env.local && set +a && \
+     npm run import:strong -- analyze \
+     "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong_workouts_may_2026.csv"
+   ```
+   This writes `strong-mapping.csv` next to the CSV. Open it, review the suggestions, and adjust `action` columns as needed.
+
+2. **Import** — group CSV rows into sessions and bulk-insert, using the mapping file:
+   ```bash
+   set -a && . ./.env.local && set +a && \
+     npm run import:strong -- import \
+     "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong_workouts_may_2026.csv" \
+     "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Workouts/strong-mapping.csv"
+   ```
+   Add `--dry-run` to parse + dedup + report without writing to the DB.
+
+Conventions:
+
+- Strong dates are interpreted as **BRT** and converted to UTC for storage.
+- **Cardio rows** (Distância > 0 or Segundos > 0) are dropped.
+- Pathological durations (e.g. `"143h 49min"`) are clamped to 6 hours.
+- Inserted rows are flagged `source = 'strong'`.
+- Re-runs are safe: existing sessions are matched on `(user_id, started_at, name)`. If an existing session has a different set count than the CSV expects, it is deleted (sets cascade) and reinserted — recovers from partial-failure runs.
+
+Required env (read from `.env.local`):
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ADMIN_EMAIL` — resolves to the target user_id.
+
 ## Auth setup (Google + Apple)
 
 ### Google Sign-In
