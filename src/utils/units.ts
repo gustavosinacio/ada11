@@ -1,6 +1,7 @@
-import type { WeightUnit } from "~/db/types";
+import type { LengthUnit, WeightUnit } from "~/db/types";
 
 const KG_PER_LB = 0.45359237;
+const CM_PER_IN = 2.54;
 
 export function kgToLbs(kg: number): number {
   return kg / KG_PER_LB;
@@ -43,4 +44,32 @@ export function formatVolume(
     return `${(value / 1000).toFixed(1)}k ${unit}`;
   }
   return `${rounded} ${unit}`;
+}
+
+// ---------------------------------------------------------------------------
+// Length helpers — mirror the kg quartet for circumference (cm) values.
+// Canonical storage is centimeters; UI converts at the boundary.
+// ---------------------------------------------------------------------------
+
+export function cmToIn(cm: number): number {
+  return cm / CM_PER_IN;
+}
+
+export function inToCm(inches: number): number {
+  return inches * CM_PER_IN;
+}
+
+export function formatLength(
+  cm: number | null | undefined,
+  unit: LengthUnit,
+): string {
+  if (cm == null) return "—";
+  const value = unit === "cm" ? cm : cmToIn(cm);
+  return `${value.toFixed(1)} ${unit}`;
+}
+
+export function parseLengthToCm(input: string, unit: LengthUnit): number | null {
+  const value = parseFloat(input.replace(",", "."));
+  if (Number.isNaN(value)) return null;
+  return unit === "cm" ? value : inToCm(value);
 }

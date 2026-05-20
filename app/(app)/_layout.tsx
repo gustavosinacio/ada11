@@ -1,5 +1,12 @@
 import { Tabs } from "expo-router";
-import { Dumbbell, History, ListChecks, User, Wrench } from "lucide-react-native";
+import {
+  Dumbbell,
+  History,
+  ListChecks,
+  Ruler,
+  User,
+  Wrench,
+} from "lucide-react-native";
 
 export default function AppLayout() {
   return (
@@ -30,6 +37,13 @@ export default function AppLayout() {
         options={{
           title: "History",
           tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="measurements"
+        options={{
+          title: "Measurements",
+          tabBarIcon: ({ color, size }) => <Ruler color={color} size={size} />,
         }}
       />
       <Tabs.Screen

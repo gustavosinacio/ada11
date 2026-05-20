@@ -2,16 +2,22 @@ import { ChevronRight } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Button } from "~/components/ui/button";
-import type { WeightUnit } from "~/db/types";
+import type { LengthUnit, WeightUnit } from "~/db/types";
 import { useAuth } from "~/lib/auth-context";
-import { usePreferences, useSetWeightUnit } from "~/hooks/use-preferences";
+import {
+  usePreferences,
+  useSetLengthUnit,
+  useSetWeightUnit,
+} from "~/hooks/use-preferences";
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const prefs = usePreferences();
   const setUnit = useSetWeightUnit();
+  const setLength = useSetLengthUnit();
 
   const currentUnit: WeightUnit = prefs.data?.weight_unit ?? "kg";
+  const currentLengthUnit: LengthUnit = prefs.data?.length_unit ?? "cm";
 
   return (
     <ScrollView
@@ -65,6 +71,48 @@ export default function ProfileScreen() {
             <Text className="mt-2 text-sm text-red-500">
               {setUnit.error instanceof Error
                 ? setUnit.error.message
+                : "Failed to save"}
+            </Text>
+          ) : null}
+        </View>
+        <View className="px-4 py-3">
+          <Text className="mb-2 text-sm text-gray-500">Length unit</Text>
+          <View className="flex-row gap-2">
+            {(["cm", "in"] as const).map((u) => {
+              const active = currentLengthUnit === u;
+              return (
+                <Pressable
+                  key={u}
+                  onPress={() => {
+                    if (active) return;
+                    setLength.mutate(u);
+                  }}
+                  disabled={setLength.isPending}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  className={`flex-1 rounded-md py-2 ${
+                    active
+                      ? "bg-black dark:bg-white"
+                      : "border border-gray-300 dark:border-gray-700"
+                  }`}
+                >
+                  <Text
+                    className={`text-center text-base font-medium ${
+                      active
+                        ? "text-white dark:text-black"
+                        : "text-black dark:text-white"
+                    }`}
+                  >
+                    {u}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {setLength.isError ? (
+            <Text className="mt-2 text-sm text-red-500">
+              {setLength.error instanceof Error
+                ? setLength.error.message
                 : "Failed to save"}
             </Text>
           ) : null}

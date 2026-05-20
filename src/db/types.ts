@@ -2,6 +2,7 @@ import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
 import {
   exercises,
+  measurementEntries,
   routineExercises,
   routines,
   sessions,
@@ -25,8 +26,12 @@ export type NewSession = InferInsertModel<typeof sessions>;
 export type Set = InferSelectModel<typeof sets>;
 export type NewSet = InferInsertModel<typeof sets>;
 
+export type MeasurementEntry = InferSelectModel<typeof measurementEntries>;
+export type NewMeasurementEntry = InferInsertModel<typeof measurementEntries>;
+
 export type SetType = "warmup" | "working" | "dropset";
 export type WeightUnit = "kg" | "lbs";
+export type LengthUnit = "cm" | "in";
 
 // Row types matching PostgREST output (snake_case).
 // Drizzle's InferSelectModel returns camelCase, but the Supabase JS client
@@ -115,6 +120,26 @@ export type SetRow = {
   parent_set_id: string | null;
   notes: string | null;
   completed_at: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type MeasurementEntryRow = {
+  id: string;
+  user_id: string;
+  measured_at: string;
+  weight_kg: string | null;
+  body_fat_pct: string | null;
+  neck_cm: string | null;
+  chest_cm: string | null;
+  biceps_cm: string | null;
+  forearm_cm: string | null;
+  waist_cm: string | null;
+  hips_cm: string | null;
+  thigh_cm: string | null;
+  calf_cm: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

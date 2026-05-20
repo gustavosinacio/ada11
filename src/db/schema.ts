@@ -35,6 +35,7 @@ export const userPreferences = pgTable("user_preferences", {
     .primaryKey()
     .references(() => authUsers.id, { onDelete: "cascade" }),
   weightUnit: text("weight_unit").notNull().default("kg"),
+  lengthUnit: text("length_unit").notNull().default("cm"),
   ...timestamps,
 });
 
@@ -166,5 +167,43 @@ export const sets = pgTable(
       sql`(${t.setType} = 'dropset' AND ${t.parentSetId} IS NOT NULL)
           OR (${t.setType} IN ('warmup','working') AND ${t.parentSetId} IS NULL)`,
     ),
+  }),
+);
+
+export const measurementEntries = pgTable(
+  "measurement_entries",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    measuredAt: timestamp("measured_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    weightKg: numeric("weight_kg", { precision: 6, scale: 2 }),
+    bodyFatPct: numeric("body_fat_pct", { precision: 4, scale: 1 }),
+    neckCm: numeric("neck_cm", { precision: 6, scale: 2 }),
+    chestCm: numeric("chest_cm", { precision: 6, scale: 2 }),
+    bicepsCm: numeric("biceps_cm", { precision: 6, scale: 2 }),
+    forearmCm: numeric("forearm_cm", { precision: 6, scale: 2 }),
+    waistCm: numeric("waist_cm", { precision: 6, scale: 2 }),
+    hipsCm: numeric("hips_cm", { precision: 6, scale: 2 }),
+    thighCm: numeric("thigh_cm", { precision: 6, scale: 2 }),
+    calfCm: numeric("calf_cm", { precision: 6, scale: 2 }),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (t) => ({
+    // Plain ASC composite. Postgres reads it backwards for
+    // ORDER BY measured_at DESC (matches sessions_user_started_idx precedent).
+    userMeasuredIdx: index("measurement_entries_user_measured_idx").on(
+      t.userId,
+      t.measuredAt,
+    ),
+    // The UNIQUE partial expression index
+    //   (user_id, date(measured_at AT TIME ZONE 'UTC')) WHERE deleted_at IS NULL
+    // cannot be expressed ergonomically in Drizzle's typed index builder
+    // (no first-class support for `date(... AT TIME ZONE ...)` or partial
+    // predicates). Source of truth is supabase/migrations/0005_measurements.sql.
   }),
 );
