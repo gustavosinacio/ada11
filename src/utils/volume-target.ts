@@ -1,0 +1,129 @@
+import type { SessionSets } from "~/api/progress";
+import type { SetRow } from "~/db/types";
+
+/**
+ * Discriminated state returned by `computeVolumeTarget`. The live
+ * `<VolumeTargetSlot>` maps these to the three render states (hidden,
+ * chasing strip, surpassed strip). All numeric fields are in kg —
+ * display-layer is responsible for unit conversion via
+ * `formatVolume` / `formatWeight`.
+ */
+export type VolumeTargetState =
+  | { kind: "no-pr" }
+  | {
+      kind: "chasing";
+      previousMaxKg: number;
+      runningKg: number;
+      /** previousMaxKg - runningKg, > 0. */
+      gapKg: number;
+      /** Weight of the most-recent set in the live session that has a
+       *  finite positive `weight`. `null` when no usable set has been
+       *  logged yet. */
+      currentWeightKg: number | null;
+      /** gapKg / currentWeightKg. `null` when `currentWeightKg` is null. */
+      repsToBeat: number | null;
+    }
+  | {
+      kind: "surpassed";
+      previousMaxKg: number;
+      runningKg: number;
+      /** runningKg - previousMaxKg, >= 0. Zero means "matched". */
+      overflowKg: number;
+    };
+
+export type ComputeVolumeTargetInput = {
+  /** All finished-session set groups for this exercise, from
+   *  `useExerciseProgress(exerciseId)`. May be undefined while loading. */
+  pastSessions: SessionSets[] | undefined;
+  /** Session-scoped sets for this exercise, from the live screen
+   *  (`setsByExercise.get(ex.id)`). */
+  currentSessionSets: SetRow[];
+};
+
+/**
+ * Canonical volume kernel — mirrors `exercises/[id]/progress.tsx:62-93` and
+ * `weekly-volume-strip.tsx:43-51`. Skips warmups, parses string weights with
+ * `parseFloat`, guards `w > 0 && r > 0`.
+ */
+function sumVolume(sets: SetRow[]): number {
+  let total = 0;
+  for (const s of sets) {
+    if (s.set_type === "warmup") continue;
+    const w = s.weight ? parseFloat(s.weight) : NaN;
+    const r = s.reps ?? 0;
+    if (Number.isFinite(w) && w > 0 && r > 0) {
+      total += w * r;
+    }
+  }
+  return total;
+}
+
+/**
+ * Computes the volume-target state for a single exercise.
+ *
+ * - `previousMaxKg` = max single-session volume across `pastSessions`.
+ * - `runningKg` = volume of `currentSessionSets` using the same kernel.
+ * - `currentWeightKg` = weight of the set with the maximum `set_number` that
+ *   has a finite positive weight. Chosen by `set_number` (not array index)
+ *   because `listSetsForSession` orders by completion timestamp, which can
+ *   reorder rows once individual sets are checked (MAJ-1 fix).
+ *
+ * Tie case (`gapKg <= 0` with `previousMaxKg > 0`): returns `surpassed` with
+ * `overflowKg = Math.max(0, -gapKg)` so the slot can render a clean "matched"
+ * or "+X over previous" copy (MIN-2).
+ */
+export function computeVolumeTarget(
+  input: ComputeVolumeTargetInput,
+): VolumeTargetState {
+  const { pastSessions, currentSessionSets } = input;
+
+  let previousMaxKg = 0;
+  if (pastSessions) {
+    for (const session of pastSessions) {
+      const total = sumVolume(session.sets);
+      if (total > previousMaxKg) previousMaxKg = total;
+    }
+  }
+
+  if (previousMaxKg === 0) {
+    return { kind: "no-pr" };
+  }
+
+  const runningKg = sumVolume(currentSessionSets);
+  const gapKg = previousMaxKg - runningKg;
+
+  if (gapKg <= 0) {
+    return {
+      kind: "surpassed",
+      previousMaxKg,
+      runningKg,
+      overflowKg: Math.max(0, -gapKg),
+    };
+  }
+
+  // Pick the "current weight" by max(set_number) — robust against the
+  // completion-timestamp ordering used by `listSetsForSession` (MAJ-1).
+  const currentSet = currentSessionSets.reduce<SetRow | null>((best, s) => {
+    const w = s.weight ? parseFloat(s.weight) : NaN;
+    if (!Number.isFinite(w) || w <= 0) return best;
+    if (!best || s.set_number > best.set_number) return s;
+    return best;
+  }, null);
+
+  const currentWeightKg = currentSet
+    ? parseFloat(currentSet.weight as string)
+    : null;
+  const repsToBeat =
+    currentWeightKg != null && currentWeightKg > 0
+      ? gapKg / currentWeightKg
+      : null;
+
+  return {
+    kind: "chasing",
+    previousMaxKg,
+    runningKg,
+    gapKg,
+    currentWeightKg,
+    repsToBeat,
+  };
+}

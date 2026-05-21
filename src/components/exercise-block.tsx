@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { SetInput } from "~/components/set-input";
+import { VolumeTargetSlot } from "~/components/volume-target-slot";
 import type { ExerciseRow, SetRow, SetType, WeightUnit } from "~/db/types";
 import { useLastWorkingSet } from "~/hooks/use-sets";
 
@@ -30,6 +31,10 @@ type Props = {
   /** Forwarded toggle handler. Required when showCheckable === true.
    *  `nextChecked` is the state the row will be in after the toggle. */
   onToggleSetChecked?: (setId: string, nextChecked: boolean) => void;
+  /** Live-session only. When true, mounts `<VolumeTargetSlot>` below the
+   *  header so the block subscribes to `useExerciseProgress(exercise.id)`
+   *  and renders the per-exercise volume-target strip. Default: false. */
+  showVolumeTarget?: boolean;
 };
 
 export function ExerciseBlock({
@@ -47,6 +52,7 @@ export function ExerciseBlock({
   removeDisabled,
   showCheckable = false,
   onToggleSetChecked,
+  showVolumeTarget = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -150,6 +156,13 @@ export function ExerciseBlock({
           </View>
         )}
       </View>
+
+      {showVolumeTarget ? (
+        <VolumeTargetSlot
+          exerciseId={exercise.id}
+          currentSessionSets={sets}
+        />
+      ) : null}
 
       {sets.length > 0 && (
         <View className="flex-row border-y border-gray-100 bg-gray-50 px-4 py-1 dark:border-gray-900 dark:bg-gray-950">

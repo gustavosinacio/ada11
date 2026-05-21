@@ -364,6 +364,7 @@ export default function LiveWorkoutScreen() {
               }
               removeDisabled={logSet.isPending}
               showCheckable
+              showVolumeTarget
               onToggleSetChecked={async (id, nextChecked) => {
                 try {
                   if (nextChecked) {
