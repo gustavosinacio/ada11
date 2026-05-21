@@ -14,7 +14,10 @@ export async function listSetsForExercise(exerciseId: string): Promise<SessionSe
     .eq("exercise_id", exerciseId)
     .not("sessions.ended_at", "is", null)
     .is("deleted_at", null)
-    .order("completed_at", { ascending: true });
+    // Secondary set_number sort breaks intra-session timestamp ties when
+    // bulkCheckAllInSession stamps every newly-checked set with the same now().
+    .order("completed_at", { ascending: true })
+    .order("set_number", { ascending: true });
   if (error) throw error;
 
   const bySession = new Map<string, SessionSets>();

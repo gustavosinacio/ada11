@@ -1,4 +1,4 @@
-import { MessageSquare, Trash2 } from "lucide-react-native";
+import { CheckSquare, MessageSquare, Square, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
@@ -14,6 +14,12 @@ type Props = {
    * text on this row's empty fields. Not used as the actual value.
    */
   previousSet?: SetRow | null;
+  /** Live-session only. When true, render the leading check button and apply
+   *  the "checked" tint when row.completed_at != null. Default: false. */
+  showCheckable?: boolean;
+  /** Called when the leading check icon is tapped. `nextChecked` reflects
+   *  the state the row will be in after this action completes. */
+  onToggleChecked?: (nextChecked: boolean) => void;
   onCommit: (patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null }) => void;
   onDelete: () => void;
 };
@@ -52,7 +58,15 @@ const TYPE_BADGE: Record<SetType, { label: string; classes: string }> = {
   dropset: { label: "↓", classes: "bg-purple-100 text-purple-800" },
 };
 
-export function SetInput({ row, unit, previousSet, onCommit, onDelete }: Props) {
+export function SetInput({
+  row,
+  unit,
+  previousSet,
+  showCheckable = false,
+  onToggleChecked,
+  onCommit,
+  onDelete,
+}: Props) {
   const weightPlaceholder = previousSet?.weight
     ? inputStringFromKg(previousSet.weight, unit)
     : unit === "kg"
@@ -86,10 +100,31 @@ export function SetInput({ row, unit, previousSet, onCommit, onDelete }: Props) 
   };
 
   const badge = TYPE_BADGE[row.set_type];
+  const isChecked = row.completed_at != null;
 
   return (
-    <View className="border-b border-gray-100 dark:border-gray-900">
+    <View
+      className={`border-b border-gray-100 dark:border-gray-900 ${
+        showCheckable && isChecked ? "bg-blue-50 dark:bg-blue-950/30" : ""
+      }`}
+    >
       <View className="flex-row items-center gap-2 px-4 py-2">
+        {showCheckable ? (
+          <Pressable
+            onPress={() => onToggleChecked?.(!isChecked)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isChecked ? "Unmark set as completed" : "Mark set as completed"
+            }
+            className="h-11 w-11 items-center justify-center"
+          >
+            {isChecked ? (
+              <CheckSquare color="#3b82f6" size={20} />
+            ) : (
+              <Square color="#9ca3af" size={20} />
+            )}
+          </Pressable>
+        ) : null}
         <View
           className={`h-7 w-7 items-center justify-center rounded-full ${badge.classes}`}
         >

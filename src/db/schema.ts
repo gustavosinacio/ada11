@@ -146,7 +146,9 @@ export const sets = pgTable(
     setType: text("set_type").notNull(), // 'warmup' | 'working' | 'dropset'
     parentSetId: uuid("parent_set_id"),
     notes: text("notes"),
-    completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+    // Nullable: null = unchecked draft (live session only),
+    // non-null = checked / persisted. See migrations/0007_set_completed_at_nullable.sql.
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({

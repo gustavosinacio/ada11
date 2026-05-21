@@ -25,7 +25,11 @@ export async function listSetsForSession(sessionId: string): Promise<SetRow[]> {
     .select("*")
     .eq("session_id", sessionId)
     .is("deleted_at", null)
-    .order("completed_at", { ascending: true });
+    // Pin nulls last so unchecked drafts appear after checked sets, and break
+    // intra-session timestamp ties (e.g. after bulkCheckAllInSession) with the
+    // unique set_number per (session_id, exercise_id).
+    .order("completed_at", { ascending: true, nullsFirst: false })
+    .order("set_number", { ascending: true });
   if (error) throw error;
   return (data ?? []) as SetRow[];
 }
@@ -60,7 +64,9 @@ export async function logSet(input: LogSetInput): Promise<SetRow> {
       set_type: input.set_type,
       parent_set_id: input.parent_set_id ?? null,
       notes: input.notes ?? null,
-      completed_at: new Date().toISOString(),
+      // null = unchecked draft. User opts in to "checked" by tapping the
+      // per-set check button (or via the bulk Finish-flow auto-check).
+      completed_at: null,
     })
     .select()
     .single();
@@ -144,4 +150,97 @@ export async function bulkSoftDeleteSetsForExerciseInSession(
     .eq("exercise_id", input.exerciseId)
     .is("deleted_at", null);
   if (error) throw error;
+}
+
+/**
+ * Flips a single set to "checked" by stamping completed_at = now().
+ * No-op if already checked (idempotent at the call site via the toggle).
+ */
+export async function checkSet(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("sets")
+    .update({ completed_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+/**
+ * Flips a single set back to "unchecked" by clearing completed_at.
+ * Only meaningful inside an active session (finished sessions never expose
+ * a toggle UI).
+ */
+export async function uncheckSet(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("sets")
+    .update({ completed_at: null })
+    .eq("id", id)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+/**
+ * Bulk-flip every unchecked, non-deleted set in this session to "checked"
+ * with the same now() timestamp. Single PostgREST round-trip. The shared
+ * timestamp ordering is broken by the secondary set_number sort in
+ * listSetsForSession / listSetsForExercise.
+ */
+export async function bulkCheckAllInSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from("sets")
+    .update({ completed_at: new Date().toISOString() })
+    .eq("session_id", sessionId)
+    .is("completed_at", null)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+/**
+ * Bulk soft-deletes every unchecked, non-deleted set in this session, then
+ * cascades the same soft-delete to UNCHECKED dropset children whose parent
+ * is one of the discarded rows. Checked dropset children survive — the user
+ * explicitly opted to keep them. Their parent_set_id then references a
+ * soft-deleted row, which is invisible behind every list's
+ * `.is("deleted_at", null)` filter (same pre-existing nit as per-row
+ * useDeleteSet of a parent with checked children).
+ *
+ * Uses a single now() timestamp for both UPDATE calls to keep deletion
+ * timestamps coherent.
+ */
+export async function bulkSoftDeleteUncheckedInSession(
+  sessionId: string,
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+
+  // 1) Collect ids of the unchecked rows we're about to discard.
+  const { data: unchecked, error: readErr } = await supabase
+    .from("sets")
+    .select("id")
+    .eq("session_id", sessionId)
+    .is("completed_at", null)
+    .is("deleted_at", null);
+  if (readErr) throw readErr;
+  const uncheckedIds = (unchecked ?? []).map((r) => r.id as string);
+  if (uncheckedIds.length === 0) return;
+
+  // 2) Soft-delete the unchecked rows themselves.
+  const { error: delErr } = await supabase
+    .from("sets")
+    .update({ deleted_at: nowIso })
+    .in("id", uncheckedIds);
+  if (delErr) throw delErr;
+
+  // 3) Cascade ONLY to unchecked dropset children of those rows. Checked
+  //    children stay — the user explicitly opted to keep them. The
+  //    parent_set_id of those checked survivors then points at a
+  //    soft-deleted row, invisible behind every list's
+  //    `.is("deleted_at", null)` filter (same pre-existing nit as per-row
+  //    useDeleteSet of a parent with checked children).
+  const { error: cascadeErr } = await supabase
+    .from("sets")
+    .update({ deleted_at: nowIso })
+    .in("parent_set_id", uncheckedIds)
+    .is("completed_at", null)
+    .is("deleted_at", null);
+  if (cascadeErr) throw cascadeErr;
 }

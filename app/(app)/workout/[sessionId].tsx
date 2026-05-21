@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { ChooseActionModal } from "~/components/choose-action-modal";
 import { ExerciseBlock } from "~/components/exercise-block";
 import { ExercisePicker } from "~/components/exercise-picker";
 import { PlateCalculator } from "~/components/plate-calculator";
@@ -22,10 +23,14 @@ import { useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
 import { useFinishSession, useSession } from "~/hooks/use-sessions";
 import {
+  useBulkCheckAllInSession,
+  useBulkSoftDeleteUncheckedInSession,
+  useCheckSet,
   useDeleteSet,
   useLogSet,
   useRemoveExerciseFromSession,
   useSetsForSession,
+  useUncheckSet,
   useUpdateSet,
 } from "~/hooks/use-sets";
 
@@ -47,6 +52,10 @@ export default function LiveWorkoutScreen() {
   const updateSet = useUpdateSet(sessionId ?? "");
   const deleteSet = useDeleteSet(sessionId ?? "");
   const removeExerciseFromSession = useRemoveExerciseFromSession(sessionId ?? "");
+  const checkSetM = useCheckSet(sessionId ?? "");
+  const uncheckSetM = useUncheckSet(sessionId ?? "");
+  const bulkCheckAll = useBulkCheckAllInSession(sessionId ?? "");
+  const bulkDiscardUnchecked = useBulkSoftDeleteUncheckedInSession(sessionId ?? "");
   const unit = useWeightUnit();
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
@@ -54,6 +63,7 @@ export default function LiveWorkoutScreen() {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [plateCalcOpen, setPlateCalcOpen] = useState(false);
+  const [finishModalOpen, setFinishModalOpen] = useState(false);
   const [adHocExerciseIds, setAdHocExerciseIds] = useState<string[]>([]);
   // User-controlled exercise ordering for this session. Null = use derived
   // default (routine order → first-logged order → ad-hoc order). Non-null
@@ -201,21 +211,66 @@ export default function LiveWorkoutScreen() {
     }
   };
 
-  const onFinish = async () => {
+  const uncheckedCount = useMemo(
+    () =>
+      (setsQ.data ?? []).filter((s) => s.completed_at == null).length,
+    [setsQ.data],
+  );
+
+  const finishAfterMutation = async () => {
     if (!sessionId) return;
-    const ok = await confirmDelete({
-      title: "Finish workout?",
-      message: "You can review it later from History.",
-      confirmLabel: "Finish",
-      cancelLabel: "Keep going",
-    });
-    if (!ok) return;
     try {
       await finish.mutateAsync(sessionId);
       router.replace("/(app)/workout");
     } catch (err) {
       console.warn("Finish failed", err);
     }
+  };
+
+  const onFinish = async () => {
+    if (!sessionId) return;
+
+    // Zero unchecked sets → keep today's 2-button confirm path (window.confirm
+    // on web, Alert.alert on native). Existing e2e specs that hit Finish with
+    // no logged sets continue to work without modal-aware updates.
+    if (uncheckedCount === 0) {
+      const ok = await confirmDelete({
+        title: "Finish workout?",
+        message: "You can review it later from History.",
+        confirmLabel: "Finish",
+        cancelLabel: "Keep going",
+      });
+      if (!ok) return;
+      await finishAfterMutation();
+      return;
+    }
+
+    // Otherwise open the 3-option dialog.
+    setFinishModalOpen(true);
+  };
+
+  const handleCheckAllAndFinish = async () => {
+    if (!sessionId) return;
+    setFinishModalOpen(false);
+    try {
+      await bulkCheckAll.mutateAsync();
+    } catch (err) {
+      console.warn("Bulk check-all failed", err);
+      return;
+    }
+    await finishAfterMutation();
+  };
+
+  const handleDiscardUncheckedAndFinish = async () => {
+    if (!sessionId) return;
+    setFinishModalOpen(false);
+    try {
+      await bulkDiscardUnchecked.mutateAsync();
+    } catch (err) {
+      console.warn("Bulk discard unchecked failed", err);
+      return;
+    }
+    await finishAfterMutation();
   };
 
   if (session.isLoading) {
@@ -308,6 +363,18 @@ export default function LiveWorkoutScreen() {
                 )
               }
               removeDisabled={logSet.isPending}
+              showCheckable
+              onToggleSetChecked={async (id, nextChecked) => {
+                try {
+                  if (nextChecked) {
+                    await checkSetM.mutateAsync(id);
+                  } else {
+                    await uncheckSetM.mutateAsync(id);
+                  }
+                } catch (err) {
+                  console.warn("Toggle set check failed", err);
+                }
+              }}
             />
           ))
         )}
@@ -355,6 +422,34 @@ export default function LiveWorkoutScreen() {
       />
 
       <RestTimerOverlay />
+
+      <ChooseActionModal
+        visible={finishModalOpen}
+        title="Some sets are unchecked"
+        message={`You have ${uncheckedCount} unchecked set${
+          uncheckedCount === 1 ? "" : "s"
+        }. Unchecked sets won't be saved. This can't be undone.`}
+        onClose={() => setFinishModalOpen(false)}
+        buttons={[
+          // iOS HIG vertical stack: primary on top, destructive middle,
+          // cancel at the bottom (thumb-reach escape).
+          {
+            label: "Check all and finish",
+            variant: "primary",
+            onPress: handleCheckAllAndFinish,
+          },
+          {
+            label: "Finish without saving unchecked",
+            variant: "destructive",
+            onPress: handleDiscardUncheckedAndFinish,
+          },
+          {
+            label: "Cancel",
+            variant: "default",
+            onPress: () => setFinishModalOpen(false),
+          },
+        ]}
+      />
     </View>
   );
 }

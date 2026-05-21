@@ -25,6 +25,11 @@ type Props = {
   onDeleteSet: (id: string) => void;
   onRemove?: () => void;
   removeDisabled?: boolean;
+  /** Live-session only. Forwarded to each <SetInput>. Default: false. */
+  showCheckable?: boolean;
+  /** Forwarded toggle handler. Required when showCheckable === true.
+   *  `nextChecked` is the state the row will be in after the toggle. */
+  onToggleSetChecked?: (setId: string, nextChecked: boolean) => void;
 };
 
 export function ExerciseBlock({
@@ -40,6 +45,8 @@ export function ExerciseBlock({
   onDeleteSet,
   onRemove,
   removeDisabled,
+  showCheckable = false,
+  onToggleSetChecked,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -146,6 +153,10 @@ export function ExerciseBlock({
 
       {sets.length > 0 && (
         <View className="flex-row border-y border-gray-100 bg-gray-50 px-4 py-1 dark:border-gray-900 dark:bg-gray-950">
+          {/* Additive leading spacer (44pt) matching the check-button tap
+              target in <SetInput>. History detail keeps the original
+              column positions because it doesn't pass `showCheckable`. */}
+          {showCheckable ? <View className="w-11" /> : null}
           <View className="w-7" />
           <Text className="w-6 text-xs text-gray-500">#</Text>
           <Text className="flex-1 text-xs text-gray-500">
@@ -164,6 +175,12 @@ export function ExerciseBlock({
           row={s}
           unit={unit}
           previousSet={previousByRowId.get(s.id) ?? null}
+          showCheckable={showCheckable}
+          onToggleChecked={
+            onToggleSetChecked
+              ? (nextChecked) => onToggleSetChecked(s.id, nextChecked)
+              : undefined
+          }
           onCommit={(patch) => onUpdateSet(s.id, patch)}
           onDelete={() => onDeleteSet(s.id)}
         />

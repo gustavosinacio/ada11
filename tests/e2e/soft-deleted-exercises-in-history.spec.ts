@@ -158,6 +158,29 @@ test.describe("Soft-deleted exercises remain visible in history (web)", () => {
         timeout: 10_000,
       });
 
+      // Tap the per-set check button on both sets so Finish hits the
+      // `uncheckedCount === 0` branch and the existing `confirmDelete`
+      // (window.confirm on web) listener below works unchanged.
+      //
+      // Two requirements (both needed; either alone flakes):
+      //
+      // 1. `{ exact: true }` on getByLabel — Playwright defaults to
+      //    case-insensitive substring match, which would also match
+      //    "Unmark set as completed" after the first tap and un-toggle the
+      //    first row on the second tap.
+      // 2. Wait for the "Mark…" locator count to drop to 1 before tapping
+      //    again. Without this, React's re-render of the icon's
+      //    accessibilityLabel is async — the second `.first()` can still
+      //    resolve to set 1 (stale DOM), re-toggling it off.
+      const markChecks = page.getByLabel("Mark set as completed", {
+        exact: true,
+      });
+      await expect(markChecks).toHaveCount(2);
+      await markChecks.first().click();
+      await expect(markChecks).toHaveCount(1);
+      await markChecks.first().click();
+      await expect(markChecks).toHaveCount(0);
+
       // Finish.
       page.once("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();

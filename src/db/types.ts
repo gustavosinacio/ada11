@@ -121,7 +121,7 @@ export type SetRow = {
   set_type: SetType;
   parent_set_id: string | null;
   notes: string | null;
-  completed_at: string;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
