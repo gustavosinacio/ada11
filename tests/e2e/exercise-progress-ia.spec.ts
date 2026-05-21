@@ -201,4 +201,125 @@ test.describe("Exercise progress IA (web)", () => {
       await deleteUserSafe(userId);
     }
   });
+
+  test("name tap in live workout block routes to /exercises/{id}/progress and back", async ({
+    page,
+  }) => {
+    const email = `e2e-ex-ia-blocktap-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+
+    try {
+      await signInAndLand(page, email);
+
+      // Quick start an ad-hoc workout.
+      await expect(page.getByText("Quick start workout").last()).toBeVisible({
+        timeout: 10_000,
+      });
+      await page.getByText("Quick start workout").last().click();
+      await page.waitForURL(/\/workout\/[0-9a-f-]+/, { timeout: 15_000 });
+      const workoutUrl = page.url();
+
+      // Add one exercise via the picker.
+      await page.getByText("Add exercise", { exact: true }).click();
+      await expect(page.getByText("Pick exercise")).toBeVisible({ timeout: 10_000 });
+      await page.getByPlaceholder("Search by name, muscle, equipment").fill("Bench Press");
+      await page.getByText("Bench Press", { exact: true }).first().click();
+      await expect(page.getByText("Pick exercise")).not.toBeVisible({ timeout: 10_000 });
+
+      // Tap the exercise name (accessible label includes "View progress for ...").
+      await page.getByLabel("View progress for Bench Press").click();
+
+      // URL lands on /exercises/<uuid>/progress. expo-router web appends a
+      // `?id=<uuid>` query suffix when navigating into a dynamic [id] route
+      // from outside the exercises stack — the regex must allow it.
+      await page.waitForURL(/\/exercises\/[0-9a-f-]+\/progress(\?.*)?$/, {
+        timeout: 10_000,
+      });
+
+      // Go back — should return to the same live workout URL.
+      await page.goBack();
+      await page.waitForURL(new RegExp(workoutUrl.replace(/^https?:\/\/[^/]+/, "").replace(/[/]/g, "\\/") + "$"), {
+        timeout: 10_000,
+      });
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  // Regression guard for the history-detail back-stack bug (run
+  // 2026-05-21_1554, fix round). Tapping an exercise name inside a finished
+  // session's detail must push (not replace) — browser back must return to
+  // /history/{sessionId}, NOT to the /history list.
+  test("name tap in history detail block routes to /exercises/{id}/progress and back to detail", async ({
+    page,
+  }) => {
+    const email = `e2e-ex-ia-histtap-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+
+    try {
+      await signInAndLand(page, email);
+
+      // Quick start a workout so we have a finished session to view in history.
+      await expect(page.getByText("Quick start workout").last()).toBeVisible({
+        timeout: 10_000,
+      });
+      await page.getByText("Quick start workout").last().click();
+      await page.waitForURL(/\/workout\/[0-9a-f-]+/, { timeout: 15_000 });
+
+      // Add Bench Press so the finished session has an exercise to tap.
+      await page.getByText("Add exercise", { exact: true }).click();
+      await expect(page.getByText("Pick exercise")).toBeVisible({ timeout: 10_000 });
+      await page.getByPlaceholder("Search by name, muscle, equipment").fill("Bench Press");
+      await page.getByText("Bench Press", { exact: true }).first().click();
+      await expect(page.getByText("Pick exercise")).not.toBeVisible({ timeout: 10_000 });
+
+      // Log a working set so the exercise appears on the session detail page
+      // (history-detail's orderedExercises is built from setsForSession).
+      await page.getByText("+ Working set", { exact: true }).first().click();
+      await expect(page.getByLabel("Mark set as completed").first()).toBeVisible({
+        timeout: 5_000,
+      });
+
+      // Finish the session. We have 1 unchecked set, so the 3-button
+      // ChooseActionModal opens — click "Check all and finish" to commit.
+      await page.getByText("Finish", { exact: true }).last().click();
+      await page.getByText("Check all and finish", { exact: true }).click();
+      await page.waitForURL(/\/workout$/, { timeout: 15_000 });
+
+      // Go to History tab and open the just-finished session.
+      await page.getByText("History", { exact: true }).first().click();
+      await page.waitForURL(/\/history$/, { timeout: 10_000 });
+
+      // Open the just-finished session. For a brand-new user it's the only
+      // session row. The row's secondary line is "<date> · <duration>" (the
+      // list page doesn't pass totalSets to SessionSummaryRow, so there's no
+      // "N sets" text). Match by the " · 0m" duration substring — unique to a
+      // just-finished session row, and absent from the tab bar.
+      const sessionRow = page.getByRole("button").filter({ hasText: /·\s*\d+m\b/ }).first();
+      await expect(sessionRow).toBeVisible({ timeout: 10_000 });
+      await sessionRow.click();
+      await page.waitForURL(/\/history\/[0-9a-f-]+$/, { timeout: 10_000 });
+      const historyDetailUrl = page.url();
+
+      // Tap the exercise name inside the history detail block.
+      await page.getByLabel("View progress for Bench Press").click();
+
+      // URL lands on /exercises/<uuid>/progress (allow optional ?id= suffix).
+      await page.waitForURL(/\/exercises\/[0-9a-f-]+\/progress(\?.*)?$/, {
+        timeout: 10_000,
+      });
+
+      // CRITICAL regression check: browser back must return to the SAME
+      // /history/{sessionId} detail, not bounce to the /history list.
+      await page.goBack();
+      await page.waitForURL(
+        new RegExp(
+          historyDetailUrl.replace(/^https?:\/\/[^/]+/, "").replace(/[/]/g, "\\/") + "$",
+        ),
+        { timeout: 10_000 },
+      );
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
 });

@@ -242,6 +242,9 @@ export default function SessionDetailScreen() {
               exercise={ex}
               sets={setsByExercise.get(ex.id) ?? []}
               unit={unit}
+              onPressName={() =>
+                router.push(`/(app)/exercises/${ex.id}/progress`)
+              }
               onAddSet={async (input) => {
                 if (!id) return;
                 try {

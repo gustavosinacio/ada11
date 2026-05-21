@@ -321,6 +321,9 @@ export default function LiveWorkoutScreen() {
               unit={unit}
               isFirst={idx === 0}
               isLast={idx === orderedExercises.length - 1}
+              onPressName={() =>
+                router.push(`/(app)/exercises/${ex.id}/progress`)
+              }
               onMoveUp={() => moveExercise(ex.id, "up")}
               onMoveDown={() => moveExercise(ex.id, "down")}
               onAddSet={async (input) => {

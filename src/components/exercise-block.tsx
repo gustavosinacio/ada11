@@ -26,6 +26,10 @@ type Props = {
   onDeleteSet: (id: string) => void;
   onRemove?: () => void;
   removeDisabled?: boolean;
+  /** When provided, the exercise name `<Text>` is wrapped in a `<Pressable>`
+   *  that invokes this callback on press. When omitted, the name renders as
+   *  plain text (current behavior). Callers own the navigation target. */
+  onPressName?: () => void;
   /** Live-session only. Forwarded to each <SetInput>. Default: false. */
   showCheckable?: boolean;
   /** Forwarded toggle handler. Required when showCheckable === true.
@@ -50,6 +54,7 @@ export function ExerciseBlock({
   onDeleteSet,
   onRemove,
   removeDisabled,
+  onPressName,
   showCheckable = false,
   onToggleSetChecked,
   showVolumeTarget = false,
@@ -99,12 +104,28 @@ export function ExerciseBlock({
     <View className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-black">
       <View className="flex-row items-start justify-between px-4 py-3">
         <View className="flex-1 pr-2">
-          <Text className="text-lg font-semibold text-black dark:text-white">
-            {exercise.name}
-            {exercise.deleted_at != null ? (
-              <Text className="text-base font-normal text-gray-500"> (deleted)</Text>
-            ) : null}
-          </Text>
+          {onPressName ? (
+            <Pressable
+              onPress={onPressName}
+              accessibilityRole="button"
+              accessibilityLabel={`View progress for ${exercise.name}`}
+              className="active:opacity-70"
+            >
+              <Text className="text-lg font-semibold text-black dark:text-white">
+                {exercise.name}
+                {exercise.deleted_at != null ? (
+                  <Text className="text-base font-normal text-gray-500"> (deleted)</Text>
+                ) : null}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text className="text-lg font-semibold text-black dark:text-white">
+              {exercise.name}
+              {exercise.deleted_at != null ? (
+                <Text className="text-base font-normal text-gray-500"> (deleted)</Text>
+              ) : null}
+            </Text>
+          )}
           {(muscles.length > 0 || exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">
               {[
