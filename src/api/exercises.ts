@@ -29,6 +29,34 @@ export async function getExercise(id: string): Promise<ExerciseRow> {
   return data as ExerciseRow;
 }
 
+// Sibling of `listExercises` that intentionally returns soft-deleted rows too.
+// History / per-exercise progress surfaces use this so old sessions don't
+// silently drop blocks for exercises that were deleted from the library.
+// The picker + Exercises library list keep using `listExercises` (filtered).
+export async function listAllExercises(): Promise<ExerciseRow[]> {
+  const { data, error } = await supabase
+    .from("exercises")
+    .select("*")
+    // intentionally NO .is("deleted_at", null) — includes soft-deleted rows
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as ExerciseRow[];
+}
+
+// Sibling of `getExercise` that intentionally resolves soft-deleted rows too.
+// Used by the per-exercise progress screen so the header title still renders
+// the exercise name when navigating to a deleted exercise's progress chart.
+export async function getAnyExercise(id: string): Promise<ExerciseRow> {
+  const { data, error } = await supabase
+    .from("exercises")
+    .select("*")
+    .eq("id", id)
+    // intentionally NO .is("deleted_at", null)
+    .single();
+  if (error) throw error;
+  return data as ExerciseRow;
+}
+
 export async function createExercise(input: ExerciseInput): Promise<ExerciseRow> {
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;

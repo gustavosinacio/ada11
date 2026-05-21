@@ -16,7 +16,7 @@ import { SessionTimesEditor } from "~/components/session-times-editor";
 import { Button } from "~/components/ui/button";
 import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow, SetRow } from "~/db/types";
-import { useExercises } from "~/hooks/use-exercises";
+import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import {
   useSession,
@@ -38,7 +38,11 @@ export default function SessionDetailScreen() {
 
   const session = useSession(id);
   const setsQ = useSetsForSession(id);
-  const exercisesQ = useExercises();
+  // Use the include-deleted hook so blocks for soft-deleted exercises in this
+  // finished session still render. Picker on this screen (ExercisePicker below)
+  // keeps its own `useExercises()` (filtered) — soft-deleted exercises stay
+  // un-addable.
+  const exercisesQ = useAllExercises();
   const unit = useWeightUnit();
 
   const logSet = useLogSet(id ?? "");

@@ -88,6 +88,9 @@ export function ExerciseBlock({
         <View className="flex-1 pr-2">
           <Text className="text-lg font-semibold text-black dark:text-white">
             {exercise.name}
+            {exercise.deleted_at != null ? (
+              <Text className="text-base font-normal text-gray-500"> (deleted)</Text>
+            ) : null}
           </Text>
           {(muscles.length > 0 || exercise.equipment) && (
             <Text className="mt-0.5 text-sm text-gray-500">

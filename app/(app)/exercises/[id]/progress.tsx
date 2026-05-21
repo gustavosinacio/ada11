@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
-import { useExercise } from "~/hooks/use-exercises";
+import { useAllExercise } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
 import { epley1RM } from "~/utils/formulas";
@@ -31,7 +31,10 @@ export default function ExerciseProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const exercise = useExercise(id);
+  // Resolve the exercise even when it's soft-deleted so the screen header and
+  // page title still render the name. The chart data itself comes from sets,
+  // which already work for deleted ids.
+  const exercise = useAllExercise(id);
   const progressQ = useExerciseProgress(id);
   const unit = useWeightUnit();
   const { width: screenWidth } = useWindowDimensions();

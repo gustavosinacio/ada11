@@ -1,9 +1,8 @@
 # Features
 
-[ ] Soft-deleted exercises should remain fully visible in past workout history (sessions, sets, totals, weekly volume aggregates) — only the exercise picker and the Exercises library list should exclude them. Today the history detail filters via the same `useExercises()` query the picker uses (`app/(app)/history/[id].tsx:93,99-104`), so `ExerciseBlock`s for soft-deleted exercises silently disappear while the session header keeps counting their sets toward volume — visible inconsistency. Fix likely needs a separate "include deleted" query/hook for history surfaces, leaving the picker on the current filtered call.
-
 ## Done
 
+[x] Soft-deleted exercises should remain fully visible in past workout history (sessions, sets, totals, weekly volume aggregates) — only the exercise picker and the Exercises library list should exclude them.
 [x] Edit a workout's start and end time from the history detail screen — e.g. fix a session that was finished hours late, or one started before the user remembered to tap "Quick start".
 [x] Allow user to remove exercise from current session in progress.
 [x] Measurements screen does not need to live on the bottom bar. It can be moved to the profile page as a button in the page itself

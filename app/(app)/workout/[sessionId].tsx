@@ -16,7 +16,7 @@ import { RestTimerOverlay } from "~/components/rest-timer-overlay";
 import { SessionHeader } from "~/components/session-header";
 import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow, SetRow } from "~/db/types";
-import { useExercises } from "~/hooks/use-exercises";
+import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
@@ -36,7 +36,12 @@ export default function LiveWorkoutScreen() {
   const session = useSession(sessionId);
   const finish = useFinishSession();
 
-  const exercisesQ = useExercises();
+  // Include soft-deleted exercises so blocks don't disappear mid-session if a
+  // user soft-deletes from /exercises/[id] while a session is open, and so the
+  // routine-exercises embedded join (which doesn't filter deleted_at) still
+  // resolves to a row in exMap. Picker (ExercisePicker below) keeps the
+  // filtered `useExercises()` so the deleted row can't be re-added.
+  const exercisesQ = useAllExercises();
   const setsQ = useSetsForSession(sessionId);
   const logSet = useLogSet(sessionId ?? "");
   const updateSet = useUpdateSet(sessionId ?? "");
