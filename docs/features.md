@@ -1,7 +1,5 @@
 # Features
 
-[ ] rest timer can be activated automatically after a set is checked as done. If another set is checked, timer needs to reset. If done set is unchecked, timer keeps going, no action.
-
 [ ] All dates can be shown as only the month and day, but if the date belongs to a previous year, the year needs to be included in the date. This is noticeable especially on the history and pogress screens.
 
 [ ] BUG: /routines/27a33734-8fd5-4dc9-9863-552bcdf21494?id=27a33734-8fd5-4dc9-9863-552bcdf21494:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
@@ -57,6 +55,8 @@ Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
 Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
 
 ## Done
+
+[x] Rest timer now auto-starts when the user checks a working set during a live workout. Uses the set's exercise `target_rest_seconds`. Re-checking another set resets the timer (`useRestTimer.start()` overwrites idempotently). Unchecking is a no-op. Bulk-check-all (Finish flow) bypasses naturally — it doesn't route through `onToggleSetChecked`. Warmup + dropset checks don't fire (no inter-drop rest in real lifting). The pipeline caught a real pre-existing architectural bug: `useRestTimer` was a per-component `useState` hook, so the workout screen and overlay had separate instances — the pre-existing add-set auto-start at `[sessionId].tsx:373-376` was silently broken too (no e2e coverage). Fixed by lifting to React Context (`<RestTimerProvider>` wraps the screen + overlay). Also added an observer-based `useEffect([setsQ.data])` backstop to handle a RN-Web `Pressable` race (responder's `onPress` config lags one render behind `accessibilityLabel` update). 7 new e2e cases. Shipped via `docs/runs/2026-05-22_1415_rest-timer-auto-start/` after 1 D↔V + 2 I↔T rounds.
 
 [x] PR context on Progress page. The hero `PRs this week: N` count is now tappable — taps expand an accordion of celebratory PR rows (top 5 + "Show all (N)" for power weeks). Each row reads `{exercise} PR! +X kg (was Y kg)`; tap routes to that exercise's progress chart. Per-muscle list PR'd rows now render the same celebratory `<PrListRow>` instead of `Max · Now · To PR: 0 kg`. Per-row triplet's "Max" relabeled to "Best session" to avoid colliding with the hero's `Max = best week ever`. New legend under the hero clarifies the three terms (only when `maxKg > 0`). Verdict screen now consumes the same `<PrListRow>` (zero behavior change). Multi-PR semantic: `currentMaxKg = max(in-week sessions)` so 800→900→1000 displays `+200 (was 800)`. New helper `computePrsThisWeek({rows, currentWeekStartIso, currentWeekEndIso})` returns ordered array; existing `computePrExerciseIdsThisWeek` is now a thin wrapper. `usePrsThisWeek` returns `prsByExerciseId: Map` consumed by `useExercisesThisWeek` (single lifetime walk per render). Shipped via `docs/runs/2026-05-22_1300_pr-context/` after 3 D↔V + 2 I↔T rounds.
 
