@@ -1,12 +1,5 @@
 # Features
 
-[ ] **(priority 2) Weekly chart horizontal scrolling + week selector.** Today the weekly-volume strips (History mini + Progress full) show a fixed 8-week window. Spec:
-
-- Both strips become horizontally scrollable to navigate through the user's full ISO-week history.
-- Add a week selector (likely a "jump to date" affordance — tappable header showing the current window, opens a date picker). Designer call on exact UI.
-- Lifetime-best overlay on the Progress chart stays anchored to the lifetime max (doesn't change as you scroll). The "you're behind your lifetime best" visual signal must stay correct under scrolling.
-- ISO-week boundary semantics unchanged (Monday-Sunday, BRT).
-
 [ ] **(priority 3) "PRs this week" needs to show WHICH PRs + better in-app context for the numbers in general.** Two related needs:
 
 - The Progress page hero shows `+N PRs · Y · Z` but doesn't surface which exercises hit a PR. Either (a) make the PR count tappable → expands a list of "this week's PR rows" (exercise + new max + previous max), or (b) add a dedicated "PR'd this week" section above the per-muscle list, or (c) tag PR rows in the per-muscle list with a distinct visual treatment. Designer picks. The verdict screen already shows a similar list for the just-finished session — Progress should show the cumulative this-week version.
@@ -14,9 +7,63 @@
 
 [ ] rest timer can be activated automatically after a set is checked as done. If another set is checked, timer needs to reset. If done set is unchecked, timer keeps going, no action.
 
-[ ] All dates can be shown as only the month and day, but if the date belongs to a previous year, the year needs to be included in the date. This is noticeable especially on the history and pogress screens
+[ ] All dates can be shown as only the month and day, but if the date belongs to a previous year, the year needs to be included in the date. This is noticeable especially on the history and pogress screens.
+
+[ ] BUG: /routines/27a33734-8fd5-4dc9-9863-552bcdf21494?id=27a33734-8fd5-4dc9-9863-552bcdf21494:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.css-g5y9jx r-1loqt21 r-1otgn73 my-3 mr-4 flex-row items-center gap-1 self-center rounded-md border border-gray-200 px-2 py-1 active:bg-gray-100 dark:border-gray-800 dark:active:bg-gray-900>
+Ancestor with aria-hidden: <div.css-g5y9jx r-13awgt0> <div class=​"css-g5y9jx r-13awgt0" style=​"background-color:​ rgb(1, 1, 1)​;​" aria-hidden=​"true">​…​</div>​flex
+entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+await in (anonymous)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+await in (anonymous)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+installHook.js:1 Failed to add exercise {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "routine_exercises_routine_position_uq"'}code: "23505"details: nullhint: nullmessage: "duplicate key value violates unique constraint \"routine_exercises_routine_position_uq\""[[Prototype]]: Object
+overrideMethod @ installHook.js:1
+onPick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:1187
+await in onPick
+onPress @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:849
+onClick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:267
+ef @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Bn @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+of @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+await in (anonymous)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
+await in (anonymous)
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
+installHook.js:1 Failed to add exercise {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "routine_exercises_routine_position_uq"'}
+overrideMethod @ installHook.js:1
+onPick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:1187
+await in onPick
+onPress @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:849
+onClick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:267
+ef @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Bn @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+of @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
+Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
 
 ## Done
+
+[x] Weekly volume strip now scrolls horizontally through full ISO-week history. New `<VisibleRangePill>` (tappable header showing current visible range, year-aware) opens a bottom-sheet `<WeekSelector>` to jump to a year/month. Default position pinned to right edge (most recent week). Lifetime-best dotted overlay stays anchored inside the scroller. Data consolidation: `useWeeklyVolume` (8-week hook) deleted; all consumers use `useLifetimeWeeklyVolume`. New helpers `isoWeeksBetween` + `isoWeekContaining` in `src/utils/dates.ts`. Scroll re-render avoidance: pill owns its own state via `forwardRef` + `useImperativeHandle` so the 260-bar strip parent never `setState`s on scroll. Week-rollover auto-scrolls the right edge while page mounted. Shipped via `docs/runs/2026-05-22_1130_chart-scroll-week-selector/` after 2 D↔V + 2 I↔T rounds (caught: signature drop would break test #43, missing `isoWeeksBetween` helper, modal mockup contradicting bottom-sheet cite, scroll-rerender perf, week-drill-down regex collision + seed gap under dynamic-bucket model).
 
 [x] Set row declutter — RPE + notes moved behind a per-row bottom-sheet menu (`MoreHorizontal` trigger right of the check button, tints blue when data exists). RPE is now a chip selector (12 chips: `—, 5.0, 5.5, …, 10.0`), not a free-form input. Notes is a 4-line textarea inside the same menu. Default row visual: weight + reps + previous placeholder + check + menu trigger. Caught a real data-loss BLK-1 in v2 review: the unchanged `updateSet` was clobbering all 4 columns on every reps/weight blur once `<SetInput>.onCommit` got narrowed to `{reps, weight}`. Fixed at the root by applying the same partial-spread pattern (`if (patch.X !== undefined) payload.X = patch.X`) to `updateSet`. Shipped via `docs/runs/2026-05-22_1000_set-row-declutter/` after 3 D↔V + 2 I↔T rounds.
 
