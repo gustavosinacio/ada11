@@ -47,6 +47,22 @@ End-of-run artifacts archive to:
 ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/SecondBrainground/AIground/multi-agent-pipeline/pipeline-runs/<run-id>/
 ```
 
+## Interaction signaling
+
+Always play the macOS Glass sound whenever the user is needed to act — questions to answer, plan approvals, blockers, completion of an autonomous run. The user is frequently AFK during pipeline runs and wants an audible cue, not a silent prompt that lingers unread.
+
+```bash
+afplay /System/Library/Sounds/Glass.aiff
+```
+
+Trigger it:
+
+- Immediately before any `AskUserQuestion`, `ExitPlanMode`, or any text turn that ends with a question / decision request.
+- At the end of every autonomous multi-step run (the existing "Glass on completion" rule still applies).
+- When a pipeline hits a blocker that needs human input.
+
+Do **not** trigger it for routine progress updates or interim tool outputs.
+
 ## Identity / context
 
 - Owner: Gustavo Inácio. Project email = `gsinacio94@gmail.com`.

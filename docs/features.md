@@ -1,6 +1,19 @@
 # Features
 
+[ ] Strong CSV importer assigns `set_number = 1` to every set whose "Ordem da série" column is missing/empty (`scripts/import-strong.ts:517-518`). 46 rows in current data violate the implied `(session_id, exercise_id, set_number)` unique key. Fix the importer to auto-increment within `(session, exercise)` ordered by row appearance + backfill existing duplicates (re-number by `completed_at, created_at`). Affects: set numbering on history detail / progress page, "Anterior" column. Does NOT affect volume math. Evidence: `docs/runs/2026-05-21_2155_volume-math-wrong/diagnosis.md`.
+
+[ ] Checked sets should visually stand out — tint the row background (e.g. light green) so completed sets are easy to scan. Reference: Strong's behavior in `docs/runs/2026-05-21_2123_volume-bugs-evidence/strong-checked-set-row-tint.png` (sets 1 and 2 in green; set 3, unchecked, no tint).
+
+[ ] Time-field editing on mobile should auto-insert the `:` between hours and minutes as the user types (e.g. typing "1830" yields "18:30"). Applies to the session start/end time editors on the history detail screen.
+
+[ ] Add a "Cancel workout" button to the live training session that ends the session without saving any sets. Strong-style red secondary button below the exercise list. Reference: `docs/runs/2026-05-21_2123_volume-bugs-evidence/strong-checked-set-row-tint.png` ("Cancelar o treino" red button at the bottom).
+
 ## Done
+
+[x] Per-exercise live-workout strip now shows Max · Now · To PR · ≈ reps @ Wkg. "Now" counts only checked working sets (per F10 semantic). Reps clause auto-hides when no sets are checked yet to prevent a misleading "Now 0 · ≈ 10 reps @ 100" render. Shipped via `docs/runs/2026-05-21_2225_multi-metric-strip/`.
+
+[x] Weekly volume count appeared wrong because the "k" shorthand obscured the real number (e.g. "26.2k kg" felt off). `formatVolume` now renders integer kg with thousands separator (`"26,210 kg"`). Investigated via the bug-fix pipeline (`docs/runs/2026-05-21_2155_volume-math-wrong/`); diagnostic confirmed displayed values matched DB exactly — the bug was display, not math. The original "Previous PR" concern folded into the multi-metric strip feature (still open above).
+
 
 [x] From the live workout session, tapping an exercise's name should navigate to that exercise's history/progress page.
 [x] While training, each exercise should show the amount of total volume left to achieve the previous max volume of that exercise. It should also calculate, using the current used weights, the amount of reps left to surpass that volume. Those reps can be shown with floating points like "7.2 reps".
