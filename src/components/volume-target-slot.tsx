@@ -48,9 +48,19 @@ export function VolumeTargetSlot({
   if (state.kind === "no-pr") return null;
 
   if (state.kind === "chasing") {
+    const maxDisplay = formatVolume(state.previousMaxKg, unit);
+    const nowDisplay = formatVolume(state.runningKg, unit);
     const gapDisplay = formatVolume(state.gapKg, unit);
+    // MAJ-1 fix (option c): suppress the reps clause when nothing has been
+    // checked yet (`runningKg === 0`). Without this, a draft `100 × 5` (still
+    // unchecked) renders as "Now 0 kg · ≈ 10 reps @ 100 kg" — internally
+    // consistent but UX-misleading because the reps clause is then a
+    // forward-looking projection of an unchecked draft, not a derived
+    // consequence of the displayed Now.
     const showRepsClause =
-      state.repsToBeat != null && state.currentWeightKg != null;
+      state.repsToBeat != null &&
+      state.currentWeightKg != null &&
+      state.runningKg > 0;
     const repsDisplay = showRepsClause
       ? `${state.repsToBeat!.toFixed(1)} reps`
       : null;
@@ -59,10 +69,10 @@ export function VolumeTargetSlot({
       : null;
 
     const a11y = showRepsClause
-      ? `Need ${gapDisplay} more to beat your previous best. About ${state.repsToBeat!.toFixed(
+      ? `Previous best ${maxDisplay}, current session ${nowDisplay}, ${gapDisplay} to beat your previous best. About ${state.repsToBeat!.toFixed(
           1,
         )} reps at ${weightDisplay}.`
-      : `Need ${gapDisplay} more to beat your previous best.`;
+      : `Previous best ${maxDisplay}, current session ${nowDisplay}, ${gapDisplay} to beat your previous best.`;
 
     return (
       <View className="border-b border-gray-100 px-4 py-2 dark:border-gray-900">
@@ -71,7 +81,15 @@ export function VolumeTargetSlot({
           accessibilityLabel={a11y}
           className="text-sm text-gray-500 dark:text-gray-400"
         >
-          {"Volume to PR: "}
+          {"Max "}
+          <Text className="font-semibold tabular-nums text-black dark:text-white">
+            {maxDisplay}
+          </Text>
+          {" · Now "}
+          <Text className="font-semibold tabular-nums text-black dark:text-white">
+            {nowDisplay}
+          </Text>
+          {" · To PR "}
           <Text className="font-semibold tabular-nums text-black dark:text-white">
             {gapDisplay}
           </Text>

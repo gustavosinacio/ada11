@@ -102,7 +102,14 @@ describe("computeVolumeTarget — chasing state", () => {
       ]),
     ];
     // Running: 100 × 5 = 500 kg. Gap = 500. Current weight = 100 → reps to beat = 5.
-    const current = [mkSet({ set_number: 1, weight: "100", reps: 5 })];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }),
+    ];
 
     const state = computeVolumeTarget({
       pastSessions: past,
@@ -124,7 +131,14 @@ describe("computeVolumeTarget — chasing state", () => {
       ]),
     ];
     // Running: 80 × 5 = 400. Gap = 600. Current weight = 80 → 600 / 80 = 7.5.
-    const current = [mkSet({ set_number: 1, weight: "80", reps: 5 })];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "80",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }),
+    ];
 
     const state = computeVolumeTarget({
       pastSessions: past,
@@ -190,7 +204,12 @@ describe("computeVolumeTarget — chasing state", () => {
     const state = computeVolumeTarget({
       pastSessions: past,
       currentSessionSets: [
-        mkSet({ set_number: 1, weight: "100", reps: 1 }), // 100
+        mkSet({
+          set_number: 1,
+          weight: "100",
+          reps: 1,
+          completed_at: "2026-05-21T10:05:00Z",
+        }), // 100
       ],
     });
     expect(state.kind).toBe("chasing");
@@ -208,8 +227,18 @@ describe("computeVolumeTarget — surpassed state", () => {
       ]),
     ];
     const current = [
-      mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
-      mkSet({ set_number: 2, weight: "100", reps: 5 }), //  500
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 10,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // 1000
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 5,
+        completed_at: "2026-05-21T10:06:00Z",
+      }), //  500
     ]; // 1500
     const state = computeVolumeTarget({
       pastSessions: past,
@@ -229,7 +258,12 @@ describe("computeVolumeTarget — surpassed state", () => {
       ]),
     ];
     const current = [
-      mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000 == previous max
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 10,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // 1000 == previous max
     ];
     const state = computeVolumeTarget({
       pastSessions: past,
@@ -260,8 +294,14 @@ describe("computeVolumeTarget — warmup exclusion", () => {
         weight: "200",
         reps: 50,
         set_type: "warmup",
+        completed_at: "2026-05-21T10:05:00Z",
       }), // excluded
-      mkSet({ set_number: 2, weight: "100", reps: 2 }), // 200
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 2,
+        completed_at: "2026-05-21T10:06:00Z",
+      }), // 200
     ];
     const state = computeVolumeTarget({
       pastSessions: past,
@@ -299,7 +339,7 @@ describe("computeVolumeTarget — MAJ-1 regression: current-weight pick", () => 
         set_number: 1,
         weight: "100",
         reps: 5,
-        completed_at: null,
+        completed_at: "2026-05-21T10:04:00Z",
       }),
     ];
     const state = computeVolumeTarget({
@@ -321,7 +361,12 @@ describe("computeVolumeTarget — MAJ-1 regression: current-weight pick", () => 
       ]),
     ];
     const current = [
-      mkSet({ set_number: 1, weight: "80", reps: 5 }), // valid (volume 400)
+      mkSet({
+        set_number: 1,
+        weight: "80",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // valid (volume 400)
       mkSet({ set_number: 2, weight: null, reps: null }), // invalid: just added, empty
       mkSet({ set_number: 3, weight: "0", reps: 0 }), // invalid: zero
     ];
@@ -333,5 +378,196 @@ describe("computeVolumeTarget — MAJ-1 regression: current-weight pick", () => 
     if (state.kind !== "chasing") return;
     expect(state.currentWeightKg).toBe(80); // set #1, the only valid one
     expect(state.runningKg).toBe(400);
+  });
+});
+
+describe("computeVolumeTarget — checked-only running volume", () => {
+  it("excludes draft (unchecked) sets from runningKg", () => {
+    // Past best: 1,000 kg. Current = [checked 100×5, draft 100×5].
+    // Only the checked set should count toward Now.
+    const past = [
+      mkSession("s1", [
+        mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
+      ]),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // checked → counts
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 5,
+        completed_at: null,
+      }), // draft → excluded from Now, but still drives currentWeightKg
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.runningKg).toBe(500);
+    expect(state.gapKg).toBe(500);
+    expect(state.currentWeightKg).toBe(100);
+    expect(state.repsToBeat).toBe(5);
+  });
+
+  it("counts all checked working sets toward runningKg", () => {
+    const past = [
+      mkSession("s1", [
+        mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
+      ]),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 3,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // 300
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 2,
+        completed_at: "2026-05-21T10:06:00Z",
+      }), // 200
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.runningKg).toBe(500);
+    expect(state.gapKg).toBe(500);
+  });
+
+  it("a draft set still drives the currentWeightKg pick when it has the highest set_number (Decision #8)", () => {
+    // Documents the deliberate decoupling: Now is checked-only, but the
+    // "what weight am I on?" pick is about INTENT, so drafts still drive it.
+    const past = [
+      mkSession("s1", [
+        mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
+      ]),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "60",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // checked → counts toward Now (300)
+      mkSet({
+        set_number: 2,
+        weight: "80",
+        reps: 5,
+        completed_at: null,
+      }), // draft → not counted, but drives currentWeightKg
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.runningKg).toBe(300);
+    expect(state.currentWeightKg).toBe(80);
+    // gapKg = 1000 - 300 = 700; repsToBeat = 700 / 80 = 8.75.
+    expect(state.gapKg).toBe(700);
+    expect(state.repsToBeat).toBeCloseTo(8.75, 6);
+  });
+
+  it("warmup is still excluded even when checked", () => {
+    // The warmup-skip predicate runs alongside the checked filter — a
+    // checked warmup must NOT count toward Now.
+    const past = [
+      mkSession("s1", [
+        mkSet({ set_number: 1, weight: "100", reps: 5 }), // 500
+      ]),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "200",
+        reps: 50,
+        set_type: "warmup",
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // checked but warmup → excluded
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 2,
+        completed_at: "2026-05-21T10:06:00Z",
+      }), // 200
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.runningKg).toBe(200);
+    expect(state.gapKg).toBe(300);
+  });
+
+  it("MIN-4: chasing → surpassed transition triggers when an existing draft is toggled checked", () => {
+    // Build sets that already total ≥ previousMax. Initially they are
+    // drafts → runningKg = 0 → state is `chasing`. Flip both
+    // `completed_at` to a stamp → state must flip to `surpassed`.
+    const past = [
+      mkSession("s1", [
+        mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
+      ]),
+    ];
+    const draftSets = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 10,
+        completed_at: null,
+      }), // 1000 if counted
+      mkSet({
+        set_number: 2,
+        weight: "100",
+        reps: 5,
+        completed_at: null,
+      }), //  500 if counted
+    ];
+
+    const before = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: draftSets,
+    });
+    expect(before.kind).toBe("chasing");
+    if (before.kind !== "chasing") return;
+    expect(before.runningKg).toBe(0);
+    expect(before.gapKg).toBe(1000);
+
+    // Now flip both sets from draft → checked, simulating the user pressing
+    // the check button on each row. State should transition to `surpassed`
+    // with the same totals.
+    const checkedSets = draftSets.map((s, i) =>
+      mkSet({
+        set_number: s.set_number,
+        weight: s.weight,
+        reps: s.reps,
+        completed_at:
+          i === 0 ? "2026-05-21T10:05:00Z" : "2026-05-21T10:06:00Z",
+      }),
+    );
+
+    const after = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: checkedSets,
+    });
+    expect(after.kind).toBe("surpassed");
+    if (after.kind !== "surpassed") return;
+    expect(after.runningKg).toBe(1500);
+    expect(after.previousMaxKg).toBe(1000);
+    expect(after.overflowKg).toBe(500);
   });
 });

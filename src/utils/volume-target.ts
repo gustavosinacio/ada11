@@ -44,8 +44,18 @@ export type ComputeVolumeTargetInput = {
  * Canonical volume kernel — mirrors `exercises/[id]/progress.tsx:62-93` and
  * `weekly-volume-strip.tsx:43-51`. Skips warmups, parses string weights with
  * `parseFloat`, guards `w > 0 && r > 0`.
+ *
+ * Past-vs-live asymmetry (deliberate): `sumPastVolume` does NOT filter on
+ * `completed_at` because `pastSessions` is loaded by `listSetsForExercise`,
+ * which scopes to finished sessions (`ended_at IS NOT NULL`). Within a
+ * finished session every set is implicitly committed — the F10 "checked =
+ * committed" rule governs the LIVE session interpretation only. Migration
+ * 0007 made `completed_at` nullable, so a finished session could technically
+ * contain unchecked rows, but that case is operational noise, not the
+ * intended semantic, and folding it into the past-max reduction would
+ * silently corrupt historical PRs.
  */
-function sumVolume(sets: SetRow[]): number {
+function sumPastVolume(sets: SetRow[]): number {
   let total = 0;
   for (const s of sets) {
     if (s.set_type === "warmup") continue;
@@ -59,14 +69,40 @@ function sumVolume(sets: SetRow[]): number {
 }
 
 /**
+ * Live-session volume kernel. Same per-set predicate as `sumPastVolume`
+ * (warmup skip, weight > 0, reps > 0) plus a leading `completed_at != null`
+ * guard so drafts (unchecked rows) are excluded. This enforces the
+ * user-visible `Max − Now = To PR` arithmetic on `<VolumeTargetSlot>` per
+ * F10 "checked = committed" semantics.
+ */
+function sumLiveVolume(sets: SetRow[]): number {
+  let total = 0;
+  for (const s of sets) {
+    if (s.completed_at == null) continue;
+    if (s.set_type === "warmup") continue;
+    const w = s.weight ? parseFloat(s.weight) : NaN;
+    const r = s.reps ?? 0;
+    if (Number.isFinite(w) && w > 0 && r > 0) {
+      total += w * r;
+    }
+  }
+  return total;
+}
+
+/**
  * Computes the volume-target state for a single exercise.
  *
- * - `previousMaxKg` = max single-session volume across `pastSessions`.
- * - `runningKg` = volume of `currentSessionSets` using the same kernel.
+ * - `previousMaxKg` = max single-session volume across `pastSessions`
+ *   (via `sumPastVolume`, no completion filter).
+ * - `runningKg` = volume of CHECKED working sets in `currentSessionSets`
+ *   (via `sumLiveVolume`, filters `completed_at != null`). This enforces
+ *   `Max − Now = To PR` on the visible UI per F10 "checked = committed".
  * - `currentWeightKg` = weight of the set with the maximum `set_number` that
  *   has a finite positive weight. Chosen by `set_number` (not array index)
  *   because `listSetsForSession` orders by completion timestamp, which can
- *   reorder rows once individual sets are checked (MAJ-1 fix).
+ *   reorder rows once individual sets are checked (MAJ-1 fix). NOT gated by
+ *   `completed_at` — the "what weight am I on?" pick is about *intent*, so
+ *   drafts still drive it (Decision #8 in the design).
  *
  * Tie case (`gapKg <= 0` with `previousMaxKg > 0`): returns `surpassed` with
  * `overflowKg = Math.max(0, -gapKg)` so the slot can render a clean "matched"
@@ -80,7 +116,7 @@ export function computeVolumeTarget(
   let previousMaxKg = 0;
   if (pastSessions) {
     for (const session of pastSessions) {
-      const total = sumVolume(session.sets);
+      const total = sumPastVolume(session.sets);
       if (total > previousMaxKg) previousMaxKg = total;
     }
   }
@@ -89,7 +125,7 @@ export function computeVolumeTarget(
     return { kind: "no-pr" };
   }
 
-  const runningKg = sumVolume(currentSessionSets);
+  const runningKg = sumLiveVolume(currentSessionSets);
   const gapKg = previousMaxKg - runningKg;
 
   if (gapKg <= 0) {
