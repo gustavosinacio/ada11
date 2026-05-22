@@ -1,59 +1,9 @@
 # Features
 
 
-[ ] BUG: /routines/27a33734-8fd5-4dc9-9863-552bcdf21494?id=27a33734-8fd5-4dc9-9863-552bcdf21494:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
-Element with focus: <button.css-g5y9jx r-1loqt21 r-1otgn73 my-3 mr-4 flex-row items-center gap-1 self-center rounded-md border border-gray-200 px-2 py-1 active:bg-gray-100 dark:border-gray-800 dark:active:bg-gray-900>
-Ancestor with aria-hidden: <div.css-g5y9jx r-13awgt0> <div class=​"css-g5y9jx r-13awgt0" style=​"background-color:​ rgb(1, 1, 1)​;​" aria-hidden=​"true">​…​</div>​flex
-entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-await in (anonymous)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-await in (anonymous)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-installHook.js:1 Failed to add exercise {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "routine_exercises_routine_position_uq"'}code: "23505"details: nullhint: nullmessage: "duplicate key value violates unique constraint \"routine_exercises_routine_position_uq\""[[Prototype]]: Object
-overrideMethod @ installHook.js:1
-onPick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:1187
-await in onPick
-onPress @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:849
-onClick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:267
-ef @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Bn @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-of @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-await in (anonymous)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775 POST https://ykrbgpctbfvndxjnpzrg.supabase.co/rest/v1/routine_exercises?select=_ 409 (Conflict)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:775
-await in (anonymous)
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-then @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:776
-installHook.js:1 Failed to add exercise {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "routine_exercises_routine_position_uq"'}
-overrideMethod @ installHook.js:1
-onPick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:1187
-await in onPick
-onPress @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:849
-onClick @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:267
-ef @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-(anonymous) @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Bn @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-of @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
-
 ## Done
+
+[x] BUG: routines detail — quick double-tap on an exercise row in the picker fired multiple `POST /routine_exercises` requests that collided on `routine_exercises_routine_position_uq` (4× 409s + console error toast). Same shape as the F6 add-set race: no UI in-flight guard, DB unique index correctly caught it. Fix: `<ExercisePicker>` now tracks `pickingId: string | null` and disables the row Pressable while the mutation is in flight (mirrors the F6 add-set pattern). Bundled the adjacent aria-hidden warning in the same run: Expo Router web keeps prior screens with `display:none` but DOM-mounted, so the Edit button from `<RoutineListItem>` retained focus across the navigation → modal opens → RN-Web puts `aria-hidden="true"` on backdrop ancestors → focused button now inside an aria-hidden subtree → React/RN-Web warning. Fix: `Modal.onShow` calls `(document.activeElement as HTMLElement | null)?.blur()` on web (`typeof document` guard preserves native paths). New e2e `tests/e2e/routines-add-exercise-race.spec.ts` intercepts `POST /rest/v1/routine_exercises`, drives `Promise.all([target.click(), target.click()])` on the same row, asserts 1 POST/201/1 DB row. Shipped via `docs/runs/2026-05-22_1640_routines-409-and-aria/`.
 
 [x] Date format unification app-wide. New central helpers `formatDisplayDate(date, opts?)` + `formatShortDate(date, opts?)` in `src/utils/format-display-date.ts`. Year-suffix now consistent everywhere — current-year dates show `"May 24"` (or `"5/24"` on chart axes); prior-year dates show `"Nov 8, 2019"` (or `"11/8/25"` on chart axes). Weekday kept on session-list rows + history detail (`{includeWeekday: true}`); dropped on chart axes for axis-width stability. 12 sites migrated: session-summary-row, format-session-times, history week drill-down (+ new `accessibilityLabel="Week range:"`), exercise progress chart, measurements list+detail+chart, weekly-volume strip pill + per-bar a11y, IsoWeek.label, best-week label. Per-bar a11y label keeps its existing 4-digit year via `{yearFormat: "numeric"}` opt — byte-for-byte preserved. Three existing test files pinned with `vi.setSystemTime(2026-05-22)` so literal `"5/20"`/`"5/18"` assertions stay year-stable. Shipped via `docs/runs/2026-05-22_1530_date-format-unification/` after 2 D↔V + 2 I↔R rounds.
 
