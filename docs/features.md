@@ -1,18 +1,18 @@
 # Features
 
-[ ] Checked sets should visually stand out — tint the row background (e.g. light green) so completed sets are easy to scan. Reference: Strong's behavior in `docs/runs/2026-05-21_2123_volume-bugs-evidence/strong-checked-set-row-tint.png` (sets 1 and 2 in green; set 3, unchecked, no tint).
-
-[ ] Time-field editing on mobile should auto-insert the `:` between hours and minutes as the user types (e.g. typing "1830" yields "18:30"). Applies to the session start/end time editors on the history detail screen.
-
-[ ] Add a "Cancel workout" button to the live training session that ends the session without saving any sets. Strong-style red secondary button below the exercise list. Reference: `docs/runs/2026-05-21_2123_volume-bugs-evidence/strong-checked-set-row-tint.png` ("Cancelar o treino" red button at the bottom).
-
-[ ] Currently the current exercise pr info is hidden when the pr is beaten. I need the now and a "Prev. Max" to be shown after the pr is beaten.
-
-[ ] On history, the sessions that were not on the current year, should show the year on the date label
-
-[ ] Prevent quick-succession double-tap on "+ Working set" from inserting two identical rows. Repro: tapping the add-set button twice within ~300ms creates two rows sharing the same `set_number` (race between two `MAX(set_number) + 1` reads). Found on 2026-05-21 Leggiday session — Leg Extension Unilateral had two rows for set #2 (36 × 8). The DB unique index added in migration 0008 now rejects this at the SQL layer, so a duplicate insert will surface as a Supabase error instead of silently corrupting. The UX-level fix is to debounce the button or disable it during the in-flight insert mutation, so the user sees nothing instead of an error toast.
-
 ## Done
+
+[x] Checked-set rows now have a light green background (`bg-green-50 dark:bg-green-950/30`) matching Strong's reference. Check icon also tinted green.
+
+[x] Time-field on history detail now auto-inserts the `:` between hours and minutes as the user types. New `maskTimeInput` helper in `src/utils/session-times-form.ts` with 7 unit tests covering type-forward, paste, stray-colon, and delete-bypass paths.
+
+[x] Live workout now has a red "Cancel workout" button below the exercise list. Confirm dialog → soft-deletes the session (cascades nothing; session disappears from history). Uses the existing `useSoftDeleteSession` hook.
+
+[x] Volume-target strip's surpassed/matched state now shows a "Prev. Max X · Now Y" line below the celebration text so the reference numbers stay visible after the PR is beaten.
+
+[x] History session-list dates now include the year when the session is not in the current calendar year (e.g. "Fri, Nov 8, 2019" vs "Sat, May 24").
+
+[x] "+ Working set" button (and Warm-up / Dropset variants) are now disabled while the insert mutation is in flight, preventing the quick-double-tap race that produced duplicate `set_number` rows. The DB unique index from migration 0008 backs this up — if the UI debounce ever slips, the server rejects the duplicate cleanly.
 
 [x] Strong-import `set_number = 1` bug fixed in DB. Full-history scan found 356 collision groups / 1,118 corrupted rows (24× the originally-estimated 46). Backfilled 7,933 rows by re-numbering each (session, exercise) group in CSV chronological order (matched 11 user-renamed exercises automatically via session+weight+reps fingerprint). Added migration `0008_sets_unique_set_number.sql` — partial unique index on `(session_id, exercise_id, set_number) WHERE deleted_at IS NULL` — to catch any future regression at the DB layer. Found and fixed one bonus native double-tap dup on the Leggiday Leg-Extension. Importer (`scripts/import-strong.ts`) deleted since the user won't re-import. Shipped via `docs/runs/2026-05-21_2330_strong-import-setnumber/`.
 

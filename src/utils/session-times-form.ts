@@ -20,6 +20,24 @@ import { parse } from "date-fns";
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const TIME_RE = /^(2[0-3]|[01]\d):([0-5]\d)$/;
 
+/**
+ * Mask incoming text into a partial `HH:mm` string while the user types on a
+ * numeric keyboard. Bypasses while deleting so the user can step backward
+ * through the colon without it being re-inserted.
+ *
+ * Examples:
+ *   "" → "1" → "18" → "183" => "18:3" → "1830" => "18:30"
+ *   Pasting "18:30" → "18:30"
+ *   Pasting "1830" → "18:30"
+ *   Backspace from "18:30" → "18:3" → "18:" → "18" → "1" → ""
+ */
+export function maskTimeInput(prev: string, next: string): string {
+  if (next.length < prev.length) return next;
+  const digits = next.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
 export type TimesDraft = {
   startDate: string; // YYYY-MM-DD
   startTime: string; // HH:mm (24h)

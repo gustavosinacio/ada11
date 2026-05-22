@@ -110,12 +110,14 @@ export function VolumeTargetSlot({
   // surpassed
   const isMatch = state.overflowKg === 0;
   const overflowDisplay = formatVolume(state.overflowKg, unit);
+  const surMaxDisplay = formatVolume(state.previousMaxKg, unit);
+  const surNowDisplay = formatVolume(state.runningKg, unit);
   const copy = isMatch
     ? "Matched your previous best — one more rep is a PR"
     : `New PR! +${overflowDisplay} over your previous`;
   const a11y = isMatch
-    ? "Matched your previous best. One more rep beats it."
-    : `New personal record. ${overflowDisplay} over your previous best.`;
+    ? `Matched your previous best at ${surMaxDisplay}. Current session ${surNowDisplay}. One more rep beats it.`
+    : `New personal record. ${overflowDisplay} over your previous best. Previous best ${surMaxDisplay}, current session ${surNowDisplay}.`;
 
   return (
     <View className="border-b border-gray-100 px-4 py-2 dark:border-gray-900">
@@ -125,6 +127,16 @@ export function VolumeTargetSlot({
         className="text-sm font-medium tabular-nums text-emerald-600 dark:text-emerald-400"
       >
         {copy}
+      </Text>
+      <Text className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+        {"Prev. Max "}
+        <Text className="font-semibold tabular-nums text-black dark:text-white">
+          {surMaxDisplay}
+        </Text>
+        {" · Now "}
+        <Text className="font-semibold tabular-nums text-black dark:text-white">
+          {surNowDisplay}
+        </Text>
       </Text>
     </View>
   );

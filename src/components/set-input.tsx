@@ -105,7 +105,7 @@ export function SetInput({
   return (
     <View
       className={`border-b border-gray-100 dark:border-gray-900 ${
-        showCheckable && isChecked ? "bg-blue-50 dark:bg-blue-950/30" : ""
+        showCheckable && isChecked ? "bg-green-50 dark:bg-green-950/30" : ""
       }`}
     >
       <View className="flex-row items-center gap-2 px-4 py-2">
@@ -119,7 +119,7 @@ export function SetInput({
             className="h-11 w-11 items-center justify-center"
           >
             {isChecked ? (
-              <CheckSquare color="#3b82f6" size={20} />
+              <CheckSquare color="#16a34a" size={20} />
             ) : (
               <Square color="#9ca3af" size={20} />
             )}

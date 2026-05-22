@@ -21,7 +21,11 @@ import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
-import { useFinishSession, useSession } from "~/hooks/use-sessions";
+import {
+  useFinishSession,
+  useSession,
+  useSoftDeleteSession,
+} from "~/hooks/use-sessions";
 import {
   useBulkCheckAllInSession,
   useBulkSoftDeleteUncheckedInSession,
@@ -40,6 +44,7 @@ export default function LiveWorkoutScreen() {
 
   const session = useSession(sessionId);
   const finish = useFinishSession();
+  const cancelSession = useSoftDeleteSession();
 
   // Include soft-deleted exercises so blocks don't disappear mid-session if a
   // user soft-deletes from /exercises/[id] while a session is open, and so the
@@ -261,6 +266,25 @@ export default function LiveWorkoutScreen() {
     await finishAfterMutation();
   };
 
+  const onCancel = async () => {
+    if (!sessionId) return;
+    const ok = await confirmDelete({
+      title: "Cancel workout?",
+      message:
+        "This session will be discarded — no sets will be saved. This can't be undone.",
+      confirmLabel: "Cancel workout",
+      cancelLabel: "Keep going",
+    });
+    if (!ok) return;
+    try {
+      await cancelSession.mutateAsync(sessionId);
+    } catch (err) {
+      console.warn("Cancel session failed", err);
+      return;
+    }
+    router.replace("/(app)/workout");
+  };
+
   const handleDiscardUncheckedAndFinish = async () => {
     if (!sessionId) return;
     setFinishModalOpen(false);
@@ -402,6 +426,17 @@ export default function LiveWorkoutScreen() {
             <Calculator color="#6b7280" size={18} />
             <Text className="ml-2 text-base text-black dark:text-white">
               Plate calculator
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onCancel}
+            disabled={cancelSession.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel workout"
+            className="mt-2 flex-row items-center justify-center rounded-lg bg-red-50 py-3 dark:bg-red-950/30"
+          >
+            <Text className="text-base font-medium text-red-600 dark:text-red-400">
+              {cancelSession.isPending ? "Cancelling…" : "Cancel workout"}
             </Text>
           </Pressable>
         </View>

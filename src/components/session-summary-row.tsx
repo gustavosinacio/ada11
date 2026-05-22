@@ -15,11 +15,17 @@ type Props = {
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
+    const opts: Intl.DateTimeFormatOptions = {
       weekday: "short",
       month: "short",
       day: "numeric",
-    });
+    };
+    // Show year for dates outside the current year so old sessions aren't
+    // ambiguous (e.g. "Sat, Nov 8" might be from 2019 in imported data).
+    if (d.getFullYear() !== new Date().getFullYear()) {
+      opts.year = "numeric";
+    }
+    return d.toLocaleDateString(undefined, opts);
   } catch {
     return iso;
   }

@@ -21,6 +21,7 @@ import {
 import {
   countSetsOutsideRange,
   decomposeIso,
+  maskTimeInput,
   messageFor,
   type TimesDraft,
   validateTimes,
@@ -149,7 +150,9 @@ export function SessionTimesEditor(props: SessionTimesEditorProps) {
         />
         <TextInput
           value={draft.startTime}
-          onChangeText={(v) => setDraft((d) => ({ ...d, startTime: v }))}
+          onChangeText={(v) =>
+            setDraft((d) => ({ ...d, startTime: maskTimeInput(d.startTime, v) }))
+          }
           placeholder="HH:mm"
           placeholderTextColor="#9ca3af"
           keyboardType="numeric"
@@ -175,7 +178,9 @@ export function SessionTimesEditor(props: SessionTimesEditorProps) {
         />
         <TextInput
           value={draft.endTime}
-          onChangeText={(v) => setDraft((d) => ({ ...d, endTime: v }))}
+          onChangeText={(v) =>
+            setDraft((d) => ({ ...d, endTime: maskTimeInput(d.endTime, v) }))
+          }
           placeholder="HH:mm"
           placeholderTextColor="#9ca3af"
           keyboardType="numeric"

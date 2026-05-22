@@ -60,6 +60,25 @@ export function ExerciseBlock({
   showVolumeTarget = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // Local in-flight guard so a quick double-tap on the add-set button doesn't
+  // race two `MAX(set_number) + 1` reads and produce duplicate rows (the DB
+  // partial unique index on (session, exercise, set_number) would reject the
+  // second insert and surface as an error toast, which is worse UX than a
+  // disabled button for ~200ms). Per-exercise scope so tapping Bench's add
+  // doesn't disable Squat's.
+  const [isAddingSet, setIsAddingSet] = useState(false);
+  const handleAddSet = async (input: {
+    set_type: SetType;
+    parent_set_id?: string | null;
+  }) => {
+    if (isAddingSet) return;
+    setIsAddingSet(true);
+    try {
+      await Promise.resolve(onAddSet(input));
+    } finally {
+      setIsAddingSet(false);
+    }
+  };
 
   const muscles = exercise.muscles ?? [];
 
@@ -223,9 +242,10 @@ export function ExerciseBlock({
       <View className="px-4 py-3">
         <View className="flex-row gap-2">
           <Pressable
-            onPress={() => onAddSet({ set_type: "working" })}
+            onPress={() => handleAddSet({ set_type: "working" })}
+            disabled={isAddingSet}
             accessibilityRole="button"
-            className="flex-1 rounded-lg bg-black py-2 dark:bg-white"
+            className={`flex-1 rounded-lg bg-black py-2 dark:bg-white ${isAddingSet ? "opacity-50" : ""}`}
           >
             <Text className="text-center text-sm font-medium text-white dark:text-black">
               + Working set
@@ -245,11 +265,12 @@ export function ExerciseBlock({
           <View className="mt-2 gap-2">
             <Pressable
               onPress={() => {
-                onAddSet({ set_type: "warmup" });
+                handleAddSet({ set_type: "warmup" });
                 setMenuOpen(false);
               }}
+              disabled={isAddingSet}
               accessibilityRole="button"
-              className="rounded-lg border border-gray-300 py-2 dark:border-gray-700"
+              className={`rounded-lg border border-gray-300 py-2 dark:border-gray-700 ${isAddingSet ? "opacity-50" : ""}`}
             >
               <Text className="text-center text-sm text-black dark:text-white">
                 + Warm-up
@@ -258,12 +279,12 @@ export function ExerciseBlock({
             <Pressable
               onPress={() => {
                 if (!lastWorkingSet) return;
-                onAddSet({ set_type: "dropset", parent_set_id: lastWorkingSet.id });
+                handleAddSet({ set_type: "dropset", parent_set_id: lastWorkingSet.id });
                 setMenuOpen(false);
               }}
-              disabled={!lastWorkingSet}
+              disabled={!lastWorkingSet || isAddingSet}
               accessibilityRole="button"
-              className={`rounded-lg border border-gray-300 py-2 dark:border-gray-700 ${!lastWorkingSet ? "opacity-50" : ""}`}
+              className={`rounded-lg border border-gray-300 py-2 dark:border-gray-700 ${!lastWorkingSet || isAddingSet ? "opacity-50" : ""}`}
             >
               <Text className="text-center text-sm text-black dark:text-white">
                 {lastWorkingSet

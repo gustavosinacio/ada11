@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   composeIso,
+  maskTimeInput,
   countSetsOutsideRange,
   DATE_RE,
   decomposeIso,
@@ -295,5 +296,43 @@ describe("messageFor", () => {
     expect(messageFor("end-time-invalid")).toMatch(/HH:MM/);
     expect(messageFor("end-before-start")).toMatch(/after start/);
     expect(messageFor("end-in-future")).toMatch(/future/);
+  });
+});
+
+describe("maskTimeInput", () => {
+  it("inserts the colon after the second digit while typing forward", () => {
+    expect(maskTimeInput("", "1")).toBe("1");
+    expect(maskTimeInput("1", "18")).toBe("18");
+    expect(maskTimeInput("18", "183")).toBe("18:3");
+    expect(maskTimeInput("18:3", "18:30")).toBe("18:30");
+  });
+
+  it("masks a fully-typed bare-digit sequence", () => {
+    // User types "1830" without any colon (numeric keyboard).
+    expect(maskTimeInput("183", "1830")).toBe("18:30");
+  });
+
+  it("normalises a paste that already includes the colon", () => {
+    expect(maskTimeInput("", "18:30")).toBe("18:30");
+  });
+
+  it("normalises a paste of bare digits", () => {
+    expect(maskTimeInput("", "1830")).toBe("18:30");
+  });
+
+  it("strips a stray colon typed in the wrong spot", () => {
+    expect(maskTimeInput("", "1:8")).toBe("18");
+  });
+
+  it("bypasses the mask while deleting so the colon can be removed", () => {
+    expect(maskTimeInput("18:30", "18:3")).toBe("18:3");
+    expect(maskTimeInput("18:3", "18:")).toBe("18:");
+    expect(maskTimeInput("18:", "18")).toBe("18");
+    expect(maskTimeInput("18", "1")).toBe("1");
+    expect(maskTimeInput("1", "")).toBe("");
+  });
+
+  it("clamps to 4 digits", () => {
+    expect(maskTimeInput("18:30", "18:301")).toBe("18:30");
   });
 });
