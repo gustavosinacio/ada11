@@ -20,22 +20,23 @@ describe("formatVolume", () => {
     expect(formatVolume(840.6, "kg")).toBe("841 kg");
   });
 
-  it("applies k-shorthand with one decimal at >= 1000", () => {
-    expect(formatVolume(1000, "kg")).toBe("1.0k kg");
-    expect(formatVolume(12400, "kg")).toBe("12.4k kg");
-    expect(formatVolume(2500, "kg")).toBe("2.5k kg");
+  it("renders thousands with a comma separator (en-US)", () => {
+    expect(formatVolume(1000, "kg")).toBe("1,000 kg");
+    expect(formatVolume(12400, "kg")).toBe("12,400 kg");
+    expect(formatVolume(2500, "kg")).toBe("2,500 kg");
+    expect(formatVolume(26210, "kg")).toBe("26,210 kg");
   });
 
-  it("MIN-3 boundary: 999.5 kg rounds up to k-shorthand (no kg-only cliff)", () => {
-    expect(formatVolume(999.5, "kg")).toBe("1.0k kg");
+  it("rounds before grouping at the 1000 boundary", () => {
+    expect(formatVolume(999.5, "kg")).toBe("1,000 kg");
     expect(formatVolume(999.4, "kg")).toBe("999 kg");
   });
 
   it("converts kg to lbs before formatting when unit is lbs", () => {
-    // 100 kg ~ 220.46 lbs (< 1000 -> whole-number)
+    // 100 kg ~ 220.46 lbs (no grouping needed)
     expect(formatVolume(100, "lbs")).toBe("220 lbs");
-    // 500 kg ~ 1102.3 lbs (>= 1000 -> k-shorthand)
-    expect(formatVolume(500, "lbs")).toBe("1.1k lbs");
+    // 500 kg ~ 1102.3 lbs (grouped with comma)
+    expect(formatVolume(500, "lbs")).toBe("1,102 lbs");
   });
 
   it("does NOT affect existing formatWeight (regression check)", () => {

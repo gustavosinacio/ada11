@@ -24,14 +24,11 @@ export function parseWeightToKg(input: string, unit: WeightUnit): number | null 
 }
 
 /**
- * Aggregate-volume formatter. Distinct from `formatWeight` because volume
- * readouts (a) abbreviate above 1000 with one decimal (`"12.4k kg"`), and
- * (b) drop decimals for whole values (`"840 kg"`) so the eye can scan at a
- * glance. Per-set displays should keep using `formatWeight`.
- *
- * Boundary rule (MIN-3): we round-then-compare. 999.5 kg rounds to 1000 and
- * renders as `"1.0k kg"`, avoiding the kg-vs-lbs asymmetry where the same
- * underlying volume would abbreviate in one unit and not the other.
+ * Aggregate-volume formatter. Renders an integer with a thousands comma
+ * separator (e.g. `"26,210 kg"`, `"840 kg"`). Locale fixed to en-US so devices
+ * in pt-BR don't render `"26.210 kg"` (period as thousands separator), which
+ * would re-introduce the readability problem the abbreviation removal was
+ * meant to solve. Per-set displays should keep using `formatWeight`.
  */
 export function formatVolume(
   kg: number | null | undefined,
@@ -39,11 +36,7 @@ export function formatVolume(
 ): string {
   if (kg == null) return "—";
   const value = unit === "kg" ? kg : kgToLbs(kg);
-  const rounded = Math.round(value);
-  if (rounded >= 1000) {
-    return `${(value / 1000).toFixed(1)}k ${unit}`;
-  }
-  return `${rounded} ${unit}`;
+  return `${Math.round(value).toLocaleString("en-US")} ${unit}`;
 }
 
 // ---------------------------------------------------------------------------

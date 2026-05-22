@@ -193,7 +193,7 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
       await expect(page.getByText("This week", { exact: true })).toBeVisible({
         timeout: 15_000,
       });
-      await expect(page.getByText("2.5k kg", { exact: true })).toBeVisible({
+      await expect(page.getByText("2,500 kg", { exact: true })).toBeVisible({
         timeout: 5_000,
       });
 
@@ -214,15 +214,15 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
         { timeout: 10_000 },
       );
 
-      // Headline-vs-bar contract: the strip showed "2.5k kg", the detail
+      // Headline-vs-bar contract: the strip showed "2,500 kg", the detail
       // screen's Total volume row should too.
       await expect(
         page.getByText("Total volume", { exact: true }),
       ).toBeVisible({ timeout: 5_000 });
-      // 2.5k kg appears twice (header + body header range). Use the row value.
+      // 2,500 kg appears twice (header + body header range). Use the row value.
       const totalRow = page
         .locator("div")
-        .filter({ hasText: /^Total volume2\.5k kg$/ });
+        .filter({ hasText: /^Total volume2,500 kg$/ });
       await expect(totalRow.first()).toBeVisible({ timeout: 5_000 });
 
       // Sessions row = 1 (1 ended, 0 in progress).

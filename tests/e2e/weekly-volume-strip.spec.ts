@@ -186,8 +186,8 @@ test.describe("Weekly volume strip — History screen", () => {
         timeout: 15_000,
       });
 
-      // Current-week sum: 5 sets × 100 kg × 5 reps = 2500 kg → "2.5k kg".
-      await expect(page.getByText("2.5k kg", { exact: true })).toBeVisible({
+      // Current-week sum: 5 sets × 100 kg × 5 reps = 2500 kg → "2,500 kg".
+      await expect(page.getByText("2,500 kg", { exact: true })).toBeVisible({
         timeout: 5_000,
       });
 
@@ -334,8 +334,8 @@ test.describe("Weekly volume strip — History screen", () => {
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
 
-      // Now: 10 sets × 100 kg × 1 rep = 1000 kg → "1.0k kg".
-      await expect(page.getByText("1.0k kg", { exact: true })).toBeVisible({
+      // Now: 10 sets × 100 kg × 1 rep = 1000 kg → "1,000 kg".
+      await expect(page.getByText("1,000 kg", { exact: true })).toBeVisible({
         timeout: 20_000,
       });
 
