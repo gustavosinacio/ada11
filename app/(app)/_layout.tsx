@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import {
   Dumbbell,
   History,
+  TrendingUp,
   User,
   Wrench,
 } from "lucide-react-native";
@@ -47,6 +48,13 @@ export default function AppLayout() {
           options={{
             title: "History",
             tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="progress"
+          options={{
+            title: "Progress",
+            tabBarIcon: ({ color, size }) => <TrendingUp color={color} size={size} />,
           }}
         />
         <Tabs.Screen

@@ -25,3 +25,24 @@ export function useWeeklyVolume(): UseQueryResult<WeeklyVolumeRow[], Error> {
     staleTime: 60_000,
   });
 }
+
+/**
+ * Returns every finished, non-warmup, non-deleted set in the user's history
+ * (paginated server-side). Powers the Progress page's lifetime-best week,
+ * PR-this-week count, and per-exercise lifetime maxes — all derive from this
+ * single dataset.
+ *
+ * Cache key sits under the `["stats"]` prefix, so existing invalidations in
+ * `useFinishSession` / `useUpdateSessionTimes` / `useSoftDeleteSession`
+ * cascade for free.
+ */
+export function useLifetimeWeeklyVolume(): UseQueryResult<
+  WeeklyVolumeRow[],
+  Error
+> {
+  return useQuery({
+    queryKey: ["stats", "weekly-volume", "lifetime"],
+    queryFn: () => listWeeklyVolumeRows({}),
+    staleTime: 60_000,
+  });
+}

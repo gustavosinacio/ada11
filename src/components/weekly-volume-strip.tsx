@@ -64,7 +64,26 @@ function computeStripModel(data: WeeklyVolumeRow[]): StripModel {
   return { buckets, maxKg, currentWeekKg };
 }
 
-export function WeeklyVolumeStrip(): React.JSX.Element | null {
+type Props = {
+  /**
+   * Lifetime-best-week kg. When `> 0` AND provided:
+   *  - The bar-height denominator becomes `Math.max(model.maxKg, bestWeekKg)`.
+   *  - A dotted overlay line is drawn at the bestWeekKg level.
+   * When undefined or 0, the strip renders byte-identically to History's
+   * existing behaviour (denom = model.maxKg, no overlay).
+   */
+  bestWeekKg?: number;
+  /**
+   * Optional label rendered below the date row (e.g. "Best week: 26,210 kg
+   * (5/13)"). Caller assembles this so the strip stays unit-agnostic.
+   */
+  bestWeekLabel?: string;
+};
+
+export function WeeklyVolumeStrip({
+  bestWeekKg,
+  bestWeekLabel,
+}: Props = {}): React.JSX.Element | null {
   const router = useRouter();
   const { data, isLoading, isError } = useWeeklyVolume();
   const unit = useWeightUnit();
@@ -94,9 +113,22 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
   if (!model) return null;
   if (model.maxKg === 0) return null;
 
+  // Max-aware denominator (BLK-2). When `bestWeekKg` is undefined OR 0,
+  // `denom === model.maxKg` and bar heights are byte-identical to the
+  // History-mount behaviour. When `bestWeekKg > model.maxKg`, bars rescale
+  // down proportionally and the overlay sits at the top edge.
+  const denom = Math.max(model.maxKg, bestWeekKg ?? 0);
+  const showOverlay = bestWeekKg != null && bestWeekKg > 0;
+  const overlayY =
+    denom === 0
+      ? PLOT_HEIGHT
+      : PLOT_HEIGHT -
+        Math.round(((bestWeekKg ?? 0) / denom) * PLOT_HEIGHT);
+
   // BRANCH 3: data — wrapper + per-column pressables. Each column owns the
   // bar (top, baseline-aligned via marginTop) and the date label (bottom),
-  // so the whole column is the tap target.
+  // so the whole column is the tap target. The dotted overlay (when present)
+  // is rendered as an absolutely-positioned sibling over the bar row only.
   return (
     <View className="border-b border-gray-200 px-4 py-5 dark:border-gray-800">
       <Text className="text-xs uppercase tracking-wide text-gray-500">
@@ -106,14 +138,14 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
         {formatVolume(model.currentWeekKg, unit)}
       </Text>
 
-      <View className="mt-4 flex-row gap-1.5">
+      <View className="relative mt-4 flex-row gap-1.5">
         {model.buckets.map((b) => {
           const h =
-            model.maxKg === 0
+            denom === 0
               ? MIN_BAR_HEIGHT
               : Math.max(
                   MIN_BAR_HEIGHT,
-                  Math.round((b.totalKg / model.maxKg) * PLOT_HEIGHT),
+                  Math.round((b.totalKg / denom) * PLOT_HEIGHT),
                 );
           const barCls =
             b.totalKg === 0
@@ -140,7 +172,23 @@ export function WeeklyVolumeStrip(): React.JSX.Element | null {
             </Pressable>
           );
         })}
+
+        {showOverlay ? (
+          <View
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ top: overlayY, height: 1 }}
+            className="absolute left-0 right-0 border-t border-dashed border-emerald-500 dark:border-emerald-400"
+          />
+        ) : null}
       </View>
+
+      {showOverlay && bestWeekLabel ? (
+        <Text className="mt-2 text-center text-[10px] text-emerald-600 dark:text-emerald-400">
+          {bestWeekLabel}
+        </Text>
+      ) : null}
     </View>
   );
 }
