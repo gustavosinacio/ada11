@@ -1,6 +1,10 @@
 # Features
 
+[ ] **End-of-session verdict screen.** When the user taps Finish (after the existing unchecked-sets dialog, if any), show a brief summary screen: `+N PRs · Y kg total volume · Zh Wm duration`, with a list of which exercises hit a new PR. Closes the loop on the in-session `Volume to PR` strip — today, hitting Finish just navigates away with no payoff for the work tracked. Strong's equivalent is the post-workout summary. The verdict screen has a single "Done" button that navigates back to the workout tab.
+
 ## Done
+
+[x] New Progress tab + page. `TrendingUp` icon between History and Profile. Hero: `PRs this week: N` + weekly volume `Max · Now · To PR` (lifetime-best anchor). Bars: extended `<WeeklyVolumeStrip>` with dotted lifetime-best overlay (max-aware denominator so the line stays inside the plot when best exceeds the 8-week window). List: exercises trained this week, grouped by `muscles[0]` (empty → "Other"), each row shows per-exercise `Max · Now · To PR`. Streak card: current consecutive weeks + best-ever. All Progress queries under `["stats", "progress-page", …]` so the existing `["stats"]` invalidation cascade catches them. Pure helpers in `src/utils/progress-page-math.ts` (59 unit tests). Shipped via `docs/runs/2026-05-22_0030_progress-page/` after 3 D↔V rounds that caught a hard crash (null `completed_at` in unchecked-set rows would have `parseISO(null) → Invalid Date → format() RangeError` in render) before Implement.
 
 [x] Checked-set rows now have a light green background (`bg-green-50 dark:bg-green-950/30`) matching Strong's reference. Check icon also tinted green.
 
