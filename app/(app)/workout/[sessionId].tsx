@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Calculator, Plus } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,7 +19,7 @@ import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow, SetRow } from "~/db/types";
 import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
-import { useRestTimer } from "~/hooks/use-rest-timer";
+import { RestTimerProvider, useRestTimer } from "~/hooks/use-rest-timer";
 import { useRoutineExercises } from "~/hooks/use-routine-exercises";
 import {
   useFinishSession,
@@ -40,6 +40,19 @@ import {
 } from "~/hooks/use-sets";
 
 export default function LiveWorkoutScreen() {
+  // Provider wraps the screen body so `useRestTimer()` in both
+  // `LiveWorkoutScreenInner` (set-check handlers, add-set handler) and the
+  // `<RestTimerOverlay>` rendered inside read from the same state instance.
+  // Without this, each `useRestTimer()` call would create its own `useState`
+  // tree and `restTimer.start(rest)` would never propagate to the overlay.
+  return (
+    <RestTimerProvider>
+      <LiveWorkoutScreenInner />
+    </RestTimerProvider>
+  );
+}
+
+function LiveWorkoutScreenInner() {
   const router = useRouter();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
@@ -97,6 +110,59 @@ export default function LiveWorkoutScreen() {
     }
     return map;
   }, [routineExercisesQ.data]);
+
+  // Observer-based rest-timer auto-start. We can't safely rely on the
+  // optimistic click-time path alone: react-native-web's `Pressable` wires
+  // its `onPress` through a `useRef`/`useEffect` cycle (see
+  // `react-native-web/dist/cjs/modules/usePressEvents/index.js`), which on
+  // very fast successive clicks (e.g. Playwright firing
+  // check→uncheck→re-check inside ~500ms) can dispatch a STALE `onPress`
+  // closure. That closure carries stale React state, so a re-check can
+  // land on the previous render's view of the cache and silently no-op.
+  //
+  // To make the start side-effect robust against that race AND against
+  // the pre-existing add-set path (`useLogSet` had no e2e coverage), we
+  // watch `setsQ.data` and start the timer when EXACTLY ONE working set
+  // transitions from `completed_at == null` → `completed_at != null`
+  // between renders. The "exactly one" gate matters because the bulk
+  // "Check all and finish" path flips many sets simultaneously, and the
+  // design (and the e2e spec at `bulk Check all and finish does NOT fire
+  // the timer`) explicitly forbids the timer firing in that flow.
+  //
+  // Tracking is done via a ref of currently-checked working-set IDs so we
+  // fire exactly once per transition (not on every re-render).
+  const checkedWorkingSetIdsRef = useRef<Set<string>>(new Set());
+  // Hydration guard: the first time `setsQ.data` arrives we initialise the
+  // ref WITHOUT firing the timer for any pre-checked sets (e.g. a session
+  // resumed from history). Only subsequent transitions count.
+  const checkedHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!setsQ.data) return;
+    const currentlyChecked = new Set<string>();
+    for (const s of setsQ.data) {
+      if (s.completed_at != null && s.set_type === "working") {
+        currentlyChecked.add(s.id);
+      }
+    }
+    if (!checkedHydratedRef.current) {
+      checkedHydratedRef.current = true;
+      checkedWorkingSetIdsRef.current = currentlyChecked;
+      return;
+    }
+    // Collect IDs newly added (transitioned to checked since last update).
+    const newlyChecked: string[] = [];
+    for (const id of currentlyChecked) {
+      if (!checkedWorkingSetIdsRef.current.has(id)) newlyChecked.push(id);
+    }
+    checkedWorkingSetIdsRef.current = currentlyChecked;
+    // Bulk transitions (Check-all-and-finish flips every unchecked set in
+    // one PATCH) must NOT fire the timer.
+    if (newlyChecked.length !== 1) return;
+    const s = setsQ.data.find((x) => x.id === newlyChecked[0]);
+    if (!s) return;
+    const rest = restByExercise.get(s.exercise_id);
+    if (rest && rest > 0) restTimer.start(rest);
+  }, [setsQ.data, restByExercise, restTimer]);
 
   // Build the ordered list of exercises for this session:
   // - if from a routine: use routine_exercises in their position order
@@ -409,6 +475,24 @@ export default function LiveWorkoutScreen() {
               showCheckable
               showVolumeTarget
               onToggleSetChecked={async (id, nextChecked) => {
+                // Optimistic auto-start (post-render observer above is the
+                // canonical trigger). Firing here too snaps the overlay
+                // BEFORE the mutation completes, eliminating the visible
+                // ~250ms delay that an observer-only approach would have.
+                // The observer is the safety net for races where this
+                // click-time path silently no-ops (e.g.
+                // react-native-web Pressable stale-responder; see comment
+                // on `checkedWorkingSetIdsRef` above).
+                if (nextChecked) {
+                  const toggled = (setsByExercise.get(ex.id) ?? []).find(
+                    (s) => s.id === id,
+                  );
+                  if (toggled?.set_type === "working") {
+                    const rest = restByExercise.get(ex.id);
+                    if (rest && rest > 0) restTimer.start(rest);
+                  }
+                }
+
                 try {
                   if (nextChecked) {
                     await checkSetM.mutateAsync(id);
