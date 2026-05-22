@@ -4,8 +4,7 @@
  * MAJ-NEW-1: tests are host-TZ-independent. Instead of pinning
  * `process.env.TZ = 'America/Sao_Paulo'` (unreliable in ESM Vitest because
  * imports are hoisted), expected UTC ISO values are constructed via
- * `date-fns-tz fromZonedTime("...", "America/Sao_Paulo")`. This mirrors
- * `scripts/import-strong.ts:57`.
+ * `date-fns-tz fromZonedTime("...", "America/Sao_Paulo")`.
  *
  * `composeIso` itself uses `date-fns/parse` which reads the host TZ at call
  * time, so to keep tests host-independent we test against the round-trip

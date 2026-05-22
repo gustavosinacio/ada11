@@ -15,8 +15,7 @@
     "db:reset": "npx supabase db reset",
     "deploy:web": "expo export --platform web && eas deploy --prod --non-interactive",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test",
-    "import:strong": "npx tsx scripts/import-strong.ts"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
