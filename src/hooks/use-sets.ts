@@ -116,8 +116,16 @@ export function useBulkCheckAllInSession(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => bulkCheckAllInSession(sessionId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
+    onSuccess: async () => {
+      // Await the refetch so `mutateAsync` resolves only after the sets cache
+      // for this session is fresh. The verdict screen (mounted right after the
+      // Finish mutation that follows this one) depends on `setsQ.data`
+      // reflecting the post-bulk-check state to render the correct total
+      // volume + PR list. Fire-and-forget invalidation would leave a race
+      // window where the verdict reads pre-bulk-check (mostly `completed_at =
+      // null`) sets and under-counts. See run
+      // `2026-05-22_0152_end-of-session-verdict` MAJ-2.
+      await qc.refetchQueries({ queryKey: KEYS.forSession(sessionId) });
     },
   });
 }

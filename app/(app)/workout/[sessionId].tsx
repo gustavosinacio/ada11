@@ -226,7 +226,7 @@ export default function LiveWorkoutScreen() {
     if (!sessionId) return;
     try {
       await finish.mutateAsync(sessionId);
-      router.replace("/(app)/workout");
+      router.replace(`/(app)/workout/verdict/${sessionId}`);
     } catch (err) {
       console.warn("Finish failed", err);
     }

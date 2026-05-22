@@ -75,7 +75,7 @@ function sumPastVolume(sets: SetRow[]): number {
  * user-visible `Max − Now = To PR` arithmetic on `<VolumeTargetSlot>` per
  * F10 "checked = committed" semantics.
  */
-function sumLiveVolume(sets: SetRow[]): number {
+export function sumLiveVolume(sets: SetRow[]): number {
   let total = 0;
   for (const s of sets) {
     if (s.completed_at == null) continue;

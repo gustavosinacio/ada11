@@ -184,6 +184,17 @@ test.describe("Ada11 CRUD flows (web)", () => {
       page.on("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();
 
+      // Post-Finish now lands on the verdict screen (one-shot summary).
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 10_000 });
+      // Empty session → headline reads "0 PRs". Load-bearing assertion: without
+      // it a race could resolve the next waitForURL before the verdict actually
+      // rendered. See run 2026-05-22_0152_end-of-session-verdict.
+      await expect(page.getByText(/0 PRs/).first()).toBeVisible({
+        timeout: 5_000,
+      });
+      // Tap "Done" to return to the workout tab root.
+      await page.getByText("Done", { exact: true }).last().click();
+
       // Back to /workout home.
       await page.waitForURL(/\/workout$/, { timeout: 10_000 });
 
