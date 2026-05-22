@@ -276,13 +276,20 @@ export default function LiveWorkoutScreen() {
       cancelLabel: "Keep going",
     });
     if (!ok) return;
+    // Navigate away BEFORE firing the mutation. The useSoftDeleteSession
+    // hook invalidates the "sessions" query prefix on success, which would
+    // trigger a refetch of useSession(sessionId) — and since the row now
+    // has deleted_at != null, getSession's `.single()` 406s. Unmounting
+    // the live screen first means there's no consumer to refetch.
+    router.replace("/(app)/workout");
     try {
       await cancelSession.mutateAsync(sessionId);
     } catch (err) {
+      // Soft failure mode: the session simply stays in the DB. The user
+      // will see it in History as an in-progress session and can finish
+      // or delete it from there.
       console.warn("Cancel session failed", err);
-      return;
     }
-    router.replace("/(app)/workout");
   };
 
   const handleDiscardUncheckedAndFinish = async () => {
