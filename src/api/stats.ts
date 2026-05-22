@@ -45,9 +45,9 @@ const PAGE = 1000;
  * assert non-null post-fetch (defence-in-depth — narrows the returned type to
  * `completed_at: string` so downstream call sites don't need to coalesce).
  */
-export async function listWeeklyVolumeRows(opts: {
-  sinceUtc?: string;
-}): Promise<WeeklyVolumeRow[]> {
+export async function listWeeklyVolumeRows(
+  opts: { sinceUtc?: string } = {},
+): Promise<WeeklyVolumeRow[]> {
   if (opts.sinceUtc !== undefined) {
     const { data, error } = await supabase
       .from("sets")

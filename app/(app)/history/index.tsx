@@ -6,7 +6,7 @@ import { SessionSummaryRow } from "~/components/session-summary-row";
 import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
-import { useWeeklyVolume } from "~/hooks/use-stats";
+import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 
 export default function HistoryList() {
   const router = useRouter();
@@ -14,7 +14,7 @@ export default function HistoryList() {
   const {
     refetch: refetchWeekly,
     isRefetching: isRefetchingWeekly,
-  } = useWeeklyVolume();
+  } = useLifetimeWeeklyVolume();
   const unit = useWeightUnit();
 
   const onRefresh = useCallback(async () => {

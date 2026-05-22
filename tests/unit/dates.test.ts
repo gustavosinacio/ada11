@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { isoWeekStart, lastNIsoWeeks, weekKeyOf, parseISO } from "~/utils/dates";
+import {
+  isoWeekContaining,
+  isoWeekStart,
+  isoWeeksBetween,
+  lastNIsoWeeks,
+  parseISO,
+  weekKeyOf,
+} from "~/utils/dates";
 
 describe("isoWeekStart", () => {
   it("returns Monday 00:00 for any day in the ISO week", () => {
@@ -109,6 +116,112 @@ describe("lastNIsoWeeks", () => {
     const weeks = lastNIsoWeeks(8);
     const keys = weeks.map((w) => w.key);
     expect(new Set(keys).size).toBe(8);
+  });
+});
+
+describe("isoWeekContaining", () => {
+  it("returns the same Monday as isoWeekStart for the same input", () => {
+    const wed = new Date(2026, 4, 13, 14, 30, 0);
+    const wk = isoWeekContaining(wed);
+    expect(wk.start.getTime()).toBe(isoWeekStart(wed).getTime());
+  });
+
+  it("agrees with weekKeyOf for any day in the same ISO week", () => {
+    const days = [
+      new Date(2026, 4, 11, 0, 0, 0),
+      new Date(2026, 4, 13, 14, 0, 0),
+      new Date(2026, 4, 17, 23, 59, 0),
+    ];
+    const keys = days.map((d) => isoWeekContaining(d).key);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toBe(weekKeyOf(days[0]!));
+  });
+
+  it("handles mid-week input and returns full IsoWeek shape", () => {
+    const wed = new Date(2026, 4, 13, 14, 30, 0); // Wed of 2026-W20
+    const wk = isoWeekContaining(wed);
+    expect(wk.start.getDate()).toBe(11); // Mon 5/11
+    expect(wk.end.getDay()).toBe(0); // Sunday
+    expect(wk.label).toMatch(/^\d{1,2}\/\d{1,2}$/);
+    expect(wk.key).toMatch(/^\d{4}-W\d{2}$/);
+  });
+
+  it("crosses an ISO-week-1-of-year boundary correctly (Jan 1 in W53/W1)", () => {
+    // 2026-01-01 is a Thursday → ISO week 1 of 2026 (Mon Dec 29 2025).
+    const jan1 = new Date(2026, 0, 1, 12, 0, 0);
+    const wk = isoWeekContaining(jan1);
+    expect(wk.start.getFullYear()).toBe(2025);
+    expect(wk.start.getMonth()).toBe(11); // December
+    expect(wk.start.getDate()).toBe(29);
+  });
+});
+
+describe("isoWeeksBetween", () => {
+  it("returns [] when end < start", () => {
+    const a = new Date(2026, 4, 11);
+    const b = new Date(2026, 4, 4);
+    expect(isoWeeksBetween(a, b)).toEqual([]);
+  });
+
+  it("returns a single week when start === end", () => {
+    const mon = new Date(2026, 4, 11); // Mon 5/11
+    const weeks = isoWeeksBetween(mon, mon);
+    expect(weeks.length).toBe(1);
+    expect(weeks[0]!.start.getDate()).toBe(11);
+  });
+
+  it("returns 3 contiguous weeks for a 14-day span", () => {
+    const start = new Date(2026, 4, 4); // Mon 5/4
+    const end = new Date(2026, 4, 18); // Mon 5/18
+    const weeks = isoWeeksBetween(start, end);
+    expect(weeks.length).toBe(3);
+    expect(weeks[0]!.start.getDate()).toBe(4);
+    expect(weeks[1]!.start.getDate()).toBe(11);
+    expect(weeks[2]!.start.getDate()).toBe(18);
+  });
+
+  it("returns 5 contiguous weeks for a 28-day span", () => {
+    const start = new Date(2026, 3, 27); // Mon 4/27
+    const end = new Date(2026, 4, 25); // Mon 5/25
+    const weeks = isoWeeksBetween(start, end);
+    expect(weeks.length).toBe(5);
+    // Monotonically increasing.
+    for (let i = 1; i < weeks.length; i++) {
+      expect(weeks[i]!.start.getTime()).toBeGreaterThan(
+        weeks[i - 1]!.start.getTime(),
+      );
+    }
+    // Each entry is exactly 7 days after the previous Monday.
+    for (let i = 1; i < weeks.length; i++) {
+      const diff =
+        weeks[i]!.start.getTime() - weeks[i - 1]!.start.getTime();
+      // Account for DST jitter ±1h — accept any value within 6.9..7.1 days.
+      const diffDays = diff / 86400000;
+      expect(diffDays).toBeGreaterThan(6.9);
+      expect(diffDays).toBeLessThan(7.1);
+    }
+  });
+
+  it("handles year-boundary ranges (Dec → Jan)", () => {
+    const start = new Date(2025, 11, 22); // Mon 2025-12-22
+    const end = new Date(2026, 0, 12); // Mon 2026-01-12
+    const weeks = isoWeeksBetween(start, end);
+    expect(weeks.length).toBe(4);
+    expect(weeks[0]!.start.getFullYear()).toBe(2025);
+    expect(weeks[weeks.length - 1]!.start.getFullYear()).toBe(2026);
+    // Keys are unique across the year boundary.
+    const keys = weeks.map((w) => w.key);
+    expect(new Set(keys).size).toBe(weeks.length);
+  });
+
+  it("normalises non-Monday inputs by snapping to that week's Monday", () => {
+    // Wed of week A → Sun of week B should expand to [A, B-inclusive] weeks.
+    const wedA = new Date(2026, 4, 13); // Wed of 2026-W20
+    const sunB = new Date(2026, 4, 24); // Sun of 2026-W21
+    const weeks = isoWeeksBetween(wedA, sunB);
+    expect(weeks.length).toBe(2);
+    expect(weeks[0]!.start.getDate()).toBe(11);
+    expect(weeks[1]!.start.getDate()).toBe(18);
   });
 });
 

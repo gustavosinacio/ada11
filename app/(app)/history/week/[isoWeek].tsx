@@ -12,12 +12,8 @@ import { SessionSummaryRow } from "~/components/session-summary-row";
 import type { SessionRow } from "~/db/types";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
-import { useWeeklyVolume } from "~/hooks/use-stats";
-import {
-  lastNIsoWeeks,
-  parseISO,
-  weekKeyOf,
-} from "~/utils/dates";
+import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
+import { parseISO, weekKeyOf } from "~/utils/dates";
 import { formatVolume } from "~/utils/units";
 
 const SECTION_HEADER =
@@ -53,7 +49,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
   const unit = useWeightUnit();
 
   const sessionsQ = useSessions();
-  const weeklyVolumeQ = useWeeklyVolume();
+  const weeklyVolumeQ = useLifetimeWeeklyVolume();
 
   // Defensive parse: `parseISO` accepts arbitrary strings; we reject anything
   // that isn't a valid Date so a tampered URL renders an empty state instead
@@ -67,15 +63,9 @@ export default function ViewWeekScreen(): React.JSX.Element {
 
   const targetKey: string = monday ? weekKeyOf(monday) : "";
 
-  // MAJOR-1 guard: `useWeeklyVolume()` only loads the rolling 8-week window.
-  // Deep links / bookmarked URLs / cache-rolls past Monday midnight can land
-  // on a week whose rows are not in the cache → headline would silently read
-  // 0 kg while the sessions list shows activity. Branch out explicitly.
-  const isInWindow: boolean = useMemo(() => {
-    if (!monday) return false;
-    const visibleWeeks = lastNIsoWeeks(8);
-    return visibleWeeks.some((w) => w.key === targetKey);
-  }, [monday, targetKey]);
+  // Lifetime data covers every historical ISO week — no out-of-window guard
+  // is needed anymore. Deep links / bookmarked URLs / cache-rolls past Monday
+  // midnight all land on a bucket the cache already has.
 
   const weekSessions: SessionRow[] = useMemo(() => {
     if (!targetKey) return [];
@@ -123,21 +113,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
     );
   }
 
-  // BRANCH 2: week outside the cached 8-week window. Headline would lie if
-  // we rendered anyway — push the user back to the strip instead.
-  if (!isInWindow) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white px-6 dark:bg-black">
-        {screenHeader}
-        <Text className="text-center text-base text-gray-500">
-          This week is outside the visible range. Open the History tab to see
-          the latest weeks.
-        </Text>
-      </View>
-    );
-  }
-
-  // BRANCH 3: either underlying query loading.
+  // BRANCH 2: either underlying query loading.
   if (sessionsQ.isLoading || weeklyVolumeQ.isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-black">
@@ -147,7 +123,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
     );
   }
 
-  // BRANCH 4: either underlying query errored.
+  // BRANCH 3: either underlying query errored.
   if (sessionsQ.isError || weeklyVolumeQ.isError) {
     const err = sessionsQ.error ?? weeklyVolumeQ.error;
     return (
@@ -160,11 +136,10 @@ export default function ViewWeekScreen(): React.JSX.Element {
     );
   }
 
-  // BRANCH 5: data — zero-or-more sessions, render the stat sheet + list.
+  // BRANCH 4: data — zero-or-more sessions, render the stat sheet + list.
   const rangeStart = format(monday, "MMM d");
-  // Sunday of the week (Monday + 6 days). Display only — we don't need a
-  // Date object for boundary math here because `endOfWeek` is already used
-  // server-side via `lastNIsoWeeks` / `useWeeklyVolume`.
+  // Sunday of the week (Monday + 6 days). Display only — `endOfWeek` is
+  // applied elsewhere for boundary math; here we just need a label.
   const sundayMs = monday.getTime() + 6 * 24 * 60 * 60 * 1000;
   const rangeEnd = format(new Date(sundayMs), "MMM d");
   const bodyHeader = `${rangeStart} – ${rangeEnd}`;

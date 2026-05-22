@@ -1,4 +1,5 @@
 import {
+  addDays,
   endOfWeek,
   format,
   parseISO,
@@ -63,6 +64,56 @@ export function lastNIsoWeeks(n: number, now: Date = new Date()): IsoWeek[] {
       key: format(start, "RRRR-'W'II"),
       label: format(start, "M/d"),
     });
+  }
+  return weeks;
+}
+
+/**
+ * Returns the ISO week containing `d` (Monday/Sunday/key/label). Convenience
+ * wrapper combining `isoWeekStart`/`endOfWeek` so callers get the full
+ * `IsoWeek` shape without re-deriving keys and labels.
+ */
+export function isoWeekContaining(d: Date): IsoWeek {
+  const start = startOfWeek(d, WEEK_OPTS);
+  const end = endOfWeek(d, WEEK_OPTS);
+  return {
+    start,
+    end,
+    key: format(start, "RRRR-'W'II"),
+    label: format(start, "M/d"),
+  };
+}
+
+/**
+ * Returns contiguous ISO weeks from `startMonday` (inclusive) to
+ * `endMondayInclusive` (inclusive), oldest → newest. Both inputs MUST be the
+ * Monday of their ISO week (call `isoWeekStart(d)` if unsure).
+ *
+ * Returns `[]` when `endMondayInclusive < startMonday`.
+ *
+ * Example:
+ *   isoWeeksBetween(new Date(2026, 4, 4), new Date(2026, 4, 18)).length === 3
+ *   // [{Mon=5/4,...}, {Mon=5/11,...}, {Mon=5/18,...}]
+ */
+export function isoWeeksBetween(
+  startMonday: Date,
+  endMondayInclusive: Date,
+): IsoWeek[] {
+  if (endMondayInclusive.getTime() < startMonday.getTime()) return [];
+  const weeks: IsoWeek[] = [];
+  // Normalise each iteration's anchor through `startOfWeek` so any drift in
+  // the input (DST shifts, mid-day Mondays) collapses back to local 00:00.
+  let cursor = startOfWeek(startMonday, WEEK_OPTS);
+  const endAnchor = startOfWeek(endMondayInclusive, WEEK_OPTS);
+  while (cursor.getTime() <= endAnchor.getTime()) {
+    const end = endOfWeek(cursor, WEEK_OPTS);
+    weeks.push({
+      start: cursor,
+      end,
+      key: format(cursor, "RRRR-'W'II"),
+      label: format(cursor, "M/d"),
+    });
+    cursor = startOfWeek(addDays(cursor, 7), WEEK_OPTS);
   }
   return weeks;
 }

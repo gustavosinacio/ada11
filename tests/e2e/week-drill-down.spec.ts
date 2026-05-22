@@ -230,9 +230,13 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
         page.getByText("Sessions", { exact: true }).first(),
       ).toBeVisible();
 
-      // Body header has a range like "May 18 – May 24".
+      // Body header has a range like "May 18 – May 24" (no year). The
+      // `<VisibleRangePill>` on the still-mounted History route also renders a
+      // date range — but always with a year suffix ("MMM d – MMM d, yyyy" or
+      // "MMM d, yyyy – MMM d, yyyy"). Anchor with `^...$` so the regex only
+      // matches the no-year body header, not the pill.
       await expect(
-        page.getByText(/[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}/),
+        page.getByText(/^[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}$/),
       ).toBeVisible({ timeout: 5_000 });
 
       // Session row: on Expo Router web the History list keeps prior rows
@@ -258,10 +262,13 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
     const userId = await createConfirmedUser(email);
     const exerciseId = await getSeedExerciseId(userId);
 
-    // Seed only the current week — the other 7 bars in the strip will be
-    // zero-volume "rest weeks".
-    {
-      const dt = mondayNWeeksAgoUtc(0);
+    // Seed sessions at offsets 0 and 5 — the dynamic-bucket model now spans
+    // `isoWeeksBetween(firstSessionMonday, currentMonday)`, so seeding only
+    // the current week would render a single bar. Seeding 5 weeks back
+    // produces 6 buckets (offsets 5,4,3,2,1,0) and the 3-weeks-ago bar
+    // exists as a zero-volume "rest week" the test then taps.
+    for (const offset of [0, 5]) {
+      const dt = mondayNWeeksAgoUtc(offset);
       dt.setUTCDate(dt.getUTCDate() + 2);
       dt.setUTCHours(18, 0, 0, 0);
       await seedFinishedSession({
@@ -316,12 +323,21 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
     }
   });
 
-  test("deep link out-of-window week: outside-range copy", async ({ page }) => {
-    const email = `e2e-drill-oow-${Date.now()}@test.com`;
+  test("deep link to a 12-weeks-ago Monday: lifetime data renders headline correctly", async ({
+    page,
+  }) => {
+    // Repurposed from the pre-2026-05-22 "outside-window" case. Lifetime data
+    // covers every historical week now, so the old "This week is outside the
+    // visible range" copy no longer exists. Instead we verify that a deep
+    // link to a Monday well before the 8-week boundary renders the per-week
+    // screen with the correct headline (0 kg / no sessions for an unseeded
+    // historical week, no crash).
+    const email = `e2e-drill-deep-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
     const exerciseId = await getSeedExerciseId(userId);
 
-    // Seed something so the user has a viable session-aware shell.
+    // Seed only the current week so the user has lifetime data anchored to
+    // "now"; the 12-weeks-ago week stays empty.
     {
       const dt = mondayNWeeksAgoUtc(0);
       dt.setUTCDate(dt.getUTCDate() + 2);
@@ -338,21 +354,29 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
 
     try {
       await signInViaUi(page, email);
-      // Deep link to a Monday 12 weeks ago — well outside the 8-week window.
-      const oowMonday = mondayNWeeksAgoUtc(12);
-      const oowSegment = fmtYmd(oowMonday);
-      await page.goto(`/history/week/${oowSegment}`, {
+      const oldMonday = mondayNWeeksAgoUtc(12);
+      const oldSegment = fmtYmd(oldMonday);
+      await page.goto(`/history/week/${oldSegment}`, {
         waitUntil: "domcontentloaded",
       });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
 
+      // No outside-window message anymore — the screen renders normally
+      // against lifetime data.
       await expect(
-        page.getByText(
-          /This week is outside the visible range\. Open the History tab to see the latest weeks\./,
-        ),
-      ).toBeVisible({ timeout: 10_000 });
+        page.getByText(/This week is outside the visible range/),
+      ).toHaveCount(0);
 
-      const file = path.join(SCREENSHOT_DIR, "drill-down-outside-window.png");
+      // Headline + Total volume row are present.
+      await expect(
+        page.getByText("Total volume", { exact: true }),
+      ).toBeVisible({ timeout: 10_000 });
+      // Empty week: "No sessions this week." copy.
+      await expect(
+        page.getByText("No sessions this week.", { exact: true }),
+      ).toBeVisible({ timeout: 5_000 });
+
+      const file = path.join(SCREENSHOT_DIR, "drill-down-historical-week.png");
       await page.screenshot({ path: file, fullPage: true });
       console.log(`[screenshot] ${file}`);
     } finally {
