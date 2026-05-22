@@ -1,17 +1,9 @@
 import type { DataPoint } from "~/components/progress-chart";
 import type { MeasurementEntryRow, WeightUnit } from "~/db/types";
+import { formatShortDate } from "~/utils/format-display-date";
 import { kgToLbs } from "~/utils/units";
 
 const DEFAULT_MAX_POINTS = 12;
-
-function shortDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  } catch {
-    return "?";
-  }
-}
 
 /**
  * Build a chart series for bodyweight history.
@@ -22,8 +14,8 @@ function shortDate(iso: string): string {
  *   filtered DESC list (most recent N), then reverses to ASC so the chart
  *   line reads left→right (oldest → newest).
  * - Converts kg→lbs when `unit === "lbs"` via `kgToLbs`.
- * - Label format: `M/D` (e.g. `"5/20"`) — identical to
- *   `app/(app)/exercises/[id]/progress.tsx:12-19`.
+ * - Label format: `M/D` for current-year entries, `M/D/YY` for prior-year
+ *   entries — via the central `formatShortDate` helper.
  *
  * Pure. No side effects. Safe to call inside `useMemo`.
  */
@@ -44,7 +36,7 @@ export function entriesToWeightSeries(
   // Reverse to ASC for left→right time progression.
   const recentAsc = recentDesc.slice().reverse();
   return recentAsc.map(({ row, kg }) => ({
-    label: shortDate(row.measured_at),
+    label: formatShortDate(row.measured_at),
     value: unit === "lbs" ? kgToLbs(kg) : kg,
   }));
 }

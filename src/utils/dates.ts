@@ -7,6 +7,8 @@ import {
   subWeeks,
 } from "date-fns";
 
+import { formatShortDate } from "~/utils/format-display-date";
+
 /**
  * ISO-week bucketing helpers (Monday-Sunday, device-local).
  *
@@ -23,7 +25,12 @@ export type IsoWeek = {
   end: Date;
   /** Stable map key: 'YYYY-Www' (e.g. '2026-W20'). */
   key: string;
-  /** Display label for the Monday: 'M/d' (e.g. '5/12'). */
+  /**
+   * Display label for the Monday — `M/d` for current-year weeks (e.g. `'5/12'`),
+   * `M/d/yy` for prior-year weeks (e.g. `'11/4/25'`). Produced via the central
+   * `formatShortDate` helper so every chart-style date in the app shares the
+   * same year-conditional rule.
+   */
   label: string;
 };
 
@@ -62,7 +69,7 @@ export function lastNIsoWeeks(n: number, now: Date = new Date()): IsoWeek[] {
       start,
       end,
       key: format(start, "RRRR-'W'II"),
-      label: format(start, "M/d"),
+      label: formatShortDate(start),
     });
   }
   return weeks;
@@ -80,7 +87,7 @@ export function isoWeekContaining(d: Date): IsoWeek {
     start,
     end,
     key: format(start, "RRRR-'W'II"),
-    label: format(start, "M/d"),
+    label: formatShortDate(start),
   };
 }
 
@@ -111,7 +118,7 @@ export function isoWeeksBetween(
       start: cursor,
       end,
       key: format(cursor, "RRRR-'W'II"),
-      label: format(cursor, "M/d"),
+      label: formatShortDate(cursor),
     });
     cursor = startOfWeek(addDays(cursor, 7), WEEK_OPTS);
   }

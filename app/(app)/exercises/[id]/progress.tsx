@@ -15,17 +15,9 @@ import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { useAllExercise } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
+import { formatShortDate } from "~/utils/format-display-date";
 import { epley1RM } from "~/utils/formulas";
 import { formatWeight, kgToLbs } from "~/utils/units";
-
-function shortDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  } catch {
-    return "?";
-  }
-}
 
 export default function ExerciseProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,7 +58,7 @@ export default function ExerciseProgressScreen() {
     let best = 0;
 
     for (const s of sessions) {
-      const label = shortDate(s.started_at);
+      const label = formatShortDate(s.started_at);
       let sessionBestE1rm = 0;
       let sessionVolume = 0;
 

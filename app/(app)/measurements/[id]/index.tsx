@@ -1,4 +1,3 @@
-import { format, parseISO } from "date-fns";
 import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Pencil } from "lucide-react-native";
 import {
@@ -13,6 +12,7 @@ import {
 import type { MeasurementEntryRow } from "~/db/types";
 import { useMeasurement } from "~/hooks/use-measurements";
 import { useLengthUnit, useWeightUnit } from "~/hooks/use-preferences";
+import { formatDisplayDate } from "~/utils/format-display-date";
 import { formatLength, formatWeight } from "~/utils/units";
 
 const SECTION_HEADER =
@@ -69,12 +69,9 @@ function MeasurementBody({
   const weightUnit = useWeightUnit();
   const lengthUnit = useLengthUnit();
 
-  let dateLabel: string;
-  try {
-    dateLabel = format(parseISO(data.measured_at), "EEE, MMM d, yyyy");
-  } catch {
-    dateLabel = data.measured_at.slice(0, 10);
-  }
+  const dateLabel = formatDisplayDate(data.measured_at, {
+    includeWeekday: true,
+  });
 
   const fmtW = (n: number) => formatWeight(n, weightUnit);
   const fmtL = (n: number) => formatLength(n, lengthUnit);

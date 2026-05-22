@@ -230,14 +230,15 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
         page.getByText("Sessions", { exact: true }).first(),
       ).toBeVisible();
 
-      // Body header has a range like "May 18 – May 24" (no year). The
-      // `<VisibleRangePill>` on the still-mounted History route also renders a
-      // date range — but always with a year suffix ("MMM d – MMM d, yyyy" or
-      // "MMM d, yyyy – MMM d, yyyy"). Anchor with `^...$` so the regex only
-      // matches the no-year body header, not the pill.
-      await expect(
-        page.getByText(/^[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}$/),
-      ).toBeVisible({ timeout: 5_000 });
+      // Body header has a range like "May 18 – May 24" (no year for
+      // current-year weeks; year-suffix for prior years via the central
+      // `formatDisplayDate` helper). The `<VisibleRangePill>` on the
+      // still-mounted History route renders a similar-looking range, so the
+      // body-header `<Text>` gets `accessibilityLabel="Week range: ..."` and
+      // we target it by label here.
+      await expect(page.getByLabel(/Week range:/)).toBeVisible({
+        timeout: 5_000,
+      });
 
       // Session row: on Expo Router web the History list keeps prior rows
       // in DOM with display:none. Count VISIBLE "Workout" texts only and

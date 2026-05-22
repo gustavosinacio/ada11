@@ -33,6 +33,21 @@ import {
 } from "~/utils/progress-page-math";
 import { isoWeekStart, weekKeyOf } from "~/utils/dates";
 
+// Pin "now" so the year-conditional label rule in `formatShortDate` stays
+// stable across calendar years. The "best-week label" test asserts a literal
+// `"5/18"` and would start emitting `"5/18/26"` once the host year ticks past
+// 2026. Mock-time isolates the fixture year. The mock is global per-describe
+// because the `WeeklyVolumeStrip` mock-builder describe overrides
+// `beforeEach`/`afterEach` with its own block — we re-pin there too.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-22T12:00:00-03:00"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 // ---------------------------------------------------------------------------
 // Test fixtures
 // ---------------------------------------------------------------------------

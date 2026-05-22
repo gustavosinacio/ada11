@@ -14,6 +14,10 @@ import {
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { isoWeekContaining, isoWeekStart } from "~/utils/dates";
+import {
+  formatDisplayDate,
+  formatShortDate,
+} from "~/utils/format-display-date";
 import { formatVolume } from "~/utils/units";
 import {
   computeStripModel,
@@ -50,16 +54,24 @@ type Props = {
 /**
  * Formats the visible-range label shown in the `<VisibleRangePill>`.
  *
- * Single-year window:  "Apr 27 – Jun 21, 2026"
- * Cross-year window:   "Dec 29, 2025 – Jan 11, 2026"
+ * Both ends route through `formatDisplayDate`, so each label gets a year
+ * suffix only when it falls outside the current local year. The rule is
+ * applied per end, independently — the helper does not coalesce a shared
+ * year across the two sides. This aligns the pill with the app-wide
+ * year-conditional rule:
+ *
+ *   Current-year window (current year = 2026):
+ *     start = Apr 27 2026, end = Jun 21 2026
+ *     → "Apr 27 – Jun 21"
+ *   Cross-year window (current year = 2026):
+ *     start = Dec 29 2025, end = Jan 11 2026
+ *     → "Dec 29, 2025 – Jan 11"        // only the prior-year end carries "2025"
+ *   Fully-prior-year window (current year = 2026):
+ *     start = Nov 4 2019, end = Nov 10 2019
+ *     → "Nov 4, 2019 – Nov 10, 2019"   // both ends carry the year
  */
 function formatVisibleRange(startMonday: Date, endMonday: Date): string {
-  const sy = startMonday.getFullYear();
-  const ey = endMonday.getFullYear();
-  if (sy === ey) {
-    return `${format(startMonday, "MMM d")} – ${format(endMonday, "MMM d, yyyy")}`;
-  }
-  return `${format(startMonday, "MMM d, yyyy")} – ${format(endMonday, "MMM d, yyyy")}`;
+  return `${formatDisplayDate(startMonday)} – ${formatDisplayDate(endMonday)}`;
 }
 
 export function WeeklyVolumeStrip({
@@ -277,10 +289,12 @@ export function WeeklyVolumeStrip({
                     ? "rounded-sm bg-blue-500 dark:bg-blue-400"
                     : "rounded-sm bg-gray-300 dark:bg-gray-700";
               const segment = format(b.start, "yyyy-MM-dd");
-              const a11yLabel =
-                b.start.getFullYear() === new Date().getFullYear()
-                  ? `View week of ${b.label}`
-                  : `View week of ${format(b.start, "M/d/yyyy")}`;
+              // Use the 4-digit year variant so the screen-reader value is
+              // unambiguous even for prior-year bars. Current-year bars stay
+              // `"View week of 5/12"` (no year), matching `b.label`.
+              const a11yLabel = `View week of ${formatShortDate(b.start, {
+                yearFormat: "numeric",
+              })}`;
               return (
                 <Pressable
                   key={b.key}

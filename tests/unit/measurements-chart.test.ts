@@ -1,7 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MeasurementEntryRow } from "~/db/types";
 import { entriesToWeightSeries } from "~/utils/measurements-chart";
+
+// Pin "now" so the year-conditional label rule in `formatShortDate` stays
+// stable across calendar years. Without this, `expect("5/20")` would start
+// failing once we cross into 2027 because all fixtures are 2026.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-22T12:00:00-03:00"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // Convenience: build a row with just the columns the helper touches plus
 // the universally-required scaffold columns. All other columns are null.

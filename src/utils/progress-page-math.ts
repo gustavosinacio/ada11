@@ -1,9 +1,8 @@
-import { format } from "date-fns";
-
 import type { WeeklyVolumeRow } from "~/api/stats";
 import type { ExerciseRow, MuscleGroup } from "~/db/types";
 import { MUSCLE_GROUPS } from "~/db/types";
 import { isoWeekStart, parseISO, weekKeyOf } from "~/utils/dates";
+import { formatShortDate } from "~/utils/format-display-date";
 
 /**
  * Pure math helpers for the Progress page. All inputs are plain data; no I/O,
@@ -113,7 +112,7 @@ function weekKeyToMondayLabel(key: string): string {
   const week1Monday = isoWeekStart(jan4);
   const monday = new Date(week1Monday);
   monday.setDate(week1Monday.getDate() + (week - 1) * 7);
-  return format(monday, "M/d");
+  return formatShortDate(monday);
 }
 
 // ---------------------------------------------------------------------------

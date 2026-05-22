@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
@@ -14,6 +13,7 @@ import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { parseISO, weekKeyOf } from "~/utils/dates";
+import { formatDisplayDate } from "~/utils/format-display-date";
 import { formatVolume } from "~/utils/units";
 
 const SECTION_HEADER =
@@ -98,7 +98,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
   const avgVolumePerSession =
     endedSessionsCount > 0 ? weekVolumeKg / endedSessionsCount : 0;
 
-  const title = monday ? `Week of ${format(monday, "MMM d")}` : "Week";
+  const title = monday ? `Week of ${formatDisplayDate(monday)}` : "Week";
   const screenHeader = (
     <Stack.Screen options={{ title, headerShown: true }} />
   );
@@ -137,11 +137,11 @@ export default function ViewWeekScreen(): React.JSX.Element {
   }
 
   // BRANCH 4: data — zero-or-more sessions, render the stat sheet + list.
-  const rangeStart = format(monday, "MMM d");
+  const rangeStart = formatDisplayDate(monday);
   // Sunday of the week (Monday + 6 days). Display only — `endOfWeek` is
   // applied elsewhere for boundary math; here we just need a label.
   const sundayMs = monday.getTime() + 6 * 24 * 60 * 60 * 1000;
-  const rangeEnd = format(new Date(sundayMs), "MMM d");
+  const rangeEnd = formatDisplayDate(new Date(sundayMs));
   const bodyHeader = `${rangeStart} – ${rangeEnd}`;
 
   const sessionsRowLabel = `${endedSessionsCount}${
@@ -173,7 +173,10 @@ export default function ViewWeekScreen(): React.JSX.Element {
       {screenHeader}
 
       <View className="px-6 pt-6">
-        <Text className="text-2xl font-semibold text-black dark:text-white">
+        <Text
+          accessibilityLabel={`Week range: ${bodyHeader}`}
+          className="text-2xl font-semibold text-black dark:text-white"
+        >
           {bodyHeader}
         </Text>
 

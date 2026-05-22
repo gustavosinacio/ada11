@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   isoWeekContaining,
@@ -8,6 +8,21 @@ import {
   parseISO,
   weekKeyOf,
 } from "~/utils/dates";
+
+// Pin "now" so year-conditional label assertions stay stable across calendar
+// years. `lastNIsoWeeks` and `isoWeekContaining` derive their `label` via
+// `formatShortDate`, which appends a year suffix once the bucket's calendar
+// year differs from the current local year. Without this, the
+// `/^\d{1,2}\/\d{1,2}$/` regex assertions below start failing once we cross
+// into 2027 because all the fixture weeks are anchored in 2026.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-22T12:00:00-03:00"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("isoWeekStart", () => {
   it("returns Monday 00:00 for any day in the ISO week", () => {

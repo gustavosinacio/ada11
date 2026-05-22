@@ -1,4 +1,3 @@
-import { format, parseISO } from "date-fns";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
@@ -7,6 +6,7 @@ import type {
   MeasurementEntryRow,
   WeightUnit,
 } from "~/db/types";
+import { formatDisplayDate } from "~/utils/format-display-date";
 import { formatLength, formatWeight } from "~/utils/units";
 
 type Props = {
@@ -44,12 +44,9 @@ export function MeasurementListItem({
   lengthUnit,
   onPress,
 }: Props) {
-  let dateLabel: string;
-  try {
-    dateLabel = format(parseISO(entry.measured_at), "EEE, MMM d, yyyy");
-  } catch {
-    dateLabel = entry.measured_at.slice(0, 10);
-  }
+  const dateLabel = formatDisplayDate(entry.measured_at, {
+    includeWeekday: true,
+  });
   const headline = formatHeadline(entry, weightUnit, lengthUnit);
 
   return (

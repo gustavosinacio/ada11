@@ -4,19 +4,17 @@
  * `SessionTimesEditor`.
  */
 
-/** "Mon, May 18, 4:30 PM" using the device locale. */
+import { formatDisplayDate } from "~/utils/format-display-date";
+
+/**
+ * "Mon, May 18, 4:30 PM" using the device locale. Year is appended only when
+ * the date is NOT in the current local year (e.g. `"Mon, Nov 4, 2019, 4:30 PM"`).
+ *
+ * Thin wrapper around `formatDisplayDate` so every screen uses the same
+ * year-conditional rule.
+ */
 export function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  return formatDisplayDate(iso, { includeWeekday: true, includeTime: true });
 }
 
 /** "1h 12m" or "12m" — em-dash when no end time. */

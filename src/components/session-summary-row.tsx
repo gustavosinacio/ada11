@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import type { SessionRow, WeightUnit } from "~/db/types";
+import { formatDisplayDate } from "~/utils/format-display-date";
 import { formatWeight } from "~/utils/units";
 
 type Props = {
@@ -11,25 +12,6 @@ type Props = {
   unit: WeightUnit;
   onPress?: () => void;
 };
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const opts: Intl.DateTimeFormatOptions = {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    };
-    // Show year for dates outside the current year so old sessions aren't
-    // ambiguous (e.g. "Sat, Nov 8" might be from 2019 in imported data).
-    if (d.getFullYear() !== new Date().getFullYear()) {
-      opts.year = "numeric";
-    }
-    return d.toLocaleDateString(undefined, opts);
-  } catch {
-    return iso;
-  }
-}
 
 function formatDuration(startIso: string, endIso: string | null): string {
   if (!endIso) return "in progress";
@@ -60,7 +42,7 @@ export function SessionSummaryRow({
             {session.name?.trim() || "Workout"}
           </Text>
           <Text className="mt-0.5 text-sm text-gray-500">
-            {formatDate(session.started_at)} ·{" "}
+            {formatDisplayDate(session.started_at, { includeWeekday: true })} ·{" "}
             {formatDuration(session.started_at, session.ended_at)}
             {totalSets != null
               ? ` · ${totalSets} ${totalSets === 1 ? "set" : "sets"}`
