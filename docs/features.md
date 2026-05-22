@@ -1,10 +1,5 @@
 # Features
 
-[ ] **(priority 3) "PRs this week" needs to show WHICH PRs + better in-app context for the numbers in general.** Two related needs:
-
-- The Progress page hero shows `+N PRs · Y · Z` but doesn't surface which exercises hit a PR. Either (a) make the PR count tappable → expands a list of "this week's PR rows" (exercise + new max + previous max), or (b) add a dedicated "PR'd this week" section above the per-muscle list, or (c) tag PR rows in the per-muscle list with a distinct visual treatment. Designer picks. The verdict screen already shows a similar list for the just-finished session — Progress should show the cumulative this-week version.
-- Broader UX: review the screens for places where numbers are surfaced without context (e.g., "Volume to PR: 4,900 kg" — what does that mean to a user who hasn't seen the per-exercise live strip? "Max · Now · To PR" — what's "Now"?). Add inline copy / labels / a brief help affordance where helpful. Designer call on scope; minimum bar = the Progress hero PR section.
-
 [ ] rest timer can be activated automatically after a set is checked as done. If another set is checked, timer needs to reset. If done set is unchecked, timer keeps going, no action.
 
 [ ] All dates can be shown as only the month and day, but if the date belongs to a previous year, the year needs to be included in the date. This is noticeable especially on the history and pogress screens.
@@ -62,6 +57,8 @@ Fd @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
 Td @ entry-3ccbd2e0e1b5c2fdbad02bc793aad7f9.js:103
 
 ## Done
+
+[x] PR context on Progress page. The hero `PRs this week: N` count is now tappable — taps expand an accordion of celebratory PR rows (top 5 + "Show all (N)" for power weeks). Each row reads `{exercise} PR! +X kg (was Y kg)`; tap routes to that exercise's progress chart. Per-muscle list PR'd rows now render the same celebratory `<PrListRow>` instead of `Max · Now · To PR: 0 kg`. Per-row triplet's "Max" relabeled to "Best session" to avoid colliding with the hero's `Max = best week ever`. New legend under the hero clarifies the three terms (only when `maxKg > 0`). Verdict screen now consumes the same `<PrListRow>` (zero behavior change). Multi-PR semantic: `currentMaxKg = max(in-week sessions)` so 800→900→1000 displays `+200 (was 800)`. New helper `computePrsThisWeek({rows, currentWeekStartIso, currentWeekEndIso})` returns ordered array; existing `computePrExerciseIdsThisWeek` is now a thin wrapper. `usePrsThisWeek` returns `prsByExerciseId: Map` consumed by `useExercisesThisWeek` (single lifetime walk per render). Shipped via `docs/runs/2026-05-22_1300_pr-context/` after 3 D↔V + 2 I↔T rounds.
 
 [x] Weekly volume strip now scrolls horizontally through full ISO-week history. New `<VisibleRangePill>` (tappable header showing current visible range, year-aware) opens a bottom-sheet `<WeekSelector>` to jump to a year/month. Default position pinned to right edge (most recent week). Lifetime-best dotted overlay stays anchored inside the scroller. Data consolidation: `useWeeklyVolume` (8-week hook) deleted; all consumers use `useLifetimeWeeklyVolume`. New helpers `isoWeeksBetween` + `isoWeekContaining` in `src/utils/dates.ts`. Scroll re-render avoidance: pill owns its own state via `forwardRef` + `useImperativeHandle` so the 260-bar strip parent never `setState`s on scroll. Week-rollover auto-scrolls the right edge while page mounted. Shipped via `docs/runs/2026-05-22_1130_chart-scroll-week-selector/` after 2 D↔V + 2 I↔T rounds (caught: signature drop would break test #43, missing `isoWeeksBetween` helper, modal mockup contradicting bottom-sheet cite, scroll-rerender perf, week-drill-down regex collision + seed gap under dynamic-bucket model).
 
