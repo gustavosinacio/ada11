@@ -29,6 +29,7 @@ import {
   useLogSet,
   useSetsForSession,
   useUpdateSet,
+  useUpdateSetMeta,
 } from "~/hooks/use-sets";
 import { formatWeight } from "~/utils/units";
 
@@ -47,6 +48,7 @@ export default function SessionDetailScreen() {
 
   const logSet = useLogSet(id ?? "");
   const updateSet = useUpdateSet(id ?? "");
+  const updateSetMeta = useUpdateSetMeta(id ?? "");
   const deleteSet = useDeleteSet(id ?? "");
   const updateName = useUpdateSessionName();
   const updateTimes = useUpdateSessionTimes();
@@ -263,6 +265,13 @@ export default function SessionDetailScreen() {
                   await updateSet.mutateAsync({ id: setId, patch });
                 } catch (err) {
                   console.warn("Update set failed", err);
+                }
+              }}
+              onUpdateSetMeta={async (setId, patch) => {
+                try {
+                  await updateSetMeta.mutateAsync({ id: setId, patch });
+                } catch (err) {
+                  console.warn("Update set meta failed", err);
                 }
               }}
               onDeleteSet={async (setId) => {

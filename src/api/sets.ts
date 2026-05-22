@@ -12,9 +12,30 @@ export type LogSetInput = {
   notes?: string | null;
 };
 
+/**
+ * Patch shape for `updateSet`.
+ *
+ * Tri-state semantics per key (binding on all callers):
+ *   - key omitted (or value `undefined`) → column NOT touched.
+ *   - key present with value `null`      → column EXPLICITLY cleared.
+ *   - key present with a value           → column written.
+ *
+ * Prefer omitting keys you don't want to write over passing `undefined`.
+ * `undefined` is tolerated by the runtime check but discouraged.
+ */
 export type UpdateSetInput = {
   reps?: number | null;
   weight?: string | null;
+  rpe?: string | null;
+  notes?: string | null;
+};
+
+/**
+ * Patch shape for `updateSetMeta`. Same tri-state semantics as
+ * `UpdateSetInput` — see that JSDoc for the contract. Prefer omitting keys
+ * over passing `undefined`.
+ */
+export type UpdateSetMetaInput = {
   rpe?: string | null;
   notes?: string | null;
 };
@@ -74,18 +95,77 @@ export async function logSet(input: LogSetInput): Promise<SetRow> {
   return data as SetRow;
 }
 
+/**
+ * Partial-update for one set's reps / weight / rpe / notes columns.
+ *
+ * Tri-state semantics per key (binding on all callers):
+ *   - key omitted (or value `undefined`) → column NOT touched.
+ *   - key present with value `null`      → column EXPLICITLY cleared.
+ *   - key present with a value           → column written.
+ *
+ * Empty patch (`{}` or all-undefined) short-circuits before any network call
+ * and returns `null`. Callers (useUpdateSet) MUST tolerate a `null` result
+ * by skipping cache writes.
+ *
+ * Mirrors updateSetMeta's payload semantics so the two API writers behave
+ * identically on the shared sets UPDATE surface.
+ */
 export async function updateSet(
   id: string,
   patch: UpdateSetInput,
-): Promise<SetRow> {
+): Promise<SetRow | null> {
+  const payload: {
+    reps?: number | null;
+    weight?: string | null;
+    rpe?: string | null;
+    notes?: string | null;
+  } = {};
+  if (patch.reps !== undefined) payload.reps = patch.reps;
+  if (patch.weight !== undefined) payload.weight = patch.weight;
+  if (patch.rpe !== undefined) payload.rpe = patch.rpe;
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+
+  if (Object.keys(payload).length === 0) return null;
+
   const { data, error } = await supabase
     .from("sets")
-    .update({
-      reps: patch.reps ?? null,
-      weight: patch.weight ?? null,
-      rpe: patch.rpe ?? null,
-      notes: patch.notes ?? null,
-    })
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SetRow;
+}
+
+/**
+ * Partial-update for one set's rpe and/or notes columns only.
+ *
+ * Same tri-state semantics as `updateSet`:
+ *   - key omitted (or value `undefined`) → column NOT touched.
+ *   - key present with value `null`      → column EXPLICITLY cleared.
+ *   - key present with a value           → column written.
+ *
+ * Empty patch short-circuits before any network call and returns `null`.
+ * `useUpdateSetMeta` skips cache invalidation on a `null` result.
+ *
+ * Lives next to `updateSet` deliberately: the `<SetRowMenu>` bottom sheet
+ * dispatches RPE/notes writes through this function so the row-level
+ * `<SetInput>` reps/weight commits and the menu-level RPE/notes commits
+ * touch disjoint columns and cannot clobber each other.
+ */
+export async function updateSetMeta(
+  id: string,
+  patch: UpdateSetMetaInput,
+): Promise<SetRow | null> {
+  const payload: { rpe?: string | null; notes?: string | null } = {};
+  if (patch.rpe !== undefined) payload.rpe = patch.rpe;
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+
+  if (Object.keys(payload).length === 0) return null;
+
+  const { data, error } = await supabase
+    .from("sets")
+    .update(payload)
     .eq("id", id)
     .select()
     .single();

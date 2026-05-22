@@ -11,8 +11,10 @@ import {
   softDeleteSet,
   uncheckSet,
   updateSet,
+  updateSetMeta,
   type LogSetInput,
   type UpdateSetInput,
+  type UpdateSetMetaInput,
 } from "~/api/sets";
 
 const KEYS = {
@@ -50,14 +52,48 @@ export function useLogSet(sessionId: string) {
   });
 }
 
+/**
+ * Partial-update mutation for a set's reps / weight / rpe / notes.
+ *
+ * Type intent: pass only the keys you want to write. `patch.X = undefined`
+ * is tolerated but discouraged — omit the key instead. `patch.X = null`
+ * explicitly clears the column.
+ *
+ * Returns null when the patch was empty (no keys with defined values); the
+ * onSuccess handler then skips invalidation since nothing changed.
+ */
 export function useUpdateSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateSetInput }) =>
       updateSet(id, patch),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // result is null when the patch was empty. No invalidation needed.
+      if (result === null) return;
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}
+
+/**
+ * Partial-update hook for RPE and/or notes only. Diverges from useUpdateSet:
+ *
+ * - Uses updateSetMeta (true partial spread, not clobber).
+ * - Invalidates ONLY ["sets", sessionId]. Does NOT invalidate ["stats"]
+ *   because RPE and notes are not inputs to any stat query (volume = weight
+ *   × reps; PR signals do not read rpe/notes). Skipping the stats
+ *   invalidation avoids needless refetches on every chip tap.
+ */
+export function useUpdateSetMeta(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateSetMetaInput }) =>
+      updateSetMeta(id, patch),
+    onSuccess: (result) => {
+      // result is null when the patch was empty. No invalidation needed.
+      if (result === null) return;
+      qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
     },
   });
 }

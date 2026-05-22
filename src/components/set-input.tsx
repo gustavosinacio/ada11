@@ -1,7 +1,9 @@
-import { CheckSquare, MessageSquare, Square, Trash2 } from "lucide-react-native";
+import { CheckSquare, MoreHorizontal, Square, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import type { UpdateSetMetaInput } from "~/api/sets";
+import { SetRowMenu } from "~/components/set-row-menu";
 import type { SetRow, SetType, WeightUnit } from "~/db/types";
 import { kgToLbs, lbsToKg } from "~/utils/units";
 
@@ -17,10 +19,14 @@ type Props = {
   /** Live-session only. When true, render the leading check button and apply
    *  the "checked" tint when row.completed_at != null. Default: false. */
   showCheckable?: boolean;
-  /** Called when the leading check icon is tapped. `nextChecked` reflects
-   *  the state the row will be in after this action completes. */
+  /** Forwarded toggle handler. */
   onToggleChecked?: (nextChecked: boolean) => void;
-  onCommit: (patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null }) => void;
+  /** Reps/weight commit on blur or submit. RPE/notes flow through onUpdateMeta. */
+  onCommit: (patch: { reps: number | null; weight: string | null }) => void;
+  /** Called when the per-row menu commits an RPE or notes change. */
+  onUpdateMeta: (patch: UpdateSetMetaInput) => void;
+  /** Used as the bottom-sheet menu's title. */
+  exerciseName: string;
   onDelete: () => void;
 };
 
@@ -65,6 +71,8 @@ export function SetInput({
   showCheckable = false,
   onToggleChecked,
   onCommit,
+  onUpdateMeta,
+  exerciseName,
   onDelete,
 }: Props) {
   const weightPlaceholder = previousSet?.weight
@@ -75,32 +83,25 @@ export function SetInput({
   const repsPlaceholder = previousSet?.reps != null
     ? previousSet.reps.toString()
     : "reps";
-  const rpePlaceholder = previousSet?.rpe ?? "RPE";
   const [reps, setReps] = useState(row.reps?.toString() ?? "");
   const [weight, setWeight] = useState(inputStringFromKg(row.weight, unit));
-  const [rpe, setRpe] = useState(row.rpe ?? "");
-  const [notes, setNotes] = useState(row.notes ?? "");
-  const [notesOpen, setNotesOpen] = useState(!!row.notes);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     setReps(row.reps?.toString() ?? "");
     setWeight(inputStringFromKg(row.weight, unit));
-    setRpe(row.rpe ?? "");
-    setNotes(row.notes ?? "");
-    setNotesOpen(!!row.notes);
-  }, [row.reps, row.weight, row.rpe, row.notes, unit]);
+  }, [row.reps, row.weight, unit]);
 
   const commit = () => {
     onCommit({
       reps: parseInt0(reps),
       weight: kgFromInputString(weight, unit),
-      rpe: rpe.trim() ? parseFloat0(rpe)?.toFixed(1) ?? null : null,
-      notes: notes.trim() || null,
     });
   };
 
   const badge = TYPE_BADGE[row.set_type];
   const isChecked = row.completed_at != null;
+  const hasMetaData = row.rpe != null || (row.notes?.trim().length ?? 0) > 0;
 
   return (
     <View
@@ -158,26 +159,20 @@ export function SetInput({
           />
         </View>
 
-        <View className="w-14">
-          <TextInput
-            value={rpe}
-            onChangeText={setRpe}
-            onBlur={commit}
-            onSubmitEditing={commit}
-            placeholder={rpePlaceholder}
-            placeholderTextColor="#9ca3af"
-            keyboardType="decimal-pad"
-            className="rounded border border-gray-200 px-2 py-1.5 text-base text-black dark:border-gray-800 dark:text-white"
-          />
-        </View>
-
         <Pressable
-          onPress={() => setNotesOpen((v) => !v)}
-          accessibilityLabel="Toggle set notes"
+          onPress={() => setMenuOpen(true)}
+          accessibilityLabel="Open set details"
           accessibilityRole="button"
-          className="rounded p-1"
+          className="h-11 w-11 items-center justify-center"
         >
-          <MessageSquare color={notes.trim() ? "#3b82f6" : "#9ca3af"} size={16} />
+          {/* Icon tint mirrors the existing notes-icon precedent: blue-500
+              when there's RPE or notes data behind the menu, gray-400
+              otherwise. lucide-react-native takes a hex `color` prop —
+              NativeWind className on the icon itself is a no-op. */}
+          <MoreHorizontal
+            color={hasMetaData ? "#3b82f6" : "#9ca3af"}
+            size={20}
+          />
         </Pressable>
 
         <Pressable
@@ -190,18 +185,16 @@ export function SetInput({
         </Pressable>
       </View>
 
-      {notesOpen ? (
-        <View className="px-4 pb-2">
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            onBlur={commit}
-            onSubmitEditing={commit}
-            placeholder="Set notes..."
-            placeholderTextColor="#9ca3af"
-            className="rounded border border-gray-200 px-2 py-1.5 text-sm text-black dark:border-gray-800 dark:text-white"
-          />
-        </View>
+      {menuOpen ? (
+        <SetRowMenu
+          onClose={() => setMenuOpen(false)}
+          setNumber={row.set_number}
+          exerciseName={exerciseName}
+          initialRpe={row.rpe}
+          initialNotes={row.notes}
+          previousRpe={previousSet?.rpe ?? null}
+          onSubmit={(patch) => onUpdateMeta(patch)}
+        />
       ) : null}
     </View>
   );

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Trash2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import type { UpdateSetMetaInput } from "~/api/sets";
 import { SetInput } from "~/components/set-input";
 import { VolumeTargetSlot } from "~/components/volume-target-slot";
 import type { ExerciseRow, SetRow, SetType, WeightUnit } from "~/db/types";
@@ -21,8 +22,10 @@ type Props = {
   }) => void;
   onUpdateSet: (
     id: string,
-    patch: { reps: number | null; weight: string | null; rpe: string | null; notes: string | null },
+    patch: { reps: number | null; weight: string | null },
   ) => void;
+  /** Per-set bottom-sheet menu commits RPE/notes through this. */
+  onUpdateSetMeta: (id: string, patch: UpdateSetMetaInput) => void;
   onDeleteSet: (id: string) => void;
   onRemove?: () => void;
   removeDisabled?: boolean;
@@ -51,6 +54,7 @@ export function ExerciseBlock({
   onMoveDown,
   onAddSet,
   onUpdateSet,
+  onUpdateSetMeta,
   onDeleteSet,
   onRemove,
   removeDisabled,
@@ -205,7 +209,7 @@ export function ExerciseBlock({
       ) : null}
 
       {sets.length > 0 && (
-        <View className="flex-row border-y border-gray-100 bg-gray-50 px-4 py-1 dark:border-gray-900 dark:bg-gray-950">
+        <View className="flex-row items-center gap-2 border-y border-gray-100 bg-gray-50 px-4 py-1 dark:border-gray-900 dark:bg-gray-950">
           {/* Additive leading spacer (44pt) matching the check-button tap
               target in <SetInput>. History detail keeps the original
               column positions because it doesn't pass `showCheckable`. */}
@@ -216,8 +220,9 @@ export function ExerciseBlock({
             Weight ({unit})
           </Text>
           <Text className="flex-1 text-xs text-gray-500">Reps</Text>
-          <Text className="w-14 text-xs text-gray-500">RPE</Text>
-          <View className="w-7" />
+          {/* 44pt spacer for the per-row menu trigger. */}
+          <View className="w-11" />
+          {/* Trash spacer mirrors the row's `rounded p-1` icon (~28pt). */}
           <View className="w-7" />
         </View>
       )}
@@ -229,12 +234,14 @@ export function ExerciseBlock({
           unit={unit}
           previousSet={previousByRowId.get(s.id) ?? null}
           showCheckable={showCheckable}
+          exerciseName={exercise.name}
           onToggleChecked={
             onToggleSetChecked
               ? (nextChecked) => onToggleSetChecked(s.id, nextChecked)
               : undefined
           }
           onCommit={(patch) => onUpdateSet(s.id, patch)}
+          onUpdateMeta={(patch) => onUpdateSetMeta(s.id, patch)}
           onDelete={() => onDeleteSet(s.id)}
         />
       ))}

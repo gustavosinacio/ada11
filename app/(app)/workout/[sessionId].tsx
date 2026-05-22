@@ -36,6 +36,7 @@ import {
   useSetsForSession,
   useUncheckSet,
   useUpdateSet,
+  useUpdateSetMeta,
 } from "~/hooks/use-sets";
 
 export default function LiveWorkoutScreen() {
@@ -55,6 +56,7 @@ export default function LiveWorkoutScreen() {
   const setsQ = useSetsForSession(sessionId);
   const logSet = useLogSet(sessionId ?? "");
   const updateSet = useUpdateSet(sessionId ?? "");
+  const updateSetMeta = useUpdateSetMeta(sessionId ?? "");
   const deleteSet = useDeleteSet(sessionId ?? "");
   const removeExerciseFromSession = useRemoveExerciseFromSession(sessionId ?? "");
   const checkSetM = useCheckSet(sessionId ?? "");
@@ -381,6 +383,13 @@ export default function LiveWorkoutScreen() {
                   await updateSet.mutateAsync({ id, patch });
                 } catch (err) {
                   console.warn("Update set failed", err);
+                }
+              }}
+              onUpdateSetMeta={async (id, patch) => {
+                try {
+                  await updateSetMeta.mutateAsync({ id, patch });
+                } catch (err) {
+                  console.warn("Update set meta failed", err);
                 }
               }}
               onDeleteSet={async (id) => {
