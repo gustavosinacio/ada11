@@ -330,7 +330,7 @@ test.describe("Progress page", () => {
     }
   });
 
-  test("6. PR badge — a row that beats its lifetime best this week renders the PR pill", async ({
+  test("6. PR badge — a row that beats its lifetime best this week renders the PR pill + accordion shows celebratory line", async ({
     page,
   }) => {
     const email = `e2e-progress-pr-${Date.now()}@test.com`;
@@ -370,6 +370,94 @@ test.describe("Progress page", () => {
       await expect(
         page.getByText("PR", { exact: true }).first(),
       ).toBeVisible({ timeout: 15_000 });
+
+      // Tap the hero count to expand the accordion. A11y-label-based selector
+      // (design-v3 MIN-10): `"${count} PRs this week, tap to expand"`.
+      await page
+        .getByRole("button", { name: /\d+ PRs this week/i })
+        .click();
+
+      // overflowKg = 2400 - 1500 = 900; priorMaxKg = 1500. Assert the literal
+      // "PR!" prefix substring matches the verdict screen copy.
+      // The celebratory line renders TWICE on this page (hero accordion + the
+      // per-muscle list's PR row), both intentional per design-v3. Playwright
+      // strict-mode forbids ambiguous getByText — use .first() to bind to
+      // either match.
+      await expect(
+        page.getByText("PR! +900 kg (was 1,500 kg)", { exact: false }).first(),
+      ).toBeVisible({ timeout: 5_000 });
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("8. hero accordion — tap count → expand → tap row → routes to exercise progress", async ({
+    page,
+  }) => {
+    const email = `e2e-progress-accordion-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+    const exerciseId = await getSeedExerciseId(userId);
+
+    // Prior session for baseline.
+    const prior = mondayNWeeksAgoUtc(2);
+    prior.setUTCDate(prior.getUTCDate() + 2);
+    prior.setUTCHours(18, 0, 0, 0);
+    await seedFinishedSession({
+      userId,
+      exerciseId,
+      completedAt: prior,
+      workingSets: 3,
+      weight: 100,
+      reps: 5,
+    });
+
+    // This-week PR session.
+    const thisWeek = mondayNWeeksAgoUtc(0);
+    thisWeek.setUTCDate(thisWeek.getUTCDate() + 1);
+    thisWeek.setUTCHours(18, 0, 0, 0);
+    await seedFinishedSession({
+      userId,
+      exerciseId,
+      completedAt: thisWeek,
+      workingSets: 4,
+      weight: 100,
+      reps: 6,
+    });
+
+    try {
+      await signInViaUi(page, email);
+      await gotoProgress(page);
+
+      // Hero count is rendered.
+      await expect(
+        page.getByText("PRs this week", { exact: true }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // Tap to expand.
+      await page
+        .getByRole("button", { name: /\d+ PRs this week/i })
+        .click();
+
+      // Get the seeded exercise's name to find the accordion row.
+      const { data } = await admin
+        .from("exercises")
+        .select("name")
+        .eq("id", exerciseId)
+        .single();
+      const exerciseName = (data?.name as string | undefined) ?? "";
+      if (!exerciseName) throw new Error("Could not load seeded exercise name");
+
+      // Tap the accordion row → route to /(app)/exercises/{id}/progress.
+      // The same exerciseName also appears in the per-muscle list below; the
+      // accordion row appears first in DOM order.
+      await page
+        .getByRole("button", { name: `${exerciseName}, view progress` })
+        .first()
+        .click();
+
+      await page.waitForURL(new RegExp(`/exercises/${exerciseId}/progress`), {
+        timeout: 10_000,
+      });
     } finally {
       await deleteUserSafe(userId);
     }

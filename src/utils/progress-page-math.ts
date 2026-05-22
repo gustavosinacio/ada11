@@ -184,28 +184,49 @@ export function computeLifetimeMaxPerExercise(
 }
 
 // ---------------------------------------------------------------------------
-// computePrExerciseIdsThisWeek
+// computePrsThisWeek
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the set of exercise_ids that hit a strict-PR session during the
- * current ISO week.
+ * Per-exercise PR summary for the current ISO week. Returns one entry per
+ * exercise that beat its prior lifetime best at least once during the
+ * current week, with both the prior baseline and the best in-week volume.
+ *
+ * Disambiguation: `currentMaxKg` here is the MAX of in-week per-session
+ * volumes for that exercise — NOT to be confused with `SessionPr.currentKg`
+ * from `session-verdict-math.ts`, which is the volume of a single specific
+ * session. They coincide when the user has only one in-week session for the
+ * exercise; they diverge when there are multiple in-week sessions.
  *
  * Algorithm:
- *   1. Group rows by (exercise_id, session_id), reduce each group to its
- *      volume and remember the session's `started_at`.
- *   2. For each exercise, sort sessions ASC by `started_at`. Compute running
- *      `priorMax` (starts at 0; updated AFTER each session is processed).
- *   3. A session "is a PR" iff `volume > priorMax` AND `priorMax > 0`.
- *      The first-ever session is NOT a PR (matches `volume-target.ts:124-126`).
- *   4. An exercise is in the returned set iff it has ≥1 PR session whose
- *      `started_at` falls in [currentWeekStartIso, currentWeekEndIso].
+ *   1. Group rows by (exercise_id, session_id) and reduce each group to its
+ *      session volume + session `started_at`.
+ *   2. For each exercise, sort sessions ASC by `started_at`. Walk forward
+ *      maintaining a running `priorMax` (starts at 0; updated after each
+ *      session). Capture `priorMaxKg` as the running prior at the moment the
+ *      FIRST in-week PR session is detected (== lifetime max strictly before
+ *      the current ISO week, conditional on at least one PR in-week).
+ *   3. Within the current week, track the MAX session volume for the
+ *      exercise as `currentMaxKg`.
+ *   4. Emit `{exerciseId, priorMaxKg, currentMaxKg, overflowKg}` when the
+ *      exercise had ≥1 in-week PR session AND `currentMaxKg > priorMaxKg`.
+ *   5. Sort: `overflowKg` DESC, `exerciseId` ASC (deterministic).
  */
-export function computePrExerciseIdsThisWeek(opts: {
+export type PrThisWeek = {
+  exerciseId: string;
+  /** Lifetime max single-session volume BEFORE the current ISO week. */
+  priorMaxKg: number;
+  /** Max single-session volume DURING the current ISO week. */
+  currentMaxKg: number;
+  /** currentMaxKg - priorMaxKg, strictly > 0 by construction. */
+  overflowKg: number;
+};
+
+export function computePrsThisWeek(opts: {
   rows: WeeklyVolumeRow[];
   currentWeekStartIso: string;
   currentWeekEndIso: string;
-}): Set<string> {
+}): PrThisWeek[] {
   const { rows, currentWeekStartIso, currentWeekEndIso } = opts;
   const weekStart = parseISO(currentWeekStartIso);
   const weekEnd = parseISO(currentWeekEndIso);
@@ -231,25 +252,67 @@ export function computePrExerciseIdsThisWeek(opts: {
     grouped.set(row.exercise_id, inner);
   }
 
-  // Step 2-4: per-exercise running priorMax, PR detection within week window.
-  const prIds = new Set<string>();
+  // Step 2-4: per-exercise running priorMax + in-week max.
+  const out: PrThisWeek[] = [];
   for (const [exId, sessions] of grouped) {
     const sorted = Array.from(sessions.values()).sort((a, b) =>
       a.startedAt.localeCompare(b.startedAt),
     );
     let priorMax = 0;
+    let priorAtFirstWeekPr = 0;
+    let hadInWeekPr = false;
+    let currentMaxKg = 0;
     for (const s of sorted) {
+      const t = parseISO(s.startedAt);
+      const inWeek = t >= weekStart && t <= weekEnd;
       const isPr = priorMax > 0 && s.volume > priorMax;
-      if (isPr) {
-        const t = parseISO(s.startedAt);
-        if (t >= weekStart && t <= weekEnd) {
-          prIds.add(exId);
-        }
+      if (isPr && inWeek && !hadInWeekPr) {
+        priorAtFirstWeekPr = priorMax;
+        hadInWeekPr = true;
+      }
+      if (inWeek && s.volume > currentMaxKg) {
+        currentMaxKg = s.volume;
       }
       if (s.volume > priorMax) priorMax = s.volume;
     }
+    if (hadInWeekPr && currentMaxKg > priorAtFirstWeekPr) {
+      out.push({
+        exerciseId: exId,
+        priorMaxKg: priorAtFirstWeekPr,
+        currentMaxKg,
+        overflowKg: currentMaxKg - priorAtFirstWeekPr,
+      });
+    }
   }
-  return prIds;
+
+  // Step 5: sort overflowKg DESC, then exerciseId ASC.
+  out.sort((a, b) => {
+    if (b.overflowKg !== a.overflowKg) return b.overflowKg - a.overflowKg;
+    return a.exerciseId.localeCompare(b.exerciseId);
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// computePrExerciseIdsThisWeek
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the set of exercise_ids that hit a strict-PR session during the
+ * current ISO week. Thin wrapper around `computePrsThisWeek`.
+ *
+ * Semantics (carried by the wrapped kernel):
+ *   - A session "is a PR" iff `volume > priorMax` AND `priorMax > 0`.
+ *     The first-ever session is NOT a PR (matches `volume-target.ts:124-126`).
+ *   - An exercise is in the returned set iff it has ≥1 PR session whose
+ *     `started_at` falls in [currentWeekStartIso, currentWeekEndIso].
+ */
+export function computePrExerciseIdsThisWeek(opts: {
+  rows: WeeklyVolumeRow[];
+  currentWeekStartIso: string;
+  currentWeekEndIso: string;
+}): Set<string> {
+  return new Set(computePrsThisWeek(opts).map((p) => p.exerciseId));
 }
 
 // ---------------------------------------------------------------------------

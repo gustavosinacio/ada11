@@ -26,6 +26,7 @@ import {
   computeCurrentWeekVolume,
   computeLifetimeMaxPerExercise,
   computePrExerciseIdsThisWeek,
+  computePrsThisWeek,
   computeStreaks,
   findBestWeek,
   groupExercisesByPrimaryMuscle,
@@ -557,6 +558,200 @@ describe("computePrExerciseIdsThisWeek", () => {
     const set = computePrExerciseIdsThisWeek(callOpts(rows));
     // Wrapper count would be `.size`; assert that's the canonical surface.
     expect(set.size).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computePrsThisWeek — design-v3 §"Contratos de I/O" + MIN-D tests
+// ---------------------------------------------------------------------------
+
+describe("computePrsThisWeek", () => {
+  // Same anchor as computePrExerciseIdsThisWeek: BRT Monday 2026-05-18.
+  const NOW = new Date(2026, 4, 19, 12, 0, 0);
+  const WEEK_START = isoWeekStart(NOW).toISOString();
+  const weekEndDate = new Date(isoWeekStart(NOW).getTime());
+  weekEndDate.setDate(weekEndDate.getDate() + 6);
+  weekEndDate.setHours(23, 59, 59, 999);
+  const WEEK_END = weekEndDate.toISOString();
+
+  function callOpts(rows: WeeklyVolumeRow[]) {
+    return {
+      rows,
+      currentWeekStartIso: WEEK_START,
+      currentWeekEndIso: WEEK_END,
+    };
+  }
+
+  it("(a) empty rows → []", () => {
+    expect(computePrsThisWeek(callOpts([]))).toEqual([]);
+  });
+
+  it("(b) one PR exercise → 1 entry with priorMaxKg/currentMaxKg/overflowKg", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "s1",
+        weight: "100",
+        reps: 5,
+      }), // 500
+      mkRow({
+        completed_at: "2026-04-08T10:00:00Z",
+        sessionStartedAt: "2026-04-08T09:00:00Z",
+        session_id: "s2",
+        weight: "100",
+        reps: 8,
+      }), // 800
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s3",
+        weight: "100",
+        reps: 9,
+      }), // 900 (PR)
+    ];
+    const result = computePrsThisWeek(callOpts(rows));
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      exerciseId: "ex-1",
+      priorMaxKg: 800,
+      currentMaxKg: 900,
+      overflowKg: 100,
+    });
+  });
+
+  it("(c) two PRs same week same exercise (800→900→1000) → priorMaxKg=800, currentMaxKg=1000", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "s1",
+        weight: "100",
+        reps: 8,
+      }), // 800 (pre-week baseline)
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s2",
+        weight: "100",
+        reps: 9,
+      }), // 900 (in-week, PR)
+      mkRow({
+        completed_at: "2026-05-21T10:00:00Z",
+        sessionStartedAt: "2026-05-21T09:00:00Z",
+        session_id: "s3",
+        weight: "100",
+        reps: 10,
+      }), // 1000 (in-week, also PR)
+    ];
+    const result = computePrsThisWeek(callOpts(rows));
+    expect(result).toHaveLength(1);
+    expect(result[0]?.priorMaxKg).toBe(800);
+    expect(result[0]?.currentMaxKg).toBe(1000);
+    expect(result[0]?.overflowKg).toBe(200);
+  });
+
+  it("(d) PR-then-non-PR in same week → currentMaxKg = max(in-week session volumes)", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "s1",
+        weight: "100",
+        reps: 5,
+      }), // 500 (pre-week baseline)
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s2",
+        weight: "100",
+        reps: 7,
+      }), // 700 (in-week PR)
+      mkRow({
+        completed_at: "2026-05-21T10:00:00Z",
+        sessionStartedAt: "2026-05-21T09:00:00Z",
+        session_id: "s3",
+        weight: "100",
+        reps: 6,
+      }), // 600 (in-week, NOT a PR vs 700)
+    ];
+    const result = computePrsThisWeek(callOpts(rows));
+    expect(result).toHaveLength(1);
+    expect(result[0]?.priorMaxKg).toBe(500);
+    // MIN-D: currentMaxKg = max(in-week volumes) = 700, not the later 600.
+    expect(result[0]?.currentMaxKg).toBe(700);
+    expect(result[0]?.overflowKg).toBe(200);
+  });
+
+  it("(e) sort: overflowKg DESC, exerciseId ASC tiebreak", () => {
+    const rows = [
+      // ex-C: prior 500 → in-week 800. overflow = 300.
+      mkRow({
+        exercise_id: "ex-C",
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "sC1",
+        weight: "100",
+        reps: 5,
+      }),
+      mkRow({
+        exercise_id: "ex-C",
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "sC2",
+        weight: "100",
+        reps: 8,
+      }),
+      // ex-A: prior 500 → in-week 700. overflow = 200.
+      mkRow({
+        exercise_id: "ex-A",
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "sA1",
+        weight: "100",
+        reps: 5,
+      }),
+      mkRow({
+        exercise_id: "ex-A",
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "sA2",
+        weight: "100",
+        reps: 7,
+      }),
+      // ex-B: prior 500 → in-week 700. overflow = 200 (ties with ex-A).
+      mkRow({
+        exercise_id: "ex-B",
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "sB1",
+        weight: "100",
+        reps: 5,
+      }),
+      mkRow({
+        exercise_id: "ex-B",
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "sB2",
+        weight: "100",
+        reps: 7,
+      }),
+    ];
+    const result = computePrsThisWeek(callOpts(rows));
+    expect(result.map((p) => p.exerciseId)).toEqual(["ex-C", "ex-A", "ex-B"]);
+  });
+
+  it("(f) priorMaxKg = 0 (first-ever session in-week) → NOT a PR", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s1",
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    expect(computePrsThisWeek(callOpts(rows))).toEqual([]);
   });
 });
 

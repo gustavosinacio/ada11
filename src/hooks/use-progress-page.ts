@@ -12,7 +12,7 @@ import {
   bucketLifetimeWeeklyVolumes,
   computeCurrentWeekVolume,
   computeLifetimeMaxPerExercise,
-  computePrExerciseIdsThisWeek,
+  computePrsThisWeek,
   computeStreaks,
   findBestWeek,
   type BestWeek,
@@ -64,26 +64,56 @@ export function useCurrentWeekVolume(): {
 // usePrsThisWeek
 // ---------------------------------------------------------------------------
 
+export type PrSummary = {
+  /** Lifetime max single-session volume BEFORE the current ISO week. */
+  priorMaxKg: number;
+  /** Max single-session volume DURING the current ISO week. */
+  currentMaxKg: number;
+  /** currentMaxKg - priorMaxKg, strictly > 0. */
+  overflowKg: number;
+};
+
+/**
+ * This-week PR count + per-exercise summary map. The map preserves the
+ * kernel's `overflowKg DESC, exerciseId ASC` ordering so consumers can use
+ * `Array.from(prsByExerciseId.values()).slice(0, 5)` to render the top-5
+ * accordion without re-sorting.
+ */
 export function usePrsThisWeek(): {
-  data: number;
+  count: number;
   prIds: Set<string>;
+  prsByExerciseId: Map<string, PrSummary>;
   isLoading: boolean;
-  isError: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
-  const { count, prIds } = useMemo(() => {
-    if (!q.data) return { count: 0, prIds: new Set<string>() };
+  const { count, prIds, prsByExerciseId } = useMemo(() => {
+    if (!q.data)
+      return {
+        count: 0,
+        prIds: new Set<string>(),
+        prsByExerciseId: new Map<string, PrSummary>(),
+      };
     const now = new Date();
     const start = isoWeekStart(now).toISOString();
     const end = endOfWeek(now, WEEK_OPTS).toISOString();
-    const ids = computePrExerciseIdsThisWeek({
+    const prs = computePrsThisWeek({
       rows: q.data,
       currentWeekStartIso: start,
       currentWeekEndIso: end,
     });
-    return { count: ids.size, prIds: ids };
+    const ids = new Set<string>();
+    const map = new Map<string, PrSummary>();
+    for (const p of prs) {
+      ids.add(p.exerciseId);
+      map.set(p.exerciseId, {
+        priorMaxKg: p.priorMaxKg,
+        currentMaxKg: p.currentMaxKg,
+        overflowKg: p.overflowKg,
+      });
+    }
+    return { count: ids.size, prIds: ids, prsByExerciseId: map };
   }, [q.data]);
-  return { data: count, prIds, isLoading: q.isLoading, isError: q.isError };
+  return { count, prIds, prsByExerciseId, isLoading: q.isLoading };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +170,10 @@ export type ExerciseThisWeekRow = {
   nowKg: number;
   gapKg: number;
   isPrThisWeek: boolean;
+  /** Populated only when isPrThisWeek === true. Lifetime max BEFORE this ISO week. */
+  priorMaxKg?: number;
+  /** Populated only when isPrThisWeek === true. currentMaxKg - priorMaxKg. */
+  overflowKg?: number;
 };
 
 /**
@@ -163,6 +197,10 @@ export function useExercisesThisWeek(): {
 } {
   const lifetime = useLifetimeWeeklyVolume();
   const lib = useAllExercises();
+  // MIN-C: consume the per-exercise PR map directly from `usePrsThisWeek`.
+  // TanStack prefix-cache + the shared `useLifetimeWeeklyVolume` dependency
+  // means `computePrsThisWeek` runs once per render (inside its `useMemo`).
+  const { prsByExerciseId } = usePrsThisWeek();
 
   const data = useMemo<ExerciseThisWeekRow[]>(() => {
     if (!lifetime.data || !lib.data) return [];
@@ -188,14 +226,8 @@ export function useExercisesThisWeek(): {
     // 2. Lifetime max single-session volume per exercise.
     const maxKgByExercise = computeLifetimeMaxPerExercise(lifetime.data);
 
-    // 3. PR flags (per-exercise, this-week dedupe).
-    const prSet = computePrExerciseIdsThisWeek({
-      rows: lifetime.data,
-      currentWeekStartIso: weekStart.toISOString(),
-      currentWeekEndIso: weekEnd.toISOString(),
-    });
-
-    // 4. Join with library for name/muscles.
+    // 3. Join with library for name/muscles + enrich PR'd rows with
+    //    priorMaxKg + overflowKg from the shared kernel result.
     const libById = new Map(lib.data.map((e) => [e.id, e] as const));
     const validMuscles = new Set<string>(MUSCLE_GROUPS);
     const rows: ExerciseThisWeekRow[] = [];
@@ -210,19 +242,35 @@ export function useExercisesThisWeek(): {
         primary && validMuscles.has(primary)
           ? (primary as MuscleGroup)
           : "Other";
-      rows.push({
-        exerciseId: exId,
-        exerciseName: ex.name,
-        muscles,
-        group,
-        maxKg,
-        nowKg,
-        gapKg,
-        isPrThisWeek: prSet.has(exId),
-      });
+      const pr = prsByExerciseId.get(exId);
+      if (pr) {
+        rows.push({
+          exerciseId: exId,
+          exerciseName: ex.name,
+          muscles,
+          group,
+          maxKg,
+          nowKg,
+          gapKg,
+          isPrThisWeek: true,
+          priorMaxKg: pr.priorMaxKg,
+          overflowKg: pr.overflowKg,
+        });
+      } else {
+        rows.push({
+          exerciseId: exId,
+          exerciseName: ex.name,
+          muscles,
+          group,
+          maxKg,
+          nowKg,
+          gapKg,
+          isPrThisWeek: false,
+        });
+      }
     }
 
-    // 5. Sort within groups: PR first, then nowKg descending. Then group
+    // 4. Sort within groups: PR first, then nowKg descending. Then group
     //    order follows `MUSCLE_GROUPS` then "Other".
     const groupOrder = new Map<MuscleGroup | "Other", number>();
     MUSCLE_GROUPS.forEach((g, i) => groupOrder.set(g, i));
@@ -237,7 +285,7 @@ export function useExercisesThisWeek(): {
     });
 
     return rows;
-  }, [lifetime.data, lib.data]);
+  }, [lifetime.data, lib.data, prsByExerciseId]);
 
   return {
     data,

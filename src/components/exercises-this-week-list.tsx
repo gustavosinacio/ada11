@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { MaxNowToPrLine } from "~/components/max-now-to-pr-line";
+import { PrListRow } from "~/components/pr-list-row";
 import type { MuscleGroup } from "~/db/types";
 import { MUSCLE_GROUPS } from "~/db/types";
 import { useWeightUnit } from "~/hooks/use-preferences";
@@ -94,39 +95,50 @@ export function ExercisesThisWeekList(): React.JSX.Element {
         return (
           <View key={group}>
             <Text className={SECTION_HEADER}>{group}</Text>
-            {rows.map((row) => (
-              <Pressable
-                key={row.exerciseId}
-                onPress={() =>
-                  router.push(`/(app)/exercises/${row.exerciseId}/progress`)
-                }
-                accessibilityRole="button"
-                accessibilityLabel={`${row.exerciseName}, view progress`}
-                className="border-b border-gray-100 px-4 py-3 active:bg-gray-50 dark:border-gray-900 dark:active:bg-gray-950"
-              >
-                <View className="flex-row items-center justify-between">
-                  <Text className="flex-1 text-base text-black dark:text-white">
-                    {row.exerciseName}
-                  </Text>
-                  {row.isPrThisWeek ? (
-                    <View className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 dark:bg-emerald-900">
-                      <Text className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                        PR
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <View className="mt-1">
-                  <MaxNowToPrLine
-                    maxKg={row.maxKg}
-                    nowKg={row.nowKg}
-                    gapKg={row.gapKg}
+            {rows.map((row) => {
+              if (row.isPrThisWeek && row.priorMaxKg != null && row.overflowKg != null) {
+                return (
+                  <PrListRow
+                    key={row.exerciseId}
+                    exerciseId={row.exerciseId}
+                    exerciseName={row.exerciseName}
+                    priorMaxKg={row.priorMaxKg}
+                    overflowKg={row.overflowKg}
                     unit={unit}
-                    a11yPrefix={`${row.exerciseName} — `}
+                    onPress={(id) =>
+                      router.push(`/(app)/exercises/${id}/progress`)
+                    }
                   />
-                </View>
-              </Pressable>
-            ))}
+                );
+              }
+              return (
+                <Pressable
+                  key={row.exerciseId}
+                  onPress={() =>
+                    router.push(`/(app)/exercises/${row.exerciseId}/progress`)
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`${row.exerciseName}, view progress`}
+                  className="border-b border-gray-100 px-4 py-3 active:bg-gray-50 dark:border-gray-900 dark:active:bg-gray-950"
+                >
+                  <View className="flex-row items-center justify-between">
+                    <Text className="flex-1 text-base text-black dark:text-white">
+                      {row.exerciseName}
+                    </Text>
+                  </View>
+                  <View className="mt-1">
+                    <MaxNowToPrLine
+                      maxKg={row.maxKg}
+                      nowKg={row.nowKg}
+                      gapKg={row.gapKg}
+                      unit={unit}
+                      maxLabel="Best session"
+                      a11yPrefix={`${row.exerciseName} — `}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         );
       })}

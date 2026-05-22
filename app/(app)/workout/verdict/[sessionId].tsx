@@ -1,13 +1,8 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 
+import { PrListRow } from "~/components/pr-list-row";
 import { Button } from "~/components/ui/button";
 import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
@@ -170,29 +165,17 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
               New PRs
             </Text>
             {prs.map((pr) => (
-              <Pressable
+              <PrListRow
                 key={pr.exerciseId}
-                accessibilityRole="button"
-                accessibilityLabel={`${pr.exerciseName}, view progress`}
-                onPress={() =>
-                  router.push(`/(app)/exercises/${pr.exerciseId}/progress`)
+                exerciseId={pr.exerciseId}
+                exerciseName={pr.exerciseName}
+                priorMaxKg={pr.priorMaxKg}
+                overflowKg={pr.overflowKg}
+                unit={unit}
+                onPress={(id) =>
+                  router.push(`/(app)/exercises/${id}/progress`)
                 }
-                className="border-b border-gray-100 px-4 py-3 active:bg-gray-50 dark:border-gray-900 dark:active:bg-gray-950"
-              >
-                <View className="flex-row items-center justify-between">
-                  <Text className="flex-1 text-base font-medium text-black dark:text-white">
-                    {pr.exerciseName}
-                  </Text>
-                  <View className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 dark:bg-emerald-900">
-                    <Text className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                      PR
-                    </Text>
-                  </View>
-                </View>
-                <Text className="mt-1 text-sm tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {`PR! +${formatVolume(pr.overflowKg, unit)} (was ${formatVolume(pr.priorMaxKg, unit)})`}
-                </Text>
-              </Pressable>
+              />
             ))}
           </View>
         ) : (
