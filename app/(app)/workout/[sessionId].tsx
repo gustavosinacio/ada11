@@ -38,6 +38,7 @@ import {
   useUpdateSet,
   useUpdateSetMeta,
 } from "~/hooks/use-sets";
+import { sumLiveVolume } from "~/utils/volume-target";
 
 export default function LiveWorkoutScreen() {
   // Provider wraps the screen body so `useRestTimer()` in both
@@ -77,6 +78,18 @@ function LiveWorkoutScreenInner() {
   const bulkCheckAll = useBulkCheckAllInSession(sessionId ?? "");
   const bulkDiscardUnchecked = useBulkSoftDeleteUncheckedInSession(sessionId ?? "");
   const unit = useWeightUnit();
+
+  // Live session-wide total volume (kg). Re-computed only when the sets
+  // cache flips — the 1-second elapsed-clock rerender inside
+  // `<SessionHeader>` does NOT trigger this reduce. Mirrors the verdict
+  // screen's gold-standard precedent at `verdict/[sessionId].tsx:53-56`.
+  // `sumLiveVolume` enforces F10 "checked = committed": warmups out,
+  // dropsets in, unchecked drafts out — so the live header total agrees
+  // with the post-Finish verdict by construction.
+  const totalVolumeKg = useMemo(
+    () => sumLiveVolume(setsQ.data ?? []),
+    [setsQ.data],
+  );
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
   const restTimer = useRestTimer();
@@ -402,6 +415,8 @@ function LiveWorkoutScreenInner() {
         startedAt={session.data.started_at}
         onFinish={onFinish}
         finishing={finish.isPending}
+        volumeKg={totalVolumeKg}
+        unit={unit}
       />
 
       <ScrollView contentContainerClassName="pb-24">
