@@ -25,12 +25,28 @@ import { formatShortDate } from "~/utils/format-display-date";
  * Buckets `rows` into `weekKeyOf(parseISO(completed_at))`. Returns a
  * Map<weekKey, totalKg>. Insertion order is preserved (callers depend on this
  * for "oldest tied week wins" tie-breaking in `findBestWeek`).
+ *
+ * Optional `windowStartMs`: when provided, excludes rows whose
+ * `sessions.started_at` is strictly before the threshold instant. The window
+ * decision is anchored on the SESSION (`started_at`) so a session that crosses
+ * midnight or an ISO-week boundary is included or excluded as one indivisible
+ * unit — never split mid-session (MAJ-1 in design-v2).
+ *
+ * Dual-anchor exception: bucket placement still uses `completed_at` (preserves
+ * the strip's existing bar-week semantic — the volume of a set logged at
+ * Monday 00:30 lands in that Monday's bar regardless of when the session
+ * started). Only INCLUSION is governed by `started_at`.
  */
 export function bucketLifetimeWeeklyVolumes(
   rows: WeeklyVolumeRow[],
+  windowStartMs?: number,
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
+    if (windowStartMs !== undefined) {
+      const startedMs = parseISO(row.sessions.started_at).getTime();
+      if (startedMs < windowStartMs) continue;
+    }
     const key = weekKeyOf(parseISO(row.completed_at));
     const w = row.weight ? parseFloat(row.weight) : 0;
     const r = row.reps ?? 0;
@@ -149,33 +165,55 @@ export function computeCurrentWeekVolume(
  *
  * Algorithm:
  *   1. Group rows by (exercise_id, session_id) and reduce each group to its
- *      total volume (sum of `w * r` with `w > 0 && r > 0` guard).
- *   2. Take the per-exercise max across that group's session volumes.
+ *      total volume (sum of `w * r` with `w > 0 && r > 0` guard). The
+ *      aggregate also carries `startedAt` from `sessions.started_at` so the
+ *      optional window filter can drop whole session aggregates atomically.
+ *   2. (Optional) When `windowStartMs` is defined, drop session aggregates
+ *      whose `parseISO(startedAt).getTime() < windowStartMs`. Filtering at
+ *      the session-aggregate level — never at row level — guarantees a
+ *      session is in-window or out-of-window as one indivisible unit
+ *      (MAJ-1 in design-v2).
+ *   3. Take the per-exercise max across surviving session volumes.
  *
- * Returns Map<exercise_id, maxKg>. Used by both `usePrsThisWeek` (for
- * priorMax comparisons) and `useExercisesThisWeek` (for the per-row Max
- * value).
+ * Returns Map<exercise_id, maxKg>. Used by `usePrsThisWeek` (priorMax),
+ * `useExercisesThisWeek` (per-row Max) and `computePrsForSession`
+ * (prior-only lifetime baseline at end-of-session).
  */
 export function computeLifetimeMaxPerExercise(
   rows: WeeklyVolumeRow[],
+  windowStartMs?: number,
 ): Map<string, number> {
-  // Step 1: group → volume per (exerciseId, sessionId).
-  const sessionVols = new Map<string, Map<string, number>>(); // exId → (sessId → vol)
+  // Step 1: group → {volume, startedAt} per (exerciseId, sessionId).
+  type SessionAgg = { volume: number; startedAt: string };
+  const sessionVols = new Map<string, Map<string, SessionAgg>>(); // exId → (sessId → agg)
   for (const row of rows) {
     const w = row.weight ? parseFloat(row.weight) : 0;
     const r = row.reps ?? 0;
     if (!(Number.isFinite(w) && w > 0 && r > 0)) continue;
-    const inner = sessionVols.get(row.exercise_id) ?? new Map<string, number>();
-    inner.set(row.session_id, (inner.get(row.session_id) ?? 0) + w * r);
+    const inner =
+      sessionVols.get(row.exercise_id) ?? new Map<string, SessionAgg>();
+    const existing = inner.get(row.session_id);
+    if (existing) {
+      existing.volume += w * r;
+    } else {
+      inner.set(row.session_id, {
+        volume: w * r,
+        startedAt: row.sessions.started_at,
+      });
+    }
     sessionVols.set(row.exercise_id, inner);
   }
 
-  // Step 2: per-exercise max.
+  // Step 2 + 3: optional window filter, then per-exercise max.
   const maxes = new Map<string, number>();
   for (const [exId, inner] of sessionVols) {
     let best = 0;
-    for (const v of inner.values()) {
-      if (v > best) best = v;
+    for (const agg of inner.values()) {
+      if (windowStartMs !== undefined) {
+        const startedMs = parseISO(agg.startedAt).getTime();
+        if (startedMs < windowStartMs) continue;
+      }
+      if (agg.volume > best) best = agg.volume;
     }
     maxes.set(exId, best);
   }
@@ -225,8 +263,17 @@ export function computePrsThisWeek(opts: {
   rows: WeeklyVolumeRow[];
   currentWeekStartIso: string;
   currentWeekEndIso: string;
+  /**
+   * Optional numeric millisecond threshold (typically from
+   * `computeWindowStart(weeks, now)`). When provided, session aggregates
+   * whose `started_at` is strictly before the threshold are dropped BEFORE
+   * the priorMax-running-walk — so the per-exercise PR detection compares
+   * against an in-window running max, not the lifetime running max. When
+   * `undefined`, behaviour is identical to the pre-feature lifetime path.
+   */
+  windowStartMs?: number;
 }): PrThisWeek[] {
-  const { rows, currentWeekStartIso, currentWeekEndIso } = opts;
+  const { rows, currentWeekStartIso, currentWeekEndIso, windowStartMs } = opts;
   const weekStart = parseISO(currentWeekStartIso);
   const weekEnd = parseISO(currentWeekEndIso);
 
@@ -251,10 +298,19 @@ export function computePrsThisWeek(opts: {
     grouped.set(row.exercise_id, inner);
   }
 
-  // Step 2-4: per-exercise running priorMax + in-week max.
+  // Step 2-4: per-exercise running priorMax + in-week max. The optional
+  // window filter is applied at the session-aggregate level (MAJ-1 in
+  // design-v2) so a session that crosses an ISO-week boundary is included
+  // or excluded as one indivisible unit — never split mid-session.
   const out: PrThisWeek[] = [];
   for (const [exId, sessions] of grouped) {
-    const sorted = Array.from(sessions.values()).sort((a, b) =>
+    let aggregates = Array.from(sessions.values());
+    if (windowStartMs !== undefined) {
+      aggregates = aggregates.filter(
+        (s) => parseISO(s.startedAt).getTime() >= windowStartMs,
+      );
+    }
+    const sorted = aggregates.sort((a, b) =>
       a.startedAt.localeCompare(b.startedAt),
     );
     let priorMax = 0;
@@ -310,6 +366,8 @@ export function computePrExerciseIdsThisWeek(opts: {
   rows: WeeklyVolumeRow[];
   currentWeekStartIso: string;
   currentWeekEndIso: string;
+  /** See `computePrsThisWeek` for semantics. */
+  windowStartMs?: number;
 }): Set<string> {
   return new Set(computePrsThisWeek(opts).map((p) => p.exerciseId));
 }

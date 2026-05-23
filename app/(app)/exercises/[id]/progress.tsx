@@ -19,6 +19,19 @@ import { formatShortDate } from "~/utils/format-display-date";
 import { epley1RM } from "~/utils/formulas";
 import { formatWeight, kgToLbs } from "~/utils/units";
 
+/**
+ * Per-exercise progress chart.
+ *
+ * Intentional deferral (MIN-1 in `docs/runs/2026-05-23_0211_configurable-max-volume-window/design-v2.md`):
+ * the `bestE1rm` and total-volume reductions below operate on the e1RM kernel
+ * (`max(weight * (1 + reps/30))`), NOT the volume kernel that the
+ * `max_volume_window_weeks` preference governs. Threading the same window
+ * preference here would conflate two distinct PR concepts (best estimated
+ * 1RM vs best single-session volume). If a separate "e1RM window" companion
+ * preference is ever introduced, that's where this screen would wire up.
+ *
+ * Until then this surface deliberately remains a "see all history" view.
+ */
 export default function ExerciseProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();

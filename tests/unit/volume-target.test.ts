@@ -37,10 +37,14 @@ function mkSet(overrides: SetOverrides): SetRow {
   };
 }
 
-function mkSession(id: string, sets: SetRow[]): SessionSets {
+function mkSession(
+  id: string,
+  sets: SetRow[],
+  startedAt?: string,
+): SessionSets {
   return {
     session_id: id,
-    started_at: "2026-05-20T10:00:00Z",
+    started_at: startedAt ?? "2026-05-20T10:00:00Z",
     sets,
   };
 }
@@ -569,5 +573,142 @@ describe("computeVolumeTarget — checked-only running volume", () => {
     expect(after.runningKg).toBe(1500);
     expect(after.previousMaxKg).toBe(1000);
     expect(after.overflowKg).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Windowed-mode regression cases (configurable max-volume window run).
+// See docs/runs/2026-05-23_0211_configurable-max-volume-window/design-v2.md.
+// ---------------------------------------------------------------------------
+
+describe("computeVolumeTarget — windowed-mode", () => {
+  // Window threshold: Monday 23 Feb 2026 local. Sessions before this UTC
+  // instant are excluded from `previousMaxKg`.
+  const windowStartMs = new Date(2026, 1, 23, 0, 0, 0).getTime();
+
+  it("(a) ancient max session excluded → previousMaxKg becomes the in-window second-best", () => {
+    // Ancient (Jan 2025, OUT of window): 1500 kg.
+    // In-window (Apr 2026): 800 kg.
+    // Current: 100 kg → chasing the in-window 800, NOT the ancient 1500.
+    const past = [
+      mkSession(
+        "s-ancient",
+        [mkSet({ set_number: 1, weight: "100", reps: 15 })], // 1500
+        "2025-01-15T09:00:00Z",
+      ),
+      mkSession(
+        "s-recent",
+        [mkSet({ set_number: 1, weight: "100", reps: 8 })], // 800
+        "2026-04-01T09:00:00Z",
+      ),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 1,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // 100
+    ];
+
+    const lifetime = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    expect(lifetime.kind).toBe("chasing");
+    if (lifetime.kind === "chasing") {
+      expect(lifetime.previousMaxKg).toBe(1500); // ancient wins under lifetime
+    }
+
+    const windowed = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+      windowStartMs,
+    });
+    expect(windowed.kind).toBe("chasing");
+    if (windowed.kind !== "chasing") return;
+    expect(windowed.previousMaxKg).toBe(800);
+    expect(windowed.runningKg).toBe(100);
+    expect(windowed.gapKg).toBe(700);
+  });
+
+  it("(b) all pastSessions excluded by window → kind=no-pr regardless of prior count", () => {
+    const past = [
+      mkSession(
+        "s-ancient-1",
+        [mkSet({ set_number: 1, weight: "100", reps: 5 })],
+        "2025-01-15T09:00:00Z",
+      ),
+      mkSession(
+        "s-ancient-2",
+        [mkSet({ set_number: 1, weight: "100", reps: 6 })],
+        "2025-06-20T09:00:00Z",
+      ),
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          weight: "100",
+          reps: 5,
+          completed_at: "2026-05-21T10:05:00Z",
+        }),
+      ],
+      windowStartMs,
+    });
+    expect(state.kind).toBe("no-pr");
+  });
+
+  it("(c) windowStartMs=undefined is identical to the pre-feature lifetime path", () => {
+    const past = [
+      mkSession("s-1", [
+        mkSet({ set_number: 1, weight: "100", reps: 10 }), // 1000
+      ]),
+    ];
+    const current = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 5,
+        completed_at: "2026-05-21T10:05:00Z",
+      }), // 500
+    ];
+    const lifetime = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+    });
+    const explicit = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: current,
+      windowStartMs: undefined,
+    });
+    expect(lifetime).toEqual(explicit);
+  });
+
+  it("session at exactly windowStartMs is INCLUDED (>=)", () => {
+    const onBoundaryIso = new Date(windowStartMs).toISOString();
+    const past = [
+      mkSession(
+        "s-on-boundary",
+        [mkSet({ set_number: 1, weight: "100", reps: 6 })], // 600
+        onBoundaryIso,
+      ),
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          weight: "100",
+          reps: 1,
+          completed_at: "2026-05-21T10:05:00Z",
+        }),
+      ],
+      windowStartMs,
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.previousMaxKg).toBe(600);
   });
 });

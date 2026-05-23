@@ -5,7 +5,10 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { PrListRow } from "~/components/pr-list-row";
 import { Button } from "~/components/ui/button";
 import { useAllExercises } from "~/hooks/use-exercises";
-import { useWeightUnit } from "~/hooks/use-preferences";
+import {
+  useMaxVolumeWindowWeeks,
+  useWeightUnit,
+} from "~/hooks/use-preferences";
 import { useSession } from "~/hooks/use-sessions";
 import { useSetsForSession } from "~/hooks/use-sets";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
@@ -16,6 +19,7 @@ import {
 } from "~/utils/session-verdict-math";
 import { formatVolume } from "~/utils/units";
 import { sumLiveVolume } from "~/utils/volume-target";
+import { computeWindowStart } from "~/utils/window-utils";
 
 /**
  * One-shot end-of-session verdict screen. Replace-arrived from the live
@@ -40,6 +44,11 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
   const setsQ = useSetsForSession(sessionId);
   const exercisesQ = useAllExercises();
   const lifetimeQ = useLifetimeWeeklyVolume();
+  const weeks = useMaxVolumeWindowWeeks();
+  const windowStartMs = useMemo(
+    () => computeWindowStart(weeks, new Date()),
+    [weeks],
+  );
 
   const totalVolumeKg = useMemo(
     () => sumLiveVolume(setsQ.data ?? []),
@@ -61,11 +70,18 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
       rows: lifetimeQ.data,
       currentSessionId: sessionId,
       currentSessionVolumeByExercise: currentByExercise,
+      windowStartMs,
     }).map((pr) => ({
       ...pr,
       exerciseName: exMap.get(pr.exerciseId)?.name ?? "Unknown exercise",
     }));
-  }, [sessionId, lifetimeQ.data, exercisesQ.data, currentByExercise]);
+  }, [
+    sessionId,
+    lifetimeQ.data,
+    exercisesQ.data,
+    currentByExercise,
+    windowStartMs,
+  ]);
 
   // Headline is ready as soon as session + sets + exercises are present.
   // `useSession.onSuccess` cache-seeded the row synchronously in

@@ -36,6 +36,10 @@ export const userPreferences = pgTable("user_preferences", {
     .references(() => authUsers.id, { onDelete: "cascade" }),
   weightUnit: text("weight_unit").notNull().default("kg"),
   lengthUnit: text("length_unit").notNull().default("cm"),
+  // Encodes the user's "max-volume window" preference. `0` = lifetime
+  // (default — preserves the pre-feature behaviour); `10/20/30` = trailing N
+  // ISO weeks. CHECK constraint lives in supabase/migrations/0009_max_volume_window.sql.
+  maxVolumeWindowWeeks: integer("max_volume_window_weeks").notNull().default(0),
   ...timestamps,
 });
 

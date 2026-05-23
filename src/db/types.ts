@@ -33,6 +33,29 @@ export type SetType = "warmup" | "working" | "dropset";
 export type WeightUnit = "kg" | "lbs";
 export type LengthUnit = "cm" | "in";
 
+/**
+ * User-selectable "max-volume window" sizes.
+ *
+ *   0  → lifetime (default — preserves pre-feature behaviour).
+ *   10 → trailing 10 ISO weeks.
+ *   20 → trailing 20 ISO weeks.
+ *   30 → trailing 30 ISO weeks.
+ *
+ * The integer-encoded enum is the source of truth at every layer (Drizzle
+ * column, PostgREST row, hook API, Profile segmented control). Mirrored by
+ * the `user_preferences_max_volume_window_weeks_check` constraint in
+ * `supabase/migrations/0009_max_volume_window.sql`.
+ */
+export type MaxVolumeWindowWeeks = 0 | 10 | 20 | 30;
+
+/**
+ * Canonical ordered list of supported window sizes. Iterated by the Profile
+ * segmented control and by tests that enumerate every valid value.
+ */
+export const MAX_VOLUME_WINDOW_OPTIONS: readonly MaxVolumeWindowWeeks[] = [
+  0, 10, 20, 30,
+] as const;
+
 // Row types matching PostgREST output (snake_case).
 // Drizzle's InferSelectModel returns camelCase, but the Supabase JS client
 // returns columns as-is — so screens and hooks consume these.

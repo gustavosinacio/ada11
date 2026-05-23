@@ -414,6 +414,120 @@ describe("computePrsForSession", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Windowed-mode regression cases (configurable max-volume window run).
+// See docs/runs/2026-05-23_0211_configurable-max-volume-window/design-v2.md.
+// ---------------------------------------------------------------------------
+
+describe("computePrsForSession — windowed-mode regression", () => {
+  // Window threshold: Monday 23 Feb 2026 local (~12 weeks before Tue 19 May).
+  const windowStartMs = new Date(2026, 1, 23, 0, 0, 0).getTime();
+
+  it("(a) ancient PR excluded by window → current beats in-window prior → PR fires", () => {
+    // Ancient (Jan 2025, OUT of window): 1500 kg.
+    // In-window prior: 700 kg.
+    // Current session: 800 kg → under lifetime NOT a PR (1500 stands);
+    // under windowed IS a PR over 700.
+    const rows = [
+      mkRow({
+        session_id: "s-ancient",
+        exercise_id: "ex-1",
+        weight: "100",
+        reps: 15,
+        sessions: {
+          started_at: "2025-01-15T09:00:00Z",
+          ended_at: "2025-01-15T11:00:00Z",
+        },
+      }),
+      mkRow({
+        session_id: "s-recent",
+        exercise_id: "ex-1",
+        weight: "100",
+        reps: 7,
+        sessions: {
+          started_at: "2026-04-01T09:00:00Z",
+          ended_at: "2026-04-01T11:00:00Z",
+        },
+      }),
+    ];
+    const opts = {
+      rows,
+      currentSessionId: "sess-current",
+      currentSessionVolumeByExercise: new Map([["ex-1", 800]]),
+    };
+    expect(computePrsForSession(opts)).toEqual([]); // lifetime: 800 < 1500
+    expect(computePrsForSession({ ...opts, windowStartMs })).toEqual([
+      {
+        exerciseId: "ex-1",
+        currentKg: 800,
+        priorMaxKg: 700,
+        overflowKg: 100,
+      },
+    ]);
+  });
+
+  it("(b) in-window priorMaxKg = 0 (only ancient sessions remain) → NOT a PR", () => {
+    // Single ancient prior, OUT of window. Current 500 kg. After window
+    // filter the in-window prior pool is empty → priorMaxKg = 0 → strict
+    // `priorMaxKg > 0` guard rejects (mirrors first-session semantic).
+    const rows = [
+      mkRow({
+        session_id: "s-ancient",
+        exercise_id: "ex-1",
+        weight: "100",
+        reps: 4,
+        sessions: {
+          started_at: "2025-01-15T09:00:00Z",
+          ended_at: "2025-01-15T11:00:00Z",
+        },
+      }),
+    ];
+    expect(
+      computePrsForSession({
+        rows,
+        currentSessionId: "sess-current",
+        currentSessionVolumeByExercise: new Map([["ex-1", 500]]),
+        windowStartMs,
+      }),
+    ).toEqual([]);
+  });
+
+  it("(c) windowStartMs=undefined is identical to the pre-feature lifetime path", () => {
+    const rows = [
+      mkRow({
+        session_id: "s-prior",
+        exercise_id: "ex-1",
+        weight: "100",
+        reps: 4,
+        sessions: {
+          started_at: "2026-04-01T09:00:00Z",
+          ended_at: "2026-04-01T11:00:00Z",
+        },
+      }),
+    ];
+    const lifetime = computePrsForSession({
+      rows,
+      currentSessionId: "sess-current",
+      currentSessionVolumeByExercise: new Map([["ex-1", 500]]),
+    });
+    const explicit = computePrsForSession({
+      rows,
+      currentSessionId: "sess-current",
+      currentSessionVolumeByExercise: new Map([["ex-1", 500]]),
+      windowStartMs: undefined,
+    });
+    expect(lifetime).toEqual(explicit);
+    expect(lifetime).toEqual([
+      {
+        exerciseId: "ex-1",
+        currentKg: 500,
+        priorMaxKg: 400,
+        overflowKg: 100,
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // sumLiveVolume reuse faithfulness — #21 (MIN-1 in design-v2)
 // ---------------------------------------------------------------------------
 

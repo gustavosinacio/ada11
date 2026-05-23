@@ -1,7 +1,22 @@
 # Features
 
+[ ] Exercise note. Be able to add a note to an exercise that will always show on that exercise, independent of the routine. This note will belong to the user on that exercise, and not to the exercise directly. So the databse needs to be able to handle multiple notes per exercise, per user. These notes belong to the individual only
+
+[ ] If an exercise is checked as done and the inputs are empty, its placeholder becomes the value. This way the user does not need to write what was already flagged as a placeholder.
+
+[ ] Show current session total volume at the top of the workout page
+
+[ ] when acessing a workout through the history page, i can immediatly change values and delete/add sets and exercises. This shouldn't be like this. We need to make a history view to be read only, with the edit button on the workout enabling all fields to be edited. The read only view should be a new component
+
+[ ] When selecting an exercise and seeing it's graphs we should also list the sessions it was performed on.
+
+[ ] Histoy lists the sessions. Currently we show the workout Name on line 1 and date/duration on line two. We can add the total volume also on this component.
+
+[ ] progress graph should start on the current week. It seems to be starting on the start of the history.
 
 ## Done
+
+[x] Configurable max-volume window. User picks `All / 10w / 20w / 30w` in Profile (new section under Length unit, with caption "Max-volume window — how many recent weeks to compare against."). Default `All` (lifetime) preserves the existing behaviour — no current user sees any change until they opt in. The choice flows uniformly into 5 surfaces: Progress hero `Max` + legend (`"Max = best of last N weeks"` when windowed), weekly volume strip dotted overlay, exercises-this-week per-row `Best session`, end-of-session verdict PR detection, and the live-workout `<VolumeTargetSlot>`. New `user_preferences.max_volume_window_weeks integer NOT NULL DEFAULT 0 CHECK (… IN (0,10,20,30))` via migration `0009_max_volume_window.sql`. Single threshold helper `computeWindowStart(weeks, now): number | undefined` in `src/utils/window-utils.ts`; all four kernels (`bucketLifetimeWeeklyVolumes`, `computeLifetimeMaxPerExercise`, `computePrsThisWeek`, `computeVolumeTarget` + `computePrsForSession`) now accept `windowStartMs?` and use `parseISO(...).getTime() >= windowStartMs` numeric compare. Consistency rule pinned: `session.started_at` is the universal windowing anchor, with per-session aggregation BEFORE the filter so a cross-week session is never split (`bucketLifetimeWeeklyVolumes` dual-anchors: `started_at` decides inclusion, `completed_at` decides bucket placement). 6 new e2e + 39 new unit tests (268/268 pass). Shipped via `docs/runs/2026-05-23_0211_configurable-max-volume-window/` after 2 D↔V rounds. Validator round 1 caught the design-load-bearing bugs: lexicographic ISO string compare (`+00:00` PostgREST vs `Z` JS — same trap the `import-strong-csv` retro documented) and cross-anchor session-split — both fixed in v2 before any code was written. Out of scope: per-exercise `bestE1rm` chart (intentionally lifetime; JSDoc note added).
 
 [x] BUG: routines detail — quick double-tap on an exercise row in the picker fired multiple `POST /routine_exercises` requests that collided on `routine_exercises_routine_position_uq` (4× 409s + console error toast). Same shape as the F6 add-set race: no UI in-flight guard, DB unique index correctly caught it. Fix: `<ExercisePicker>` now tracks `pickingId: string | null` and disables the row Pressable while the mutation is in flight (mirrors the F6 add-set pattern). Bundled the adjacent aria-hidden warning in the same run: Expo Router web keeps prior screens with `display:none` but DOM-mounted, so the Edit button from `<RoutineListItem>` retained focus across the navigation → modal opens → RN-Web puts `aria-hidden="true"` on backdrop ancestors → focused button now inside an aria-hidden subtree → React/RN-Web warning. Fix: `Modal.onShow` calls `(document.activeElement as HTMLElement | null)?.blur()` on web (`typeof document` guard preserves native paths). New e2e `tests/e2e/routines-add-exercise-race.spec.ts` intercepts `POST /rest/v1/routine_exercises`, drives `Promise.all([target.click(), target.click()])` on the same row, asserts 1 POST/201/1 DB row. Shipped via `docs/runs/2026-05-22_1640_routines-409-and-aria/`.
 

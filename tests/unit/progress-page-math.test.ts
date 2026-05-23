@@ -1210,6 +1210,371 @@ describe("useExercisesThisWeek derivation invariants (pure-helper level)", () =>
 // computeCurrentWeekVolume — supporting tests for the hero "Now" value
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Windowed-mode regression cases (configurable max-volume window run).
+// ---------------------------------------------------------------------------
+//
+// These three blocks pin the per-kernel `windowStartMs?: number` semantic
+// (see `docs/runs/2026-05-23_0211_configurable-max-volume-window/design-v2.md`).
+//
+// All cases share:
+//   - `NOW = 2026-05-19` (Tuesday in 2026-W21).
+//   - `windowStartMs` derived from `computeWindowStart(N, NOW)`.
+// ---------------------------------------------------------------------------
+
+describe("windowed-mode regression — bucketLifetimeWeeklyVolumes", () => {
+  // We construct `windowStartMs` from a known instant rather than
+  // `computeWindowStart` to keep this test independent of that helper's
+  // bugs. Pick a Monday and use its UTC ms as the threshold.
+  const NOW = new Date(2026, 4, 19, 12, 0, 0); // Tuesday 19 May 2026 (W21)
+  const windowMondayLocal = new Date(2026, 1, 23, 0, 0, 0); // Monday 23 Feb 2026
+  const windowStartMs = windowMondayLocal.getTime();
+
+  it("(a) session at exactly windowStartMs is INCLUDED (>=)", () => {
+    const rows = [
+      mkRow({
+        completed_at: windowMondayLocal.toISOString(),
+        sessionStartedAt: windowMondayLocal.toISOString(),
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = bucketLifetimeWeeklyVolumes(rows, windowStartMs);
+    expect(m.size).toBe(1);
+    expect([...m.values()][0]).toBe(500);
+  });
+
+  it("(b) session 1 ms before windowStartMs is EXCLUDED", () => {
+    const oneMsBefore = new Date(windowStartMs - 1).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: oneMsBefore,
+        sessionStartedAt: oneMsBefore,
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = bucketLifetimeWeeklyVolumes(rows, windowStartMs);
+    expect(m.size).toBe(0);
+  });
+
+  it("(d) windowStartMs=undefined falls back to identical lifetime numbers", () => {
+    const ancient = new Date(2024, 0, 1, 10, 0, 0).toISOString();
+    const recent = new Date(2026, 4, 19, 10, 0, 0).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: ancient,
+        sessionStartedAt: ancient,
+        weight: "100",
+        reps: 5,
+      }), // 500
+      mkRow({
+        completed_at: recent,
+        sessionStartedAt: recent,
+        weight: "100",
+        reps: 8,
+      }), // 800
+    ];
+    const lifetime = bucketLifetimeWeeklyVolumes(rows);
+    const explicitUndefined = bucketLifetimeWeeklyVolumes(rows, undefined);
+    expect(lifetime).toEqual(explicitUndefined);
+    // Total volume across both weeks = 1300.
+    let total = 0;
+    for (const v of lifetime.values()) total += v;
+    expect(total).toBe(500 + 800);
+  });
+
+  it("(e) cross-week session: started_at outside window, completed_at inside → EXCLUDED as one unit", () => {
+    // Session started Sunday 22 Feb 23:30 local (week W08, before the
+    // window) and completed Monday 23 Feb 00:30 local (week W09, ON the
+    // window's first Monday). Window starts at Monday 23 Feb 00:00 local.
+    // Per the dual-anchor rule, session-anchor decides INCLUSION → the
+    // whole session is excluded; bucket placement is irrelevant because no
+    // row survives.
+    const sundayLateLocal = new Date(2026, 1, 22, 23, 30, 0).toISOString();
+    const mondayEarlyLocal = new Date(2026, 1, 23, 0, 30, 0).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: mondayEarlyLocal,
+        sessionStartedAt: sundayLateLocal,
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = bucketLifetimeWeeklyVolumes(rows, windowStartMs);
+    expect(m.size).toBe(0);
+  });
+
+  it("(e2) cross-week session: started_at inside window, completed_at on later week → INCLUDED entirely", () => {
+    // Inverse of (e): session started ON the window's first Monday at
+    // 23:30 local, and a set completed at Tuesday 00:30 local. The whole
+    // session is in-window; the set still lands in the Tuesday bucket per
+    // the dual-anchor rule.
+    const mondayLateLocal = new Date(2026, 1, 23, 23, 30, 0).toISOString();
+    const tuesdayEarlyLocal = new Date(2026, 1, 24, 0, 30, 0).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: tuesdayEarlyLocal,
+        sessionStartedAt: mondayLateLocal,
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = bucketLifetimeWeeklyVolumes(rows, windowStartMs);
+    expect(m.size).toBe(1);
+    expect([...m.values()][0]).toBe(500);
+  });
+
+  // Reference `NOW` so the lint rule that flags unused declarations stays
+  // happy if it ever runs on the file. (NOW is the conceptual anchor; the
+  // explicit dates above were chosen against it.)
+  it("__internal__: NOW anchor is the Tuesday of 2026-W21", () => {
+    expect(NOW.getDay()).toBe(2);
+  });
+});
+
+describe("windowed-mode regression — computeLifetimeMaxPerExercise", () => {
+  const windowMondayLocal = new Date(2026, 1, 23, 0, 0, 0); // Monday 23 Feb 2026
+  const windowStartMs = windowMondayLocal.getTime();
+
+  it("(a) session exactly at windowStartMs is INCLUDED", () => {
+    const exactly = windowMondayLocal.toISOString();
+    const rows = [
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-on-boundary",
+        completed_at: exactly,
+        sessionStartedAt: exactly,
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = computeLifetimeMaxPerExercise(rows, windowStartMs);
+    expect(m.get("ex-1")).toBe(500);
+  });
+
+  it("(b) session 1 ms before windowStartMs is EXCLUDED", () => {
+    const before = new Date(windowStartMs - 1).toISOString();
+    const rows = [
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-before",
+        completed_at: before,
+        sessionStartedAt: before,
+        weight: "100",
+        reps: 5,
+      }),
+    ];
+    const m = computeLifetimeMaxPerExercise(rows, windowStartMs);
+    // No surviving sessions for ex-1 → 0 (or absent; we accept both).
+    expect(m.get("ex-1") ?? 0).toBe(0);
+  });
+
+  it("(c) ancient PR excluded → in-window second-best becomes the max", () => {
+    // Ancient: 1500 kg (one year ago, OUT of window).
+    // In-window: 800 kg.
+    const ancient = "2025-01-15T10:00:00Z";
+    const recent = "2026-04-01T10:00:00Z";
+    const rows = [
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-ancient",
+        completed_at: ancient,
+        sessionStartedAt: ancient,
+        weight: "100",
+        reps: 15, // 1500 kg
+      }),
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-recent",
+        completed_at: recent,
+        sessionStartedAt: recent,
+        weight: "100",
+        reps: 8, // 800 kg
+      }),
+    ];
+    const windowed = computeLifetimeMaxPerExercise(rows, windowStartMs);
+    expect(windowed.get("ex-1")).toBe(800);
+    // Lifetime (no window) still picks the 1500.
+    const lifetime = computeLifetimeMaxPerExercise(rows);
+    expect(lifetime.get("ex-1")).toBe(1500);
+  });
+
+  it("(d) windowStartMs=undefined matches the lifetime path byte-for-byte", () => {
+    const rows = [
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-1",
+        completed_at: "2025-01-01T10:00:00Z",
+        sessionStartedAt: "2025-01-01T10:00:00Z",
+        weight: "100",
+        reps: 5,
+      }),
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-2",
+        completed_at: "2026-05-01T10:00:00Z",
+        sessionStartedAt: "2026-05-01T10:00:00Z",
+        weight: "100",
+        reps: 8,
+      }),
+    ];
+    expect(computeLifetimeMaxPerExercise(rows)).toEqual(
+      computeLifetimeMaxPerExercise(rows, undefined),
+    );
+  });
+
+  it("(e) cross-week session counted as one unit (started_at decides inclusion)", () => {
+    // Session started 1 ms BEFORE the window, with one set completed inside
+    // the window — the entire session is OUT.
+    const startedBefore = new Date(windowStartMs - 1).toISOString();
+    const completedInside = new Date(windowStartMs + 60_000).toISOString();
+    const rows = [
+      mkRow({
+        exercise_id: "ex-1",
+        session_id: "s-cross",
+        completed_at: completedInside,
+        sessionStartedAt: startedBefore,
+        weight: "100",
+        reps: 7, // 700 kg
+      }),
+    ];
+    const m = computeLifetimeMaxPerExercise(rows, windowStartMs);
+    expect(m.get("ex-1") ?? 0).toBe(0);
+  });
+});
+
+describe("windowed-mode regression — computePrsThisWeek", () => {
+  // Anchor on Tuesday 2026-W21 just like the existing block.
+  const NOW = new Date(2026, 4, 19, 12, 0, 0);
+  const WEEK_START = isoWeekStart(NOW).toISOString();
+  const weekEndDate = new Date(isoWeekStart(NOW).getTime());
+  weekEndDate.setDate(weekEndDate.getDate() + 6);
+  weekEndDate.setHours(23, 59, 59, 999);
+  const WEEK_END = weekEndDate.toISOString();
+
+  // Window threshold: Monday 23 Feb 2026 local (12 weeks before W21).
+  const windowStartMs = new Date(2026, 1, 23, 0, 0, 0).getTime();
+
+  function callOpts(rows: WeeklyVolumeRow[], windowed: boolean) {
+    return {
+      rows,
+      currentWeekStartIso: WEEK_START,
+      currentWeekEndIso: WEEK_END,
+      windowStartMs: windowed ? windowStartMs : undefined,
+    };
+  }
+
+  it("(c) ancient PR excluded by window → in-window prior becomes the priorMax → new PR fires", () => {
+    // Ancient: 1500 kg (Jan 2025, OUT of window).
+    // In-window prior: 700 kg.
+    // This week: 800 kg → under lifetime semantics NOT a PR (1500 stands);
+    // under windowed semantics IS a PR (700 was the priorMax).
+    const rows = [
+      mkRow({
+        completed_at: "2025-01-15T10:00:00Z",
+        sessionStartedAt: "2025-01-15T09:00:00Z",
+        session_id: "s-ancient",
+        weight: "100",
+        reps: 15, // 1500
+      }),
+      mkRow({
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "s-recent",
+        weight: "100",
+        reps: 7, // 700
+      }),
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s-thisweek",
+        weight: "100",
+        reps: 8, // 800
+      }),
+    ];
+
+    const lifetime = computePrsThisWeek(callOpts(rows, false));
+    expect(lifetime).toHaveLength(0); // 800 < 1500, no PR
+
+    const windowed = computePrsThisWeek(callOpts(rows, true));
+    expect(windowed).toHaveLength(1);
+    expect(windowed[0]).toEqual({
+      exerciseId: "ex-1",
+      priorMaxKg: 700,
+      currentMaxKg: 800,
+      overflowKg: 100,
+    });
+  });
+
+  it("(d) windowStartMs=undefined is byte-identical to existing lifetime numbers", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-04-01T10:00:00Z",
+        sessionStartedAt: "2026-04-01T09:00:00Z",
+        session_id: "s1",
+        weight: "100",
+        reps: 5,
+      }), // 500
+      mkRow({
+        completed_at: "2026-04-08T10:00:00Z",
+        sessionStartedAt: "2026-04-08T09:00:00Z",
+        session_id: "s2",
+        weight: "100",
+        reps: 8,
+      }), // 800
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s3",
+        weight: "100",
+        reps: 9,
+      }), // 900 (PR)
+    ];
+    expect(computePrsThisWeek(callOpts(rows, false))).toEqual([
+      {
+        exerciseId: "ex-1",
+        priorMaxKg: 800,
+        currentMaxKg: 900,
+        overflowKg: 100,
+      },
+    ]);
+  });
+
+  it("(e) cross-week session: priors aggregated to session level → never split", () => {
+    // Pre-window session started 1ms BEFORE windowStartMs, with sets
+    // completed AFTER. As an aggregate it is OUT-of-window. With no other
+    // priors, this-week becomes a "first session in-window" → priorMax=0
+    // → NOT a PR (mirrors lifetime first-session semantic).
+    const startedBefore = new Date(windowStartMs - 1).toISOString();
+    const completedInside = new Date(windowStartMs + 60_000).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: completedInside,
+        sessionStartedAt: startedBefore,
+        session_id: "s-cross",
+        weight: "100",
+        reps: 6, // 600
+      }),
+      mkRow({
+        completed_at: "2026-05-19T10:00:00Z",
+        sessionStartedAt: "2026-05-19T09:00:00Z",
+        session_id: "s-thisweek",
+        weight: "100",
+        reps: 8, // 800
+      }),
+    ];
+    expect(computePrsThisWeek(callOpts(rows, true))).toHaveLength(0);
+    // For sanity: under lifetime (no window) the cross-session counts and
+    // this-week 800 IS a PR over 600.
+    expect(computePrsThisWeek(callOpts(rows, false))).toHaveLength(1);
+  });
+
+  it("internal anchor sanity: NOW is the Tuesday of 2026-W21", () => {
+    expect(NOW.getDay()).toBe(2);
+  });
+});
+
 describe("computeCurrentWeekVolume", () => {
   const NOW = new Date(2026, 4, 19, 12, 0, 0);
 

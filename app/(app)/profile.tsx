@@ -3,13 +3,32 @@ import { ChevronRight, Ruler } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Button } from "~/components/ui/button";
-import type { LengthUnit, WeightUnit } from "~/db/types";
+import {
+  MAX_VOLUME_WINDOW_OPTIONS,
+  type LengthUnit,
+  type MaxVolumeWindowWeeks,
+  type WeightUnit,
+} from "~/db/types";
 import { useAuth } from "~/lib/auth-context";
 import {
   usePreferences,
   useSetLengthUnit,
+  useSetMaxVolumeWindowWeeks,
   useSetWeightUnit,
 } from "~/hooks/use-preferences";
+
+/**
+ * Label map for the max-volume-window segmented control. "All" stands in for
+ * `0` (lifetime) so the four segments fit the 54pt-per-segment budget on a
+ * 320pt screen (MAJ-2 in design-v2). The legend caption directly below the
+ * row clarifies the abbreviation for first-time users.
+ */
+const MAX_VOLUME_WINDOW_LABELS: Record<MaxVolumeWindowWeeks, string> = {
+  0: "All",
+  10: "10w",
+  20: "20w",
+  30: "30w",
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -17,9 +36,12 @@ export default function ProfileScreen() {
   const prefs = usePreferences();
   const setUnit = useSetWeightUnit();
   const setLength = useSetLengthUnit();
+  const setMaxVolumeWindow = useSetMaxVolumeWindowWeeks();
 
   const currentUnit: WeightUnit = prefs.data?.weight_unit ?? "kg";
   const currentLengthUnit: LengthUnit = prefs.data?.length_unit ?? "cm";
+  const currentMaxVolumeWindow: MaxVolumeWindowWeeks =
+    prefs.data?.max_volume_window_weeks ?? 0;
 
   return (
     <ScrollView
@@ -77,7 +99,7 @@ export default function ProfileScreen() {
             </Text>
           ) : null}
         </View>
-        <View className="px-4 py-3">
+        <View className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <Text className="mb-2 text-sm text-gray-500">Length unit</Text>
           <View className="flex-row gap-2">
             {(["cm", "in"] as const).map((u) => {
@@ -115,6 +137,58 @@ export default function ProfileScreen() {
             <Text className="mt-2 text-sm text-red-500">
               {setLength.error instanceof Error
                 ? setLength.error.message
+                : "Failed to save"}
+            </Text>
+          ) : null}
+        </View>
+        <View className="px-4 py-3">
+          <Text className="mb-2 text-sm text-gray-500">
+            Max-volume window
+          </Text>
+          <View className="flex-row gap-2">
+            {MAX_VOLUME_WINDOW_OPTIONS.map((w) => {
+              const active = currentMaxVolumeWindow === w;
+              return (
+                <Pressable
+                  key={w}
+                  onPress={() => {
+                    if (active) return;
+                    setMaxVolumeWindow.mutate(w);
+                  }}
+                  disabled={setMaxVolumeWindow.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    w === 0
+                      ? "Lifetime — compare against your entire history"
+                      : `Last ${w} weeks — compare against the trailing ${w} ISO weeks`
+                  }
+                  accessibilityState={{ selected: active }}
+                  className={`flex-1 rounded-md py-2 ${
+                    active
+                      ? "bg-black dark:bg-white"
+                      : "border border-gray-300 dark:border-gray-700"
+                  }`}
+                >
+                  <Text
+                    className={`text-center text-base font-medium ${
+                      active
+                        ? "text-white dark:text-black"
+                        : "text-black dark:text-white"
+                    }`}
+                  >
+                    {MAX_VOLUME_WINDOW_LABELS[w]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Max-volume window — how many recent weeks to compare against.
+          </Text>
+          {setMaxVolumeWindow.isError ? (
+            <Text className="mt-2 text-sm text-red-500">
+              {setMaxVolumeWindow.error instanceof Error
+                ? setMaxVolumeWindow.error.message
                 : "Failed to save"}
             </Text>
           ) : null}

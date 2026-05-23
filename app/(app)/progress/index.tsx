@@ -5,7 +5,10 @@ import { ExercisesThisWeekList } from "~/components/exercises-this-week-list";
 import { ProgressHero } from "~/components/progress-hero";
 import { StreakCard } from "~/components/streak-card";
 import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
-import { useWeightUnit } from "~/hooks/use-preferences";
+import {
+  useMaxVolumeWindowWeeks,
+  useWeightUnit,
+} from "~/hooks/use-preferences";
 import {
   useLifetimeBestWeek,
   useProgressPageRefresh,
@@ -29,11 +32,14 @@ import { formatVolume } from "~/utils/units";
  */
 export default function ProgressScreen(): React.JSX.Element {
   const unit = useWeightUnit();
+  const weeks = useMaxVolumeWindowWeeks();
   const { data: bestWeek } = useLifetimeBestWeek();
   const { refreshing, onRefresh } = useProgressPageRefresh();
 
   const bestWeekLabel = bestWeek
-    ? `Best week: ${formatVolume(bestWeek.totalKg, unit)} (${bestWeek.weekStartLabel})`
+    ? weeks === 0
+      ? `Best week: ${formatVolume(bestWeek.totalKg, unit)} (${bestWeek.weekStartLabel})`
+      : `Best of last ${weeks} weeks: ${formatVolume(bestWeek.totalKg, unit)} (${bestWeek.weekStartLabel})`
     : undefined;
 
   return (
@@ -46,6 +52,16 @@ export default function ProgressScreen(): React.JSX.Element {
     >
       <Stack.Screen options={{ title: "Progress", headerShown: true }} />
       <ProgressHero />
+      {/*
+       * NEW-MIN-3 ack: under a narrow window (e.g. 10w) the strip's per-bar
+       * height denom remains the lifetime-bucket max, while the dotted
+       * `bestWeekKg` overlay only reflects the in-window best. A historical
+       * peak from outside the window can therefore tower visually above the
+       * overlay line. This asymmetry is intentional — the bar-height scale
+       * is about readability across the full visible bucket range, and the
+       * overlay is the dedicated cue for the windowed Max. Do not "fix" by
+       * shrinking bars to the window. See design-v2.md §"Out of scope".
+       */}
       <WeeklyVolumeStrip
         bestWeekKg={bestWeek?.totalKg}
         bestWeekLabel={bestWeekLabel}

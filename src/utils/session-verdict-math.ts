@@ -83,15 +83,32 @@ export function computePrsForSession(opts: {
   rows: WeeklyVolumeRow[];
   currentSessionId: string;
   currentSessionVolumeByExercise: Map<string, number>;
+  /**
+   * Optional numeric millisecond threshold (typically from
+   * `computeWindowStart(weeks, now)`). Plumbed straight through to
+   * `computeLifetimeMaxPerExercise`. When provided, the prior-only baseline
+   * is restricted to sessions whose `started_at >= windowStartMs`; the
+   * strict-`>` and `priorMaxKg > 0` PR invariants survive trivially because
+   * the comparison logic is unchanged — only the dataset shrinks.
+   */
+  windowStartMs?: number;
 }): SessionPr[] {
-  const { rows, currentSessionId, currentSessionVolumeByExercise } = opts;
+  const {
+    rows,
+    currentSessionId,
+    currentSessionVolumeByExercise,
+    windowStartMs,
+  } = opts;
 
   // Step 1: drop current-session rows so the lifetime max represents prior
   // sessions only.
   const priorRows = rows.filter((r) => r.session_id !== currentSessionId);
 
-  // Step 2: prior-only lifetime max per exercise.
-  const priorMaxByExercise = computeLifetimeMaxPerExercise(priorRows);
+  // Step 2: prior-only lifetime max per exercise (windowed when configured).
+  const priorMaxByExercise = computeLifetimeMaxPerExercise(
+    priorRows,
+    windowStartMs,
+  );
 
   // Step 3: emit PR for each exercise with current > priorMax && priorMax > 0.
   const out: SessionPr[] = [];

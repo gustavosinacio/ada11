@@ -2,10 +2,14 @@ import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 import type { SetRow } from "~/db/types";
-import { useWeightUnit } from "~/hooks/use-preferences";
+import {
+  useMaxVolumeWindowWeeks,
+  useWeightUnit,
+} from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
 import { formatVolume, formatWeight } from "~/utils/units";
 import { computeVolumeTarget } from "~/utils/volume-target";
+import { computeWindowStart } from "~/utils/window-utils";
 
 type Props = {
   exerciseId: string;
@@ -32,14 +36,20 @@ export function VolumeTargetSlot({
 }: Props): React.JSX.Element | null {
   const progressQ = useExerciseProgress(exerciseId);
   const unit = useWeightUnit();
+  const weeks = useMaxVolumeWindowWeeks();
+  const windowStartMs = useMemo(
+    () => computeWindowStart(weeks, new Date()),
+    [weeks],
+  );
 
   const state = useMemo(
     () =>
       computeVolumeTarget({
         pastSessions: progressQ.data,
         currentSessionSets,
+        windowStartMs,
       }),
-    [progressQ.data, currentSessionSets],
+    [progressQ.data, currentSessionSets, windowStartMs],
   );
 
   // Hide while loading (no skeleton — keeps the block compact during

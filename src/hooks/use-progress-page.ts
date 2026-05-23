@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { listFinishedSessionStartedAts } from "~/api/progress-page";
 import type { MuscleGroup } from "~/db/types";
 import { useAllExercises } from "~/hooks/use-exercises";
+import { useMaxVolumeWindowWeeks } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { MUSCLE_GROUPS } from "~/db/types";
 import { isoWeekStart, parseISO } from "~/utils/dates";
@@ -17,6 +18,7 @@ import {
   findBestWeek,
   type BestWeek,
 } from "~/utils/progress-page-math";
+import { computeWindowStart } from "~/utils/window-utils";
 
 /**
  * Hooks orchestrating the Progress page. Every raw fetch sits under the
@@ -30,16 +32,35 @@ const WEEK_OPTS = { weekStartsOn: 1 as const };
 // useLifetimeBestWeek
 // ---------------------------------------------------------------------------
 
+/**
+ * Best ISO-week of lifetime weekly volume, OR — when the user has configured
+ * a "max-volume window" preference (`weeks > 0`) — the best ISO-week within
+ * the trailing N weeks anchored at `session.started_at`.
+ *
+ * Name retained (no rename to `useBestWindowWeek`) to avoid rippling through
+ * every Progress-page consumer. The window semantic lives inside the memo;
+ * when `weeks === 0` (default) the result is identical to the pre-feature
+ * lifetime best. See `MaxVolumeWindowWeeks` for the integer encoding.
+ */
 export function useLifetimeBestWeek(): {
   data: BestWeek | null;
   isLoading: boolean;
   isError: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
+  const weeks = useMaxVolumeWindowWeeks();
+  // `new Date()` lives INSIDE the factory so it does not appear in the dep
+  // list — the memo only re-runs when `weeks` or `q.data` changes. The
+  // resulting threshold is correct for ~24h until the local Monday rolls
+  // over, which matches existing memo lifetimes on this page.
+  const windowStartMs = useMemo(
+    () => computeWindowStart(weeks, new Date()),
+    [weeks],
+  );
   const data = useMemo<BestWeek | null>(() => {
     if (!q.data) return null;
-    return findBestWeek(bucketLifetimeWeeklyVolumes(q.data));
-  }, [q.data]);
+    return findBestWeek(bucketLifetimeWeeklyVolumes(q.data, windowStartMs));
+  }, [q.data, windowStartMs]);
   return { data, isLoading: q.isLoading, isError: q.isError };
 }
 
@@ -86,6 +107,11 @@ export function usePrsThisWeek(): {
   isLoading: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
+  const weeks = useMaxVolumeWindowWeeks();
+  const windowStartMs = useMemo(
+    () => computeWindowStart(weeks, new Date()),
+    [weeks],
+  );
   const { count, prIds, prsByExerciseId } = useMemo(() => {
     if (!q.data)
       return {
@@ -100,6 +126,7 @@ export function usePrsThisWeek(): {
       rows: q.data,
       currentWeekStartIso: start,
       currentWeekEndIso: end,
+      windowStartMs,
     });
     const ids = new Set<string>();
     const map = new Map<string, PrSummary>();
@@ -112,7 +139,7 @@ export function usePrsThisWeek(): {
       });
     }
     return { count: ids.size, prIds: ids, prsByExerciseId: map };
-  }, [q.data]);
+  }, [q.data, windowStartMs]);
   return { count, prIds, prsByExerciseId, isLoading: q.isLoading };
 }
 
@@ -197,6 +224,11 @@ export function useExercisesThisWeek(): {
 } {
   const lifetime = useLifetimeWeeklyVolume();
   const lib = useAllExercises();
+  const weeks = useMaxVolumeWindowWeeks();
+  const windowStartMs = useMemo(
+    () => computeWindowStart(weeks, new Date()),
+    [weeks],
+  );
   // MIN-C: consume the per-exercise PR map directly from `usePrsThisWeek`.
   // TanStack prefix-cache + the shared `useLifetimeWeeklyVolume` dependency
   // means `computePrsThisWeek` runs once per render (inside its `useMemo`).
@@ -208,7 +240,10 @@ export function useExercisesThisWeek(): {
     const weekStart = isoWeekStart(now);
     const weekEnd = endOfWeek(now, WEEK_OPTS);
 
-    // 1. Bucket this week's rows by exercise_id → nowKg.
+    // 1. Bucket this week's rows by exercise_id → nowKg. "Now" is always
+    //    this week and is orthogonal to the window pref (the window only
+    //    governs "Max"); we do NOT filter `nowKgByExercise` by
+    //    `windowStartMs`.
     const nowKgByExercise = new Map<string, number>();
     for (const r of lifetime.data) {
       const t = parseISO(r.completed_at);
@@ -223,8 +258,12 @@ export function useExercisesThisWeek(): {
       }
     }
 
-    // 2. Lifetime max single-session volume per exercise.
-    const maxKgByExercise = computeLifetimeMaxPerExercise(lifetime.data);
+    // 2. Max single-session volume per exercise. Honours the user's
+    //    "max-volume window" preference via `windowStartMs`.
+    const maxKgByExercise = computeLifetimeMaxPerExercise(
+      lifetime.data,
+      windowStartMs,
+    );
 
     // 3. Join with library for name/muscles + enrich PR'd rows with
     //    priorMaxKg + overflowKg from the shared kernel result.
@@ -285,7 +324,7 @@ export function useExercisesThisWeek(): {
     });
 
     return rows;
-  }, [lifetime.data, lib.data, prsByExerciseId]);
+  }, [lifetime.data, lib.data, prsByExerciseId, windowStartMs]);
 
   return {
     data,

@@ -5,7 +5,10 @@ import { Pressable, Text, View } from "react-native";
 import { MaxNowToPrLine } from "~/components/max-now-to-pr-line";
 import { PrListRow } from "~/components/pr-list-row";
 import { useAllExercises } from "~/hooks/use-exercises";
-import { useWeightUnit } from "~/hooks/use-preferences";
+import {
+  useMaxVolumeWindowWeeks,
+  useWeightUnit,
+} from "~/hooks/use-preferences";
 import {
   useCurrentWeekVolume,
   useLifetimeBestWeek,
@@ -31,6 +34,7 @@ const TOP_N = 5;
 export function ProgressHero(): React.JSX.Element {
   const router = useRouter();
   const unit = useWeightUnit();
+  const weeks = useMaxVolumeWindowWeeks();
   const bestWeekQ = useLifetimeBestWeek();
   const nowQ = useCurrentWeekVolume();
   const prsQ = usePrsThisWeek();
@@ -160,7 +164,9 @@ export function ProgressHero(): React.JSX.Element {
               a11yPrefix="Weekly volume — "
             />
             <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Max = best week ever · Now = this week · To PR = remaining
+              {weeks === 0
+                ? "Max = best week ever · Now = this week · To PR = remaining"
+                : `Max = best of last ${weeks} weeks · Now = this week · To PR = remaining`}
             </Text>
           </>
         ) : (

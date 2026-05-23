@@ -1,5 +1,6 @@
 import type { SessionSets } from "~/api/progress";
 import type { SetRow } from "~/db/types";
+import { parseISO } from "~/utils/dates";
 
 /**
  * Discriminated state returned by `computeVolumeTarget`. The live
@@ -38,6 +39,15 @@ export type ComputeVolumeTargetInput = {
   /** Session-scoped sets for this exercise, from the live screen
    *  (`setsByExercise.get(ex.id)`). */
   currentSessionSets: SetRow[];
+  /**
+   * Optional numeric millisecond threshold (typically from
+   * `computeWindowStart(weeks, now)`). When provided, past sessions whose
+   * `started_at` is strictly before the threshold are excluded from the
+   * `previousMaxKg` reduction. Filtering uses `SessionSets.started_at` (not
+   * individual set `completed_at`) so a session is always an indivisible
+   * unit — consistent with the cross-kernel rule in design-v2.
+   */
+  windowStartMs?: number;
 };
 
 /**
@@ -111,11 +121,17 @@ export function sumLiveVolume(sets: SetRow[]): number {
 export function computeVolumeTarget(
   input: ComputeVolumeTargetInput,
 ): VolumeTargetState {
-  const { pastSessions, currentSessionSets } = input;
+  const { pastSessions, currentSessionSets, windowStartMs } = input;
 
   let previousMaxKg = 0;
   if (pastSessions) {
     for (const session of pastSessions) {
+      // Window filter at the session level — never per-set — so a session is
+      // always treated as one indivisible unit (MAJ-1 in design-v2).
+      if (windowStartMs !== undefined) {
+        const startedMs = parseISO(session.started_at).getTime();
+        if (startedMs < windowStartMs) continue;
+      }
       const total = sumPastVolume(session.sets);
       if (total > previousMaxKg) previousMaxKg = total;
     }
