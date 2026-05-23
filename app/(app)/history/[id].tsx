@@ -1,17 +1,20 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { Pencil, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
+  useColorScheme,
 } from "react-native";
 
 import { ExerciseBlock } from "~/components/exercise-block";
 import { ExercisePicker } from "~/components/exercise-picker";
+import { ReadOnlyExerciseBlock } from "~/components/read-only-exercise-block";
 import { SessionTimesEditor } from "~/components/session-times-editor";
 import { Button } from "~/components/ui/button";
 import { confirmDelete } from "~/components/confirm-delete";
@@ -58,6 +61,11 @@ export default function SessionDetailScreen() {
   // Exercises added during this edit (no sets logged yet).
   const [addedExerciseIds, setAddedExerciseIds] = useState<string[]>([]);
   const [nameDraft, setNameDraft] = useState("");
+  // Screen-level read-only/edit toggle. Default = read-only (false). Flipped
+  // by the header Pencil → "Done" Pressable. Local state only; navigating
+  // away unmounts the screen and the next mount re-enters read-only.
+  const [isEditing, setIsEditing] = useState(false);
+  const colorScheme = useColorScheme();
 
   useEffect(() => {
     if (session.data) {
@@ -152,10 +160,65 @@ export default function SessionDetailScreen() {
     }
   };
 
+  // Title chain:
+  //   - happy-path with a name → trimmed name
+  //   - happy-path without a name → "Workout" (preserves history/[id]:177)
+  //   - loading / error (no session.data) → "Session" (preserves prior labels
+  //     at lines 158, 167 before this refactor — see validator NEW-MIN-1).
+  const headerTitle = session.data?.name?.trim()
+    ? session.data.name.trim()
+    : session.data
+      ? "Workout"
+      : "Session";
+
+  // Single `<Stack.Screen options={...} />` config reused across the loading,
+  // error and happy-path branches so the header Pencil is consistently
+  // available. The pencil is a no-op when `session.data` is undefined
+  // (orderedExercises is empty in the loading case); flipping `isEditing` to
+  // true on the error path is harmless local state. Mirrors the measurements
+  // precedent (`app/(app)/measurements/[id]/index.tsx:140-156`).
+  const screenOptions = {
+    title: headerTitle,
+    headerShown: true,
+    headerRight: () =>
+      isEditing ? (
+        <Pressable
+          onPress={() => {
+            // Force blur of any focused <TextInput> (weight/reps inside
+            // <SetInput>, the session-name field) BEFORE the editable tree
+            // unmounts. Without this dismiss, a "Done" tap while a number
+            // input is focused would lose the in-flight keystrokes because
+            // <SetInput> commits on blur (`set-input.tsx:140, 153`). On web
+            // `Keyboard.dismiss()` is a no-op, but unmount itself fires
+            // focus-loss which still triggers the `onBlur=commit` path.
+            Keyboard.dismiss();
+            // Close the picker before flipping isEditing so a stale-open
+            // modal can't survive into read-only mode.
+            setPickerOpen(false);
+            setIsEditing(false);
+          }}
+          accessibilityLabel="Exit edit mode"
+          accessibilityRole="button"
+          className="px-3 py-1"
+        >
+          <Text className="text-base font-medium text-blue-500">Done</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={() => setIsEditing(true)}
+          accessibilityLabel="Edit workout"
+          accessibilityRole="button"
+          className="px-3 py-1"
+        >
+          <Pencil color={colorScheme === "dark" ? "#fff" : "#000"} size={20} />
+        </Pressable>
+      ),
+  } as const;
+
   if (session.isLoading || setsQ.isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-black">
-        <Stack.Screen options={{ title: "Session", headerShown: true }} />
+        <Stack.Screen options={screenOptions} />
         <ActivityIndicator />
       </View>
     );
@@ -164,7 +227,7 @@ export default function SessionDetailScreen() {
   if (session.isError || !session.data) {
     return (
       <View className="flex-1 items-center justify-center bg-white px-6 dark:bg-black">
-        <Stack.Screen options={{ title: "Session", headerShown: true }} />
+        <Stack.Screen options={screenOptions} />
         <Text className="text-base text-red-500">
           {session.error instanceof Error
             ? session.error.message
@@ -174,31 +237,37 @@ export default function SessionDetailScreen() {
     );
   }
 
-  const headerTitle = session.data.name?.trim() || "Workout";
-
   return (
     <View className="flex-1 bg-white dark:bg-black">
-      <Stack.Screen options={{ title: headerTitle, headerShown: true }} />
+      <Stack.Screen options={screenOptions} />
 
       <ScrollView contentContainerClassName="pb-24">
         <View className="border-b border-gray-200 px-6 py-6 dark:border-gray-800">
-          <Text className="mb-1 text-xs uppercase text-gray-500">Name</Text>
-          <TextInput
-            value={nameDraft}
-            onChangeText={setNameDraft}
-            onBlur={commitName}
-            onSubmitEditing={commitName}
-            placeholder="Workout"
-            placeholderTextColor="#9ca3af"
-            className="rounded-md border border-gray-300 px-3 py-2 text-lg font-semibold text-black dark:border-gray-700 dark:text-white"
-          />
-          {updateName.isError ? (
-            <Text className="mt-1 text-xs text-red-500">
-              {updateName.error instanceof Error
-                ? updateName.error.message
-                : "Failed to rename"}
+          {isEditing ? (
+            <>
+              <Text className="mb-1 text-xs uppercase text-gray-500">Name</Text>
+              <TextInput
+                value={nameDraft}
+                onChangeText={setNameDraft}
+                onBlur={commitName}
+                onSubmitEditing={commitName}
+                placeholder="Workout"
+                placeholderTextColor="#9ca3af"
+                className="rounded-md border border-gray-300 px-3 py-2 text-lg font-semibold text-black dark:border-gray-700 dark:text-white"
+              />
+              {updateName.isError ? (
+                <Text className="mt-1 text-xs text-red-500">
+                  {updateName.error instanceof Error
+                    ? updateName.error.message
+                    : "Failed to rename"}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text className="text-lg font-semibold text-black dark:text-white">
+              {headerTitle}
             </Text>
-          ) : null}
+          )}
 
           <SessionTimesEditor
             startedAt={session.data.started_at}
@@ -238,87 +307,103 @@ export default function SessionDetailScreen() {
             </Text>
           </View>
         ) : (
-          orderedExercises.map((ex) => (
-            <ExerciseBlock
-              key={ex.id}
-              exercise={ex}
-              sets={setsByExercise.get(ex.id) ?? []}
-              unit={unit}
-              onPressName={() =>
-                router.push(`/(app)/exercises/${ex.id}/progress`)
-              }
-              onAddSet={async (input) => {
-                if (!id) return;
-                try {
-                  await logSet.mutateAsync({
-                    session_id: id,
-                    exercise_id: ex.id,
-                    set_type: input.set_type,
-                    parent_set_id: input.parent_set_id ?? null,
-                  });
-                } catch (err) {
-                  console.warn("Log set failed", err);
+          orderedExercises.map((ex) =>
+            isEditing ? (
+              <ExerciseBlock
+                key={ex.id}
+                exercise={ex}
+                sets={setsByExercise.get(ex.id) ?? []}
+                unit={unit}
+                onPressName={() =>
+                  router.push(`/(app)/exercises/${ex.id}/progress`)
                 }
-              }}
-              onUpdateSet={async (setId, patch) => {
-                try {
-                  await updateSet.mutateAsync({ id: setId, patch });
-                } catch (err) {
-                  console.warn("Update set failed", err);
+                onAddSet={async (input) => {
+                  if (!id) return;
+                  try {
+                    await logSet.mutateAsync({
+                      session_id: id,
+                      exercise_id: ex.id,
+                      set_type: input.set_type,
+                      parent_set_id: input.parent_set_id ?? null,
+                    });
+                  } catch (err) {
+                    console.warn("Log set failed", err);
+                  }
+                }}
+                onUpdateSet={async (setId, patch) => {
+                  try {
+                    await updateSet.mutateAsync({ id: setId, patch });
+                  } catch (err) {
+                    console.warn("Update set failed", err);
+                  }
+                }}
+                onUpdateSetMeta={async (setId, patch) => {
+                  try {
+                    await updateSetMeta.mutateAsync({ id: setId, patch });
+                  } catch (err) {
+                    console.warn("Update set meta failed", err);
+                  }
+                }}
+                onDeleteSet={async (setId) => {
+                  try {
+                    await deleteSet.mutateAsync(setId);
+                  } catch (err) {
+                    console.warn("Delete set failed", err);
+                  }
+                }}
+              />
+            ) : (
+              <ReadOnlyExerciseBlock
+                key={ex.id}
+                exercise={ex}
+                sets={setsByExercise.get(ex.id) ?? []}
+                unit={unit}
+                onPressName={() =>
+                  router.push(`/(app)/exercises/${ex.id}/progress`)
                 }
-              }}
-              onUpdateSetMeta={async (setId, patch) => {
-                try {
-                  await updateSetMeta.mutateAsync({ id: setId, patch });
-                } catch (err) {
-                  console.warn("Update set meta failed", err);
-                }
-              }}
-              onDeleteSet={async (setId) => {
-                try {
-                  await deleteSet.mutateAsync(setId);
-                } catch (err) {
-                  console.warn("Delete set failed", err);
-                }
-              }}
-            />
-          ))
+              />
+            ),
+          )
         )}
 
-        <View className="mt-4 gap-3 px-4">
-          <Pressable
-            onPress={() => setPickerOpen(true)}
-            accessibilityRole="button"
-            className="flex-row items-center justify-center rounded-lg border border-gray-300 py-3 dark:border-gray-700"
-          >
-            <Plus color="#6b7280" size={18} />
-            <Text className="ml-2 text-base text-black dark:text-white">
-              Add exercise
-            </Text>
-          </Pressable>
+        {isEditing ? (
+          <View className="mt-4 gap-3 px-4">
+            <Pressable
+              onPress={() => setPickerOpen(true)}
+              accessibilityRole="button"
+              className="flex-row items-center justify-center rounded-lg border border-gray-300 py-3 dark:border-gray-700"
+            >
+              <Plus color="#6b7280" size={18} />
+              <Text className="ml-2 text-base text-black dark:text-white">
+                Add exercise
+              </Text>
+            </Pressable>
 
-          <View className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-800">
-            <Button
-              label="Delete workout"
-              variant="destructive"
-              onPress={onDeleteSession}
-              loading={softDelete.isPending}
-            />
+            <View className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-800">
+              <Button
+                label="Delete workout"
+                variant="destructive"
+                onPress={onDeleteSession}
+                loading={softDelete.isPending}
+              />
+            </View>
           </View>
-        </View>
+        ) : null}
       </ScrollView>
 
-      <ExercisePicker
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        excludeIds={orderedExercises.map((e) => e.id)}
-        onPick={(ex) => {
-          setAddedExerciseIds((prev) =>
-            prev.includes(ex.id) ? prev : [...prev, ex.id],
-          );
-          setPickerOpen(false);
-        }}
-      />
+      {isEditing ? (
+        <ExercisePicker
+          visible={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          excludeIds={orderedExercises.map((e) => e.id)}
+          onPick={(ex) => {
+            setAddedExerciseIds((prev) =>
+              prev.includes(ex.id) ? prev : [...prev, ex.id],
+            );
+            setPickerOpen(false);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
