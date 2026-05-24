@@ -38,6 +38,13 @@ const SCREENSHOT_DIR = path.resolve(
 );
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
+// MIN-A: ensure the current run's screenshot directory exists before any test
+// captures into it. Pattern mirrors `SCREENSHOT_DIR` above.
+const NARROW_VIEWPORT_SCREENSHOT_DIR = path.resolve(
+  "docs/runs/2026-05-23_2357_progress-graph-current-week/screenshots",
+);
+fs.mkdirSync(NARROW_VIEWPORT_SCREENSHOT_DIR, { recursive: true });
+
 const createdUserIds = new Set<string>();
 
 async function createConfirmedUser(email: string): Promise<string> {
@@ -311,6 +318,85 @@ test.describe("Weekly volume strip — scroll + week selector", () => {
       await expect(
         page.getByText("Jump to month", { exact: true }),
       ).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("default mount on narrow viewport: scroll is pinned to right edge", async ({
+    page,
+  }) => {
+    // CRITICAL: shrink viewport BEFORE sign-in / navigation so layout reflects
+    // 390pt width when the strip first measures itself. On the default
+    // Playwright viewport (~1280pt) the entire 16-bucket strip fits without
+    // overflow and the regression cannot be observed.
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    const email = `e2e-scroll-narrow-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+    const exerciseId = await getSeedExerciseId(userId);
+
+    // Seed 16 weeks so the strip definitely overflows a 390pt viewport.
+    for (let offset = 0; offset < 16; offset++) {
+      const dt = mondayNWeeksAgoUtc(offset);
+      dt.setUTCDate(dt.getUTCDate() + 2);
+      dt.setUTCHours(18, 0, 0, 0);
+      await seedFinishedSession({
+        userId,
+        exerciseId,
+        completedAt: dt,
+        workingSets: 3,
+        weight: 50 + offset * 5,
+        reps: 5,
+      });
+    }
+
+    try {
+      await signInViaUi(page, email);
+      await gotoHistory(page);
+
+      await expect(page.getByText("This week", { exact: true })).toBeVisible({
+        timeout: 15_000,
+      });
+
+      // Direct selector via data-testid emitted by RN Web from
+      // testID="weekly-strip-scroller" on the <ScrollView>.
+      const scroller = page.locator('[data-testid="weekly-strip-scroller"]');
+      await expect(scroller).toBeVisible({ timeout: 5_000 });
+
+      // Deterministic regression-killer: scrollLeft + clientWidth must equal
+      // scrollWidth (within 4-px sub-pixel tolerance) — i.e. pinned right.
+      const pinned = await scroller.evaluate((el) => {
+        const slack = el.scrollWidth - el.clientWidth - el.scrollLeft;
+        return {
+          ok: slack <= 4,
+          slack,
+          scrollLeft: el.scrollLeft,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        };
+      });
+      expect(
+        pinned.ok,
+        `scroll not pinned to right edge: ${JSON.stringify(pinned)}`,
+      ).toBe(true);
+
+      // Sanity: current-week bar is present in the DOM (no a11y regression).
+      const currentMonday = mondayNWeeksAgoUtc(0);
+      const currentLabel = `${currentMonday.getUTCMonth() + 1}/${currentMonday.getUTCDate()}`;
+      await expect(
+        page.getByRole("button", { name: `View week of ${currentLabel}` }),
+      ).toBeVisible({ timeout: 5_000 });
+
+      // MIN-5 / MIN-A: capture the narrow-viewport pinned screenshot as
+      // visual evidence. Directory created at module load via
+      // NARROW_VIEWPORT_SCREENSHOT_DIR.
+      const file = path.join(
+        NARROW_VIEWPORT_SCREENSHOT_DIR,
+        "narrow-viewport-pin.png",
+      );
+      await page.screenshot({ path: file, fullPage: false });
+      console.log(`[screenshot] ${file}`);
     } finally {
       await deleteUserSafe(userId);
     }

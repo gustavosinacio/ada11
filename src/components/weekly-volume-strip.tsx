@@ -87,6 +87,12 @@ export function WeeklyVolumeStrip({
   const lastLabelRef = useRef<string>("");
   const viewportWidthRef = useRef<number>(0);
   const isPinnedRightRef = useRef<boolean>(true);
+  // One-shot guard for the initial right-edge pin. Flips `true` on the FIRST
+  // `onContentSizeChange` with `w > 0` (i.e. when the loaded `<ScrollView>`
+  // first measures its content) and never resets. Subsequent content-size
+  // changes (refetch, week rollover, in-week volume growth) are handled by
+  // the rollover effect at `:160-165` gated on `isPinnedRightRef`.
+  const didInitialPinRef = useRef<boolean>(false);
 
   // Bucket math depends only on `data`. `unit` is read inline in JSX so the
   // toggle re-renders without invalidating the memo.
@@ -231,12 +237,6 @@ export function WeeklyVolumeStrip({
     model.buckets.length * BAR_WIDTH +
     Math.max(0, model.buckets.length - 1) * BAR_GAP;
 
-  // Right-edge anchor for `contentOffset.x` on mount. We need the strip to
-  // land showing the most-recent week — same UX as `<Terminal>`/`<Chat>`
-  // tail-anchor patterns. ScrollView's `contentOffset` is the canonical
-  // no-flash way to land at a non-zero offset.
-  const rightAnchorX = Math.max(0, contentWidth);
-
   return (
     <View
       onLayout={onLayout}
@@ -264,7 +264,13 @@ export function WeeklyVolumeStrip({
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentOffset={{ x: rightAnchorX, y: 0 }}
+        testID="weekly-strip-scroller"
+        onContentSizeChange={(w) => {
+          if (didInitialPinRef.current) return;
+          if (w <= 0) return;
+          scrollRef.current?.scrollToEnd({ animated: false });
+          didInitialPinRef.current = true;
+        }}
         onScroll={onScroll}
         scrollEventThrottle={16}
         className="mt-4"
