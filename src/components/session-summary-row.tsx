@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import type { SessionRow, WeightUnit } from "~/db/types";
 import { formatDisplayDate } from "~/utils/format-display-date";
-import { formatWeight } from "~/utils/units";
+import { presentSessionVolumeSlot } from "~/utils/session-row-format";
 
 type Props = {
   session: SessionRow;
@@ -47,9 +47,7 @@ export function SessionSummaryRow({
             {totalSets != null
               ? ` · ${totalSets} ${totalSets === 1 ? "set" : "sets"}`
               : ""}
-            {totalVolumeKg != null && totalVolumeKg > 0
-              ? ` · ${formatWeight(totalVolumeKg, unit)} volume`
-              : ""}
+            {presentSessionVolumeSlot(totalVolumeKg, unit) ?? ""}
           </Text>
           {!session.ended_at ? (
             <Text className="mt-1 text-xs font-medium text-orange-600">

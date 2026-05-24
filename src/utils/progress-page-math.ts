@@ -3,6 +3,7 @@ import type { ExerciseRow, MuscleGroup } from "~/db/types";
 import { MUSCLE_GROUPS } from "~/db/types";
 import { isoWeekStart, parseISO, weekKeyOf } from "~/utils/dates";
 import { formatShortDate } from "~/utils/format-display-date";
+import { sumLiveVolume } from "~/utils/volume-target";
 
 /**
  * Pure math helpers for the Progress page. All inputs are plain data; no I/O,
@@ -218,6 +219,49 @@ export function computeLifetimeMaxPerExercise(
     maxes.set(exId, best);
   }
   return maxes;
+}
+
+// ---------------------------------------------------------------------------
+// groupSessionVolumes
+// ---------------------------------------------------------------------------
+
+/**
+ * Groups `rows` by `session_id` and reduces each group via `sumLiveVolume`.
+ *
+ * Returned map values are kg totals for non-warmup sets in finished sessions.
+ * `WeeklyVolumeRow` server filters guarantee `completed_at != null`,
+ * `sessions.ended_at != null`, `set_type != "warmup"`, and `deleted_at IS
+ * NULL`, so `sumLiveVolume`'s warmup-skip + `completed_at` guards are no-ops
+ * here. Using the kernel anyway (rather than inlining `w * r`) keeps every
+ * aggregate volume readout rooted in a single function — see the
+ * cross-surface consistency rule documented in `volume-target.ts:53-67`.
+ *
+ * Result is a Map (not a Record): O(1) `.get(sessionId)` per row render, no
+ * JSON-key coercion. Callers `useMemo` on `data` reference identity.
+ *
+ * In-progress sessions are absent from `rows` (server filters require
+ * `sessions.ended_at IS NOT NULL`), so the map has no entry for an
+ * `ended_at IS NULL` session — `map.get(id)` returns `undefined`, and the
+ * `<SessionSummaryRow>` presenter hides the slot.
+ *
+ * `sumLiveVolume` accepts the `Pick<SetRow, "completed_at" | "set_type" |
+ * "weight" | "reps">` shape that `WeeklyVolumeRow` structurally satisfies,
+ * so no cast is needed at the call site.
+ */
+export function groupSessionVolumes(
+  rows: WeeklyVolumeRow[],
+): Map<string, number> {
+  const bySession = new Map<string, WeeklyVolumeRow[]>();
+  for (const row of rows) {
+    const list = bySession.get(row.session_id) ?? [];
+    list.push(row);
+    bySession.set(row.session_id, list);
+  }
+  const out = new Map<string, number>();
+  for (const [sessionId, sets] of bySession) {
+    out.set(sessionId, sumLiveVolume(sets));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -84,8 +84,16 @@ function sumPastVolume(sets: SetRow[]): number {
  * guard so drafts (unchecked rows) are excluded. This enforces the
  * user-visible `Max − Now = To PR` arithmetic on `<VolumeTargetSlot>` per
  * F10 "checked = committed" semantics.
+ *
+ * Accepts the structural subset of `SetRow` the body actually reads
+ * (`Pick<SetRow, "completed_at" | "set_type" | "weight" | "reps">`). This
+ * lets non-`SetRow` shapes — notably `WeeklyVolumeRow` from `src/api/stats`
+ * — feed the kernel without casts, while existing `SetRow[]` callers remain
+ * structurally assignable.
  */
-export function sumLiveVolume(sets: SetRow[]): number {
+export function sumLiveVolume(
+  sets: Pick<SetRow, "completed_at" | "set_type" | "weight" | "reps">[],
+): number {
   let total = 0;
   for (const s of sets) {
     if (s.completed_at == null) continue;

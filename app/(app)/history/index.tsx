@@ -1,5 +1,5 @@
 import { Stack, useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
 
 import { SessionSummaryRow } from "~/components/session-summary-row";
@@ -7,15 +7,22 @@ import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
+import { groupSessionVolumes } from "~/utils/progress-page-math";
 
 export default function HistoryList() {
   const router = useRouter();
   const { data, isLoading, isError, error, refetch, isRefetching } = useSessions();
   const {
+    data: weeklyVolumeData,
     refetch: refetchWeekly,
     isRefetching: isRefetchingWeekly,
   } = useLifetimeWeeklyVolume();
   const unit = useWeightUnit();
+
+  const totalVolumeBySessionId = useMemo(
+    () => groupSessionVolumes(weeklyVolumeData ?? []),
+    [weeklyVolumeData],
+  );
 
   const onRefresh = useCallback(async () => {
     await Promise.all([refetch(), refetchWeekly()]);
@@ -50,6 +57,7 @@ export default function HistoryList() {
             <SessionSummaryRow
               session={item}
               unit={unit}
+              totalVolumeKg={totalVolumeBySessionId.get(item.id)}
               onPress={() => router.push(`/(app)/history/${item.id}`)}
             />
           )}

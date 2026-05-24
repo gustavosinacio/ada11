@@ -291,10 +291,13 @@ test.describe("Exercise progress IA (web)", () => {
       await page.waitForURL(/\/history$/, { timeout: 10_000 });
 
       // Open the just-finished session. For a brand-new user it's the only
-      // session row. The row's secondary line is "<date> · <duration>" (the
-      // list page doesn't pass totalSets to SessionSummaryRow, so there's no
-      // "N sets" text). Match by the " · 0m" duration substring — unique to a
-      // just-finished session row, and absent from the tab bar.
+      // session row. The row's secondary line is "<date> · <duration> ·
+      // <volume>" (the list page passes totalVolumeKg but not totalSets to
+      // SessionSummaryRow, so there's no "N sets" text — but there IS a
+      // "12,345 kg" volume token appended). Match by the " · 0m" duration
+      // substring — unique to a just-finished session row, and absent from
+      // the tab bar. The regex anchors on the duration token only, so the
+      // appended volume slot doesn't affect the selector.
       const sessionRow = page.getByRole("button").filter({ hasText: /·\s*\d+m\b/ }).first();
       await expect(sessionRow).toBeVisible({ timeout: 10_000 });
       await sessionRow.click();

@@ -14,6 +14,7 @@ import { useSessions } from "~/hooks/use-sessions";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { parseISO, weekKeyOf } from "~/utils/dates";
 import { formatDisplayDate } from "~/utils/format-display-date";
+import { groupSessionVolumes } from "~/utils/progress-page-math";
 import { formatVolume } from "~/utils/units";
 
 const SECTION_HEADER =
@@ -90,6 +91,14 @@ export default function ViewWeekScreen(): React.JSX.Element {
     }
     return vol;
   }, [weeklyVolumeQ.data, targetKey]);
+
+  // Per-session volume map for the row totals. Reuses the same lifetime
+  // cache the headline above reads — one O(n) reduce, memoized on `data`
+  // reference identity.
+  const totalVolumeBySessionId = useMemo(
+    () => groupSessionVolumes(weeklyVolumeQ.data ?? []),
+    [weeklyVolumeQ.data],
+  );
 
   const endedSessionsCount = weekSessions.filter(
     (s) => s.ended_at != null,
@@ -197,6 +206,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
             key={s.id}
             session={s}
             unit={unit}
+            totalVolumeKg={totalVolumeBySessionId.get(s.id)}
             onPress={() => router.push(`/(app)/history/${s.id}`)}
           />
         ))

@@ -34,7 +34,8 @@ import {
   useUpdateSet,
   useUpdateSetMeta,
 } from "~/hooks/use-sets";
-import { formatWeight } from "~/utils/units";
+import { formatVolume } from "~/utils/units";
+import { sumLiveVolume } from "~/utils/volume-target";
 
 export default function SessionDetailScreen() {
   const router = useRouter();
@@ -122,16 +123,14 @@ export default function SessionDetailScreen() {
   }, [setsQ.data]);
 
   const totals = useMemo(() => {
-    let totalSets = 0;
-    let totalVolumeKg = 0;
-    for (const s of setsQ.data ?? []) {
-      totalSets += 1;
-      const reps = s.reps ?? 0;
-      const w = s.weight ? parseFloat(s.weight) : 0;
-      if (Number.isFinite(reps) && Number.isFinite(w)) {
-        totalVolumeKg += reps * w;
-      }
-    }
+    const rows = setsQ.data ?? [];
+    // Canonical kernel — matches the live session header, verdict screen,
+    // weekly-volume strip and the History list row. Predicate:
+    // `completed_at != null`, `set_type !== "warmup"`, `w > 0 && r > 0`.
+    const totalSets = rows.filter(
+      (s) => s.completed_at != null && s.set_type !== "warmup",
+    ).length;
+    const totalVolumeKg = sumLiveVolume(rows);
     return { totalSets, totalVolumeKg };
   }, [setsQ.data]);
 
@@ -289,9 +288,8 @@ export default function SessionDetailScreen() {
           <Text className="mt-0.5 text-sm text-gray-500">
             Total: {totals.totalSets} {totals.totalSets === 1 ? "set" : "sets"} ·{" "}
             {totals.totalVolumeKg > 0
-              ? formatWeight(totals.totalVolumeKg, unit)
-              : "—"}{" "}
-            volume
+              ? formatVolume(totals.totalVolumeKg, unit)
+              : "—"}
           </Text>
           {session.data.notes ? (
             <Text className="mt-3 text-sm italic text-gray-600 dark:text-gray-400">
