@@ -119,6 +119,7 @@ export function useSoftDeleteSession() {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.invalidateQueries({ queryKey: KEYS.active });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }

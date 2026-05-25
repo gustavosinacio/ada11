@@ -190,6 +190,7 @@ export async function getLastWorkingSetForExercise(
     .not("weight", "is", null)
     .not("reps", "is", null)
     .is("deleted_at", null)
+    .is("sessions.deleted_at", null)
     .not("sessions.ended_at", "is", null)
     .order("completed_at", { ascending: false })
     .limit(1)
