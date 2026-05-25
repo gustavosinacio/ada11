@@ -101,10 +101,26 @@ export function SetInput({
   }, [row.reps, row.weight, unit]);
 
   const commit = () => {
-    onCommit({
-      reps: parseInt0(reps),
-      weight: kgFromInputString(weight, unit),
-    });
+    const newWeight = kgFromInputString(weight, unit);
+    const newReps = parseInt0(reps);
+    // F7 follow-up race fix: skip the no-op blur-commit. When both local
+    // strings parse to null AND the row was already null, this PATCH is a
+    // null→null write that races the toggle handler's auto-fill `updateSet`
+    // PATCH on the same `id` (PostgREST gives no ordering guarantee for
+    // concurrent UPDATEs on one row). Suppressing it removes the colliding
+    // writer entirely on the focused-empty-input + tap-check path.
+    // Accepted trade-off: typing "100" then erasing to "" then blurring
+    // without check is also suppressed — net effect zero because the row
+    // was already null (nothing to clear).
+    if (
+      newWeight === null &&
+      newReps === null &&
+      row.weight === null &&
+      row.reps === null
+    ) {
+      return;
+    }
+    onCommit({ reps: newReps, weight: newWeight });
   };
 
   const badge = TYPE_BADGE[row.set_type];

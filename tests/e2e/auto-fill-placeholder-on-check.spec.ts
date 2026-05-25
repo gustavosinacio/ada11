@@ -256,7 +256,11 @@ async function purgeQueryCache(page: Page) {
   });
 }
 
-async function gotoLiveSession(page: Page, sessionId: string) {
+async function gotoLiveSession(
+  page: Page,
+  sessionId: string,
+  opts?: { previousWeightPlaceholder?: string },
+) {
   await purgeQueryCache(page);
   await page.goto(`/(app)/workout/${sessionId}`, {
     waitUntil: "domcontentloaded",
@@ -271,6 +275,23 @@ async function gotoLiveSession(page: Page, sessionId: string) {
   await expect(page.getByText("Back Squat", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
+  // Fix 3 (race 2 mitigation): wait for `useLastWorkingSet` to have resolved
+  // before allowing the first click. Without this anchor, Playwright can
+  // fire the click before the cross-session placeholder query lands; the
+  // handler then receives `previousSet = null`, `computeAutoFillPayload`
+  // returns null, auto-fill is skipped, and the DB row stays null after the
+  // check — the E7 `:633` NaN flake flagged by the regression report.
+  // The placeholder text on the weight input is the visual proxy for the
+  // query data having arrived (see <SetInput>.weightPlaceholder at
+  // src/components/set-input.tsx:86-90). Callers seeded with a prior
+  // session pass the expected placeholder (e.g. "120" for 120 kg in kg
+  // mode, "264.6" for 120 kg in lbs mode). Callers without a prior session
+  // can omit the option and skip this anchor.
+  if (opts?.previousWeightPlaceholder) {
+    await expect(
+      page.getByPlaceholder(opts.previousWeightPlaceholder).first(),
+    ).toBeVisible({ timeout: 15_000 });
+  }
 }
 
 test.afterAll(async () => {
@@ -311,7 +332,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       await page.getByLabel("Mark set as completed", { exact: true }).first().click();
       await expect(
@@ -361,7 +384,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // Type "100" into the weight input. We target the input via placeholder
       // text: with prior 120 kg x 8, the weight input renders placeholder
@@ -438,7 +463,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // Type "5" into reps. Same deterministic-blur scaffolding as E2 —
       // without explicit blur, the check-button's implicit blur races the
@@ -551,7 +578,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       await page.getByLabel("Mark set as completed", { exact: true }).first().click();
       await expect(
@@ -611,7 +640,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // The parent working set is already checked; the only unchecked row
       // is the dropset.
@@ -663,7 +694,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // First check → auto-fill 120 / 8.
       await page.getByLabel("Mark set as completed", { exact: true }).first().click();
@@ -750,7 +783,9 @@ test.describe("Auto-fill placeholder on check", () => {
       page.on("dialog", (d) => void d.accept());
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // Trigger the "Some sets are unchecked" modal → "Check all and finish".
       await page.getByText("Finish", { exact: true }).last().click();
@@ -816,10 +851,12 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "264.6",
+      });
 
-      // The weight input placeholder renders the lbs-converted display.
-      // Anchor on it to assert the lbs mode took effect before the click.
+      // Anchor explicitly here as well (matches the historical assertion)
+      // for clarity that lbs-converted display took effect before the click.
       await expect(page.getByPlaceholder("264.6").first()).toBeVisible({
         timeout: 10_000,
       });
@@ -873,7 +910,9 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       await signInAndLand(page, email);
-      await gotoLiveSession(page, sessionId);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
 
       // Tap check → rest-timer overlay should flip to "Resting" near
       // instantly (no extra round-trip on the auto-fill path because the
@@ -896,6 +935,118 @@ test.describe("Auto-fill placeholder on check", () => {
       // Values unchanged (no auto-fill, no clobber).
       expect(parseFloat(row.weight as string)).toBeCloseTo(90, 1);
       expect(row.reps).toBe(6);
+      expect(row.completed_at).not.toBeNull();
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("E11: focused empty input + tap check → auto-fill is sole PATCH, no commit collision", async ({
+    page,
+  }) => {
+    // Pins the F7 follow-up race fix: with both <SetInput> local strings
+    // empty AND row.weight/row.reps already null, the blur-commit triggered
+    // by Keyboard.dismiss() inside the toggle handler must NOT dispatch a
+    // null→null PATCH that races the auto-fill `updateSet`. The gate in
+    // src/components/set-input.tsx:commit() suppresses that emit at the
+    // source. This test focuses the empty weight input then taps the check
+    // button without typing or blurring — exactly the Repro A shape from
+    // docs/runs/2026-05-25_1214_blur-commit-skip-when-empty/repro.md.
+    const email = `e2e-autofill-e11-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+    try {
+      const withRest = await getSeedExerciseByName(userId, "Bench Press");
+      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      await seedFinishedSession({
+        userId,
+        exerciseId: withRest.id,
+        weightKg: 120,
+        reps: 8,
+      });
+      const routineId = await seedRoutineWithTwoExercises({
+        userId,
+        withRestExerciseId: withRest.id,
+        withoutRestExerciseId: withoutRest.id,
+        restSeconds: 60,
+      });
+      const sessionId = await startLiveSession(userId, routineId);
+      const setId = await seedSet({
+        userId,
+        sessionId,
+        exerciseId: withRest.id,
+        setNumber: 1,
+        setType: "working",
+        completedAt: null,
+        weightKg: null,
+        reps: null,
+      });
+
+      await signInAndLand(page, email);
+      await gotoLiveSession(page, sessionId, {
+        previousWeightPlaceholder: "120",
+      });
+
+      // Count PATCHes targeting this row. The handler's auto-fill issues
+      // exactly one PATCH on /rest/v1/sets?id=eq.<setId> with weight+reps.
+      // The toggle's checkSet path issues a SEPARATE PATCH against the
+      // /sets/check RPC (or a distinct shape) — but our existing check
+      // implementation also uses /rest/v1/sets?id=eq.<setId> to set
+      // completed_at. So we filter PATCHes to ones whose body contains
+      // weight/reps (not completed_at) to single out the auto-fill family.
+      // Pre-fix: a second null→null PATCH from <SetInput>.commit would also
+      // land on the same URL with weight+reps in the body → count == 2.
+      // Post-fix: exactly one PATCH with weight/reps in the body.
+      const setPatchBodies: string[] = [];
+      page.on("request", (req) => {
+        const url = req.url();
+        if (
+          url.includes(`/rest/v1/sets?`) &&
+          url.includes(`id=eq.${setId}`) &&
+          req.method() === "PATCH"
+        ) {
+          const body = req.postData() ?? "";
+          // Only count writes that touch weight or reps. The checkSet
+          // PATCH carries `completed_at` and (currently) does not include
+          // weight/reps in its body — filtering this way isolates the
+          // auto-fill vs blur-commit collision family.
+          if (body.includes("\"weight\"") || body.includes("\"reps\"")) {
+            setPatchBodies.push(body);
+          }
+        }
+      });
+
+      // Focus the empty weight input. Do NOT type. Do NOT blur explicitly.
+      // The placeholder ("120") is rendered because the prior session is
+      // 120 kg x 8.
+      const weightInput = page.getByPlaceholder("120").first();
+      await weightInput.focus();
+
+      // Tap check. The handler runs Keyboard.dismiss() synchronously, which
+      // on react-native-web blurs the focused input → <SetInput>.commit()
+      // fires with local strings empty AND row.weight/row.reps null. The
+      // gate must short-circuit before the no-op `{weight: null, reps: null}`
+      // PATCH is dispatched.
+      await page.getByLabel("Mark set as completed", { exact: true }).first().click();
+      await expect(
+        page.getByLabel("Unmark set as completed", { exact: true }).first(),
+      ).toBeVisible({ timeout: 5_000 });
+
+      // Settle window: let any in-flight PATCH land before counting.
+      await page.waitForTimeout(800);
+
+      // EXACTLY ONE PATCH with weight/reps in body (the auto-fill).
+      expect(setPatchBodies).toHaveLength(1);
+      // Sanity-check the surviving body carries the auto-fill payload, not
+      // a null clobber.
+      expect(setPatchBodies[0]).toContain("\"weight\"");
+      expect(setPatchBodies[0]).toContain("\"reps\"");
+      expect(setPatchBodies[0]).not.toMatch(/"weight"\s*:\s*null/);
+      expect(setPatchBodies[0]).not.toMatch(/"reps"\s*:\s*null/);
+
+      const row = await getSet(setId);
+      expect(row.weight).not.toBeNull();
+      expect(parseFloat(row.weight as string)).toBeCloseTo(120, 1);
+      expect(row.reps).toBe(8);
       expect(row.completed_at).not.toBeNull();
     } finally {
       await deleteUserSafe(userId);
