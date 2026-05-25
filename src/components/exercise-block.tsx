@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { UpdateSetMetaInput } from "~/api/sets";
+import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { SetInput } from "~/components/set-input";
 import { VolumeTargetSlot } from "~/components/volume-target-slot";
 import type { ExerciseRow, SetRow, SetType, WeightUnit } from "~/db/types";
@@ -213,6 +214,8 @@ export function ExerciseBlock({
           </View>
         )}
       </View>
+
+      <ExerciseNoteSlot exerciseId={exercise.id} editable={true} />
 
       {showVolumeTarget ? (
         <VolumeTargetSlot

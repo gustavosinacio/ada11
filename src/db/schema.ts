@@ -215,3 +215,32 @@ export const measurementEntries = pgTable(
     // predicates). Source of truth is supabase/migrations/0005_measurements.sql.
   }),
 );
+
+export const exerciseNotes = pgTable(
+  "exercise_notes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    // Composite read index — every read filters on (user_id, exercise_id).
+    userExerciseIdx: index("exercise_notes_user_exercise_idx").on(
+      t.userId,
+      t.exerciseId,
+    ),
+    // The UNIQUE partial index
+    //   (user_id, exercise_id) WHERE deleted_at IS NULL
+    // and the CHECK (char_length(body) <= 2000) constraint live in
+    // supabase/migrations/0010_exercise_notes.sql. Drizzle's typed builders
+    // have no first-class support for partial predicates or column-level
+    // CHECK — matches measurement_entries_user_day_idx precedent
+    // (schema.ts:211-216).
+  }),
+);

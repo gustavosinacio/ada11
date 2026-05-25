@@ -130,6 +130,67 @@ async function main() {
       throw new Error("FAIL: B deleted A's measurement");
     }
 
+    // -------------------------------------------------------------------
+    // exercise_notes — same RLS pattern, a note attached to A's exercise.
+    // -------------------------------------------------------------------
+    const { data: aNote, error: nInsErr } = await clientA
+      .from("exercise_notes")
+      .insert({
+        user_id: a.user.id,
+        exercise_id: aEx.id,
+        body: "grip width: shoulder-width",
+      })
+      .select()
+      .single();
+    if (nInsErr || !aNote) {
+      throw new Error(`A exercise_note insert failed: ${nInsErr?.message}`);
+    }
+
+    // B reads — must return zero rows.
+    const { data: bNRead } = await clientB
+      .from("exercise_notes")
+      .select("*")
+      .eq("id", aNote.id);
+    if ((bNRead ?? []).length > 0) {
+      throw new Error("FAIL: B can read A's exercise_note");
+    }
+
+    // B updates — must affect zero rows.
+    const { data: bNUpd } = await clientB
+      .from("exercise_notes")
+      .update({ body: "hijacked" })
+      .eq("id", aNote.id)
+      .select();
+    if ((bNUpd ?? []).length > 0) {
+      throw new Error("FAIL: B updated A's exercise_note");
+    }
+
+    // B deletes — must affect zero rows.
+    const { data: bNDel } = await clientB
+      .from("exercise_notes")
+      .delete()
+      .eq("id", aNote.id)
+      .select();
+    if ((bNDel ?? []).length > 0) {
+      throw new Error("FAIL: B deleted A's exercise_note");
+    }
+
+    // B insert spoof — must fail (INSERT policy `with check
+    // (auth.uid() = user_id)` rejects). Supabase JS surfaces this as either
+    // an error (preferred) or zero affected rows depending on PostgREST
+    // behavior. We assert at least one of those is true.
+    const { data: bNSpoofData, error: bNSpoofErr } = await clientB
+      .from("exercise_notes")
+      .insert({
+        user_id: a.user.id,
+        exercise_id: aEx.id,
+        body: "spoof",
+      })
+      .select();
+    if (!bNSpoofErr && (bNSpoofData ?? []).length > 0) {
+      throw new Error("FAIL: B spoofed an exercise_note insert on A's row");
+    }
+
     console.log("✅ RLS test passed — B cannot read/update/delete A's data.");
   } finally {
     await admin.auth.admin.deleteUser(a.user.id);

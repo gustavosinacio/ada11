@@ -1,6 +1,7 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
 import {
+  exerciseNotes,
   exercises,
   measurementEntries,
   routineExercises,
@@ -28,6 +29,9 @@ export type NewSet = InferInsertModel<typeof sets>;
 
 export type MeasurementEntry = InferSelectModel<typeof measurementEntries>;
 export type NewMeasurementEntry = InferInsertModel<typeof measurementEntries>;
+
+export type ExerciseNote = InferSelectModel<typeof exerciseNotes>;
+export type NewExerciseNote = InferInsertModel<typeof exerciseNotes>;
 
 export type SetType = "warmup" | "working" | "dropset";
 export type WeightUnit = "kg" | "lbs";
@@ -165,6 +169,16 @@ export type MeasurementEntryRow = {
   thigh_cm: string | null;
   calf_cm: string | null;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type ExerciseNoteRow = {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  body: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

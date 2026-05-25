@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { ExerciseSessionRow } from "~/components/exercise-session-row";
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { useAllExercise } from "~/hooks/use-exercises";
@@ -136,6 +137,13 @@ export default function ExerciseProgressScreen() {
         {totalSessions} {totalSessions === 1 ? "session" : "sessions"} logged
         {bestE1rm > 0 ? ` · Best est. 1RM: ${formatWeight(bestE1rm, unit)}` : ""}
       </Text>
+
+      {/* Per-(user, exercise) personal note. Sits above the chart so it's the
+          first thing the user sees after the name + summary line. Renders even
+          for soft-deleted exercises and for the empty-progress branch below. */}
+      <View className="-mx-6 mb-2">
+        <ExerciseNoteSlot exerciseId={id} editable={true} alwaysExpanded={true} />
+      </View>
 
       {e1rmData.length === 0 ? (
         <View className="items-center py-10">

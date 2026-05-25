@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { ReadOnlySetRow } from "~/components/read-only-set-row";
 import type { ExerciseRow, SetRow, WeightUnit } from "~/db/types";
 import { presentReadOnlyExerciseBlock } from "~/utils/set-display";
@@ -73,6 +74,8 @@ export function ReadOnlyExerciseBlock({
         {/* No action area — history never passed `onRemove`/`onMoveUp`/
             `onMoveDown` and the read-only block omits it by contract. */}
       </View>
+
+      <ExerciseNoteSlot exerciseId={exercise.id} editable={false} />
 
       {p.showColumnHeader ? (
         <View className="flex-row items-center gap-2 border-y border-gray-100 bg-gray-50 px-4 py-1 dark:border-gray-900 dark:bg-gray-950">
