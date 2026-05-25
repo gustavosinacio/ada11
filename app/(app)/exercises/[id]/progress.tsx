@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { ExerciseSessionRow } from "~/components/exercise-session-row";
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { useAllExercise } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
@@ -105,6 +106,13 @@ export default function ExerciseProgressScreen() {
     };
   }, [progressQ.data, unit]);
 
+  // The query returns ASC for chart plotting (left→right oldest→newest).
+  // The "Sessions" list below wants newest first, so reverse a shallow copy.
+  const sessionsDesc = useMemo(
+    () => [...(progressQ.data ?? [])].reverse(),
+    [progressQ.data],
+  );
+
   if (exercise.isLoading || progressQ.isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-black">
@@ -137,23 +145,42 @@ export default function ExerciseProgressScreen() {
           </Text>
         </View>
       ) : (
-        <View className="gap-8">
-          <ProgressChart
-            data={e1rmData}
-            width={chartWidth}
-            title={`Estimated 1RM (${unit})`}
-            formatValue={(v) => v.toFixed(1)}
-          />
+        <>
+          <View className="gap-8">
+            <ProgressChart
+              data={e1rmData}
+              width={chartWidth}
+              title={`Estimated 1RM (${unit})`}
+              formatValue={(v) => v.toFixed(1)}
+            />
 
-          <ProgressChart
-            data={volumeData}
-            width={chartWidth}
-            title={`Total volume (${unit})`}
-            formatValue={(v) =>
-              v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
-            }
-          />
-        </View>
+            <ProgressChart
+              data={volumeData}
+              width={chartWidth}
+              title={`Total volume (${unit})`}
+              formatValue={(v) =>
+                v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
+              }
+            />
+          </View>
+
+          <View className="mt-6">
+            {/* keep in sync with SECTION_HEADER on history/week/[isoWeek].tsx:20-21 */}
+            <Text className="mt-4 mb-2 text-sm font-medium uppercase text-gray-500">
+              Sessions
+            </Text>
+            <View>
+              {sessionsDesc.map((s) => (
+                <ExerciseSessionRow
+                  key={s.session_id}
+                  session={s}
+                  unit={unit}
+                  onPress={() => router.push(`/(app)/history/${s.session_id}`)}
+                />
+              ))}
+            </View>
+          </View>
+        </>
       )}
     </ScrollView>
   );

@@ -65,7 +65,7 @@ export type ComputeVolumeTargetInput = {
  * intended semantic, and folding it into the past-max reduction would
  * silently corrupt historical PRs.
  */
-function sumPastVolume(sets: SetRow[]): number {
+export function sumPastVolume(sets: SetRow[]): number {
   let total = 0;
   for (const s of sets) {
     if (s.set_type === "warmup") continue;

@@ -1,0 +1,63 @@
+import { ChevronRight } from "lucide-react-native";
+import { Pressable, Text, View } from "react-native";
+
+import type { SessionSets } from "~/api/progress";
+import type { WeightUnit } from "~/db/types";
+import { presentExerciseSessionRow } from "~/utils/exercise-session-row-format";
+import { formatDisplayDate } from "~/utils/format-display-date";
+
+type Props = {
+  session: SessionSets;
+  unit: WeightUnit;
+  onPress: () => void;
+};
+
+/**
+ * Exercise-scoped session row for the `/(app)/exercises/{id}/progress`
+ * "Sessions" section. Mirrors the visual idiom of `<SessionSummaryRow>`
+ * (border-bottom, active-state, ChevronRight) but deliberately omits the
+ * `px-4` horizontal padding so the host screen's ambient `px-6` governs
+ * indent and the row's left edge aligns with the chart container above
+ * (design-v2 MAJ-2b).
+ *
+ * Line 1: visible date (no time). Line 2: aggregate "N × volume" — only
+ * rendered when the presenter returns a non-empty `volumeLabel`
+ * (warmup-only sessions degrade gracefully to a date-only row).
+ *
+ * A11y label includes the time-of-day so same-day sessions stay
+ * disambiguated for screen readers and automation (design-v2 MAJ-1).
+ */
+export function ExerciseSessionRow({ session, unit, onPress }: Props) {
+  const { volumeLabel } = presentExerciseSessionRow({
+    sets: session.sets,
+    unit,
+  });
+  const visibleDate = formatDisplayDate(session.started_at, {
+    includeWeekday: true,
+  });
+  const accessibleDate = formatDisplayDate(session.started_at, {
+    includeWeekday: true,
+    includeTime: true,
+  });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open session from ${accessibleDate}`}
+      className="border-b border-gray-100 py-4 active:bg-gray-50 dark:border-gray-900 dark:active:bg-gray-950"
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 pr-3">
+          <Text className="text-base font-semibold text-black dark:text-white">
+            {visibleDate}
+          </Text>
+          {volumeLabel !== "" ? (
+            <Text className="mt-0.5 text-sm text-gray-500">{volumeLabel}</Text>
+          ) : null}
+        </View>
+        <ChevronRight color="#9ca3af" size={18} />
+      </View>
+    </Pressable>
+  );
+}
