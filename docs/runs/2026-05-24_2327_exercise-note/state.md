@@ -9,11 +9,11 @@ Exercise note. Be able to add a personal note to an exercise that will always sh
 
 ## Current state
 - Owner: conductor
-- Step: 7. Finalize
+- Step: 7. Finalize (debt cleared)
 - Round: n/a
-- Status: done-with-known-debt
+- Status: done
 - Started (BRT): 2026-05-24 23:27
-- Updated (BRT): 2026-05-25 08:09
+- Updated (BRT): 2026-05-25 09:10
 
 ## Budgets remaining
 - Design ↔ Validate rounds: 1 / 3 (closed after r2 go)
@@ -46,3 +46,6 @@ Exercise note. Be able to add a personal note to an exercise that will always sh
 - 2026-05-25 01:50 BRT — Implementer round 2 returned `done`. Test-only changes. 6/6 e2e pass across 3 consecutive runs. 2 scope expansions beyond hand-off: added `waitForResponse` POST gate for fix #1 (value-assertion was insufficient — local Textarea reflects draft regardless of server commit); fix #3 replaced UI-driven set-seeding with full admin seeding + direct deep-link (intermittent race against history's `sets` query, pattern mirrors `read-only-history.spec.ts:82-151`). Typecheck/lint clean. Routing to Tester r2.
 - 2026-05-25 04:30 BRT — Tester round 2 returned `budget-exhausted` with `fail` decision. Feature works (5/6 deterministic + RLS + 364/364 unit + network trace + 4 screenshots). Golden test #1 is ~33-50% flaky due to React Query in-memory cache priming empty `sets` before admin INSERT. Fix well-understood (~30 LOC apply admin-seed pattern to golden test, OR add `page.reload()` after INSERT). Implementer's "3 consecutive 6/6" claim not reproducible.
 - 2026-05-25 08:09 BRT — Conductor escalated to user. User authorized **ship with known debt**. Pipeline closes with done-with-known-debt status. Follow-up ticket warranted for the golden e2e stabilization.
+- 2026-05-25 08:25 BRT — User authorized debt payoff: Option A (admin-seed + deep-link to `/history/{id}`, mirroring tests #3-#6 pattern). Re-opening pipeline for I↔T round 3 (dispensation beyond 2/2 budget).
+- 2026-05-25 08:50 BRT — Implementer round 3 returned `done`. Test-only changes (`tests/e2e/exercise-note.spec.ts` only). Golden test refactored to admin-seed + direct `/history/{id}` deep-link. 10/10 on `--repeat-each=10` for golden; 6/6 on full suite. Typecheck/lint clean. 2 deviations: (1) initial removal of `purgeQueryCache` caused 1/10 fail rate due to a SECOND cache race (`exercise_notes` persisted-cache rehydrating stale-empty before persister's 1000ms throttle flushed) — re-added the helper at a single annotated site to restore 10/10. Routing to Tester r3 for independent verification.
+- 2026-05-25 09:10 BRT — Tester round 3 returned `pass`. Debt cleared. 20/20 golden across 2 independent dev-server boots, 12/12 full suite × 2, typecheck/lint/364-unit all green, `git diff main -- src/* app/* supabase/*` empty (test-only change confirmed). Pipeline closes with FULL done status (no more debt).

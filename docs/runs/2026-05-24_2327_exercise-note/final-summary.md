@@ -2,7 +2,7 @@
 
 ## Outcome
 - **Feature**: Personal per-(user, exercise) note. New `exercise_notes` table with RLS. Visible on 4 surfaces (progress screen + live `<ExerciseBlock>` + history-edit `<ExerciseBlock>` + history-read `<ReadOnlyExerciseBlock>`). Commit-on-blur editing with collapsed `+ Add note` affordance on dense surfaces, `alwaysExpanded` Textarea on progress.
-- **Pipeline result**: **shipped** (with one known flaky e2e — see Known debt).
+- **Pipeline result**: **shipped + debt cleared** (round 3 stabilized the golden e2e — see "Debt payoff" below).
 - **Branch / baseline**: `main` / `aba47051b8328c990d3dbe9a464831c89a804639`
 - **User mandate**: "special care" — honored across 2 D↔V + 1 I↔R + 2 I↔T rounds (3 design revisions before approval).
 
@@ -67,8 +67,8 @@
 - Visual: 4 screenshots from round 1 (golden progress, live workout, history read-only, collapsed `+ Add note`).
 - Regression sweep on the full e2e matrix touching `<ExerciseBlock>`: 36/40, 4 baseline-preexisting failures (post-Finish URL regex stale since verdict-screen feature; same as F3-F8 surfaced).
 
-## Known debt (post-merge follow-up)
-**Golden e2e test #1 in `tests/e2e/exercise-note.spec.ts` is ~33-50% flaky.** Root cause: the spec navigates to `/workout` first (which primes React Query's in-memory `sets` cache with empty for the seeded session), THEN admin-INSERTs a working set, THEN navigates to `/history/<id>` — but the cached empty `sets` array is served before the refetch. Fix is well-understood (~30 LOC): apply the admin-seed + direct deep-link pattern already proven on tests 3-6 to the golden test, OR add `await page.reload()` after admin INSERT. Tester decided to ship with the flake documented rather than burn round-budget on test stabilization.
+## Debt payoff (round 3, user-authorized)
+**The golden e2e test stabilized.** Round 3 (test-only) refactored test #1 to admin-seed `sessions` + `sets` server-side and deep-link directly to `/history/{sessionId}`, mirroring the pattern already used in tests #3-#6. Removed the `/workout/{id}` step that primed React Query's in-memory cache with empty `sets`. Implementer initially removed the `purgeQueryCache` helper entirely but uncovered a SECOND cache race against the AsyncStorage persister's 1000ms throttle — re-added the helper at a single annotated site. Tester independently verified: **20/20 golden across two independent dev-server boots** (durations 7.4-10.4s), **12/12 full suite × 2**, source diff empty (`git diff main -- src/* app/* supabase/*` returns nothing). No source files touched in round 3.
 
 ## Why we stopped (per playbook: budget exhausted)
 I↔T budget exhausted (round 2 closed with fail). User authorized close-via-ship-with-known-debt rather than escalate to a hypothetical round 3.

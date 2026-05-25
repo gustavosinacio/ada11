@@ -96,6 +96,14 @@ async function pickSeedExercise(userId: string): Promise<{ id: string; name: str
   return bench ?? (data[0] as { id: string; name: string });
 }
 
+/**
+ * Clear the persisted React Query cache (the AsyncStorage/localStorage entry
+ * that `createAsyncStoragePersister` writes). Forces a fresh network fetch
+ * on the next mount of any query whose data would otherwise rehydrate from
+ * localStorage. The golden test uses this between the progress-screen POST
+ * and the /history deep-link so the read-only slot's GET cannot be served
+ * from a stale empty-array entry written before the POST landed.
+ */
 async function purgeQueryCache(page: Page) {
   await page.evaluate(() => {
     window.localStorage.removeItem("ada11-query-cache");
@@ -107,12 +115,55 @@ test.afterAll(async () => {
 });
 
 test.describe("Exercise note feature (web)", () => {
-  test("golden: progress screen edit → live workout displays → history read-only", async ({
+  test("golden: progress screen edit → history read-only surfaces the note", async ({
     page,
   }) => {
     const email = `e2e-exnote-golden-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
     const exercise = await pickSeedExercise(userId);
+
+    // Admin-seed an ended session + working set BEFORE the UI flow runs.
+    // History detail enumerates exercises from the `sets` table
+    // (`app/(app)/history/[id].tsx:87-113`): zero sets ⇒ no
+    // <ReadOnlyExerciseBlock> mounts ⇒ no <ExerciseNoteSlot> to surface the
+    // note. Seeding server-side and deep-linking directly to /history/<id>
+    // mirrors the pattern test #3 / read-only-history.spec.ts:82-151 already
+    // proves stable — and crucially avoids visiting /workout/<id> at all,
+    // which is what primed the empty-sets entry in the in-memory React Query
+    // cache and caused the round-1 + round-2 history-detail flake (see
+    // test-report-v2.md root-cause analysis).
+    const now = new Date();
+    const startedAt = new Date(now.getTime() - 60 * 60 * 1000);
+    const endedAt = new Date(now.getTime() - 30 * 60 * 1000);
+
+    const { data: sess, error: sessErr } = await admin
+      .from("sessions")
+      .insert({
+        user_id: userId,
+        started_at: startedAt.toISOString(),
+        ended_at: endedAt.toISOString(),
+        name: "Golden read-only target",
+      })
+      .select("id")
+      .single();
+    if (sessErr || !sess) throw new Error(`session seed: ${sessErr?.message}`);
+    const sessionId = sess.id;
+
+    const { data: setRow, error: setErr } = await admin
+      .from("sets")
+      .insert({
+        user_id: userId,
+        session_id: sessionId,
+        exercise_id: exercise.id,
+        set_number: 1,
+        reps: 8,
+        weight: "60",
+        set_type: "working",
+        completed_at: endedAt.toISOString(),
+      })
+      .select("id")
+      .single();
+    if (setErr || !setRow) throw new Error(`seed set: ${setErr?.message}`);
 
     try {
       await signInAndLand(page, email);
@@ -138,13 +189,12 @@ test.describe("Exercise note feature (web)", () => {
       await noteTextarea.first().fill(noteBody);
 
       // Commit on blur — dispatch a DOM blur event directly on the focused
-      // textarea. This was verified working in the round-1 diagnostic spec;
-      // the previous click-outside + activeElement.blur() chain did NOT
-      // reliably fire onBlur on RN-web in this codebase. We also wait for
+      // textarea. The previous click-outside + activeElement.blur() chain did
+      // NOT reliably fire onBlur on RN-web in this codebase. We also wait for
       // the POST /rest/v1/exercise_notes response BEFORE proceeding so the
-      // server round-trip is guaranteed to land before we navigate away
-      // (the local <Textarea> value reflects the draft regardless of
-      // server commit, so a value-based wait would not catch a missed POST).
+      // server round-trip is guaranteed to land before we navigate away (the
+      // local <Textarea> value reflects the draft regardless of server
+      // commit, so a value-based wait would not catch a missed POST).
       const postResponsePromise = page.waitForResponse(
         (res) =>
           res.url().includes("/rest/v1/exercise_notes") &&
@@ -176,75 +226,22 @@ test.describe("Exercise note feature (web)", () => {
       });
 
       // -------------------------------------------------------------
-      // 2) Quick-start workout → ExerciseBlock displays the note inline.
-      // -------------------------------------------------------------
-      await purgeQueryCache(page);
-      await page.goto("/workout", { waitUntil: "domcontentloaded" });
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
-
-      await page.getByText("Quick start workout").last().click();
-      await page.waitForURL(/\/workout\/[0-9a-f-]+/, { timeout: 15_000 });
-
-      // Add our seeded exercise via the picker.
-      await page.getByText("Add exercise", { exact: true }).first().click();
-      await expect(page.getByText("Pick exercise")).toBeVisible({
-        timeout: 10_000,
-      });
-      await page
-        .getByPlaceholder("Search by name, muscle, equipment")
-        .fill(exercise.name);
-      await page.getByText(exercise.name, { exact: true }).first().click();
-      await expect(page.getByText("Pick exercise")).not.toBeVisible({
-        timeout: 10_000,
-      });
-
-      // The note populates a Textarea on ExerciseBlock (editable=true, body
-      // non-empty → full Textarea pre-populated). The accessibilityLabel is
-      // "Exercise note" on the slot's Textarea.
-      await expect(
-        page.getByLabel("Exercise note").first(),
-      ).toHaveValue(noteBody, { timeout: 15_000 });
-
-      // Get the sessionId before finishing.
-      const sessionId = (() => {
-        const m = page.url().match(/\/workout\/([0-9a-f-]+)/);
-        if (!m) throw new Error("No sessionId");
-        return m[1]!;
-      })();
-
-      // Admin-seed a logged working set so the finished session actually
-      // mounts a <ReadOnlyExerciseBlock> in history detail (history enumerates
-      // exercises from the `sets` table — zero sets ⇒ no block ⇒ no slot to
-      // surface the note). Use `.select().single()` to verify the row landed
-      // (FK validations are silent without it).
-      const { data: liveSet, error: setErr } = await admin
-        .from("sets")
-        .insert({
-          user_id: userId,
-          session_id: sessionId,
-          exercise_id: exercise.id,
-          set_number: 1,
-          reps: 8,
-          weight: "60",
-          set_type: "working",
-          completed_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-      if (setErr || !liveSet) throw new Error(`seed live set: ${setErr?.message}`);
-
-      // Finish the workout — all logged sets checked ⇒ confirmDelete
-      // (window.confirm) path. After accept, the app lands on the verdict
-      // screen, not directly on /workout. Pattern mirrors
-      // end-of-session-verdict.spec.ts:245-274.
-      page.once("dialog", (d) => void d.accept());
-      await page.getByText("Finish", { exact: true }).last().click();
-      await page.waitForURL(/\/workout\/verdict\//, { timeout: 15_000 });
-      await page.getByText("Done", { exact: true }).last().click();
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
-
-      // -------------------------------------------------------------
-      // 4) History detail read-only — slot renders the note italic.
+      // 2) History detail read-only — slot renders the note italic.
+      //    Deep-link directly to /history/<sessionId>. The session + set
+      //    were admin-seeded above, so the read-only <ReadOnlyExerciseBlock>
+      //    mounts and surfaces the slot. No /workout/<id> visit ⇒ no empty
+      //    sets cache priming ⇒ no race on the sets query.
+      //
+      //    Purge the persisted query cache BEFORE navigation. The progress
+      //    screen's slot fired an initial exercise_notes GET that returned
+      //    `[]` (no row yet) and pushed that empty result into the persister.
+      //    `setQueryData` after the POST updates the in-memory cache, but
+      //    the persister's throttled writer (default 1000ms) is not
+      //    guaranteed to have flushed before navigation. On reload, the
+      //    rehydrated cache could be the stale empty value, and with
+      //    staleTime=30s the slot would not refetch. Purging localStorage
+      //    forces a fresh network GET on the read-only mount, which
+      //    deterministically returns the persisted row.
       // -------------------------------------------------------------
       await purgeQueryCache(page);
       await page.goto(`/history/${sessionId}`, {
@@ -253,6 +250,13 @@ test.describe("Exercise note feature (web)", () => {
       await page.waitForURL(new RegExp(`/history/${sessionId}$`), {
         timeout: 10_000,
       });
+
+      // Wait for the read-only block to mount — assert the exercise header
+      // is visible before checking the note, so the assertion isn't a vacuous
+      // early read.
+      await expect(
+        page.getByText(exercise.name, { exact: true }).first(),
+      ).toBeVisible({ timeout: 10_000 });
 
       // In read-only mode the slot renders the body as italic text. Use the
       // body string itself as the assertion — it's unique enough.

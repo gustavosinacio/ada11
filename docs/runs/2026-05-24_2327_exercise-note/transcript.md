@@ -67,3 +67,20 @@
 - **Inputs passed**: 3 close options (round 3 fix, ship with debt, pause).
 - **Returned**: User chose **Ship with known debt** + follow-up ticket.
 - **Conductor decision**: Finalize via final-summary + vault archive + commit + push + deploy. Document the flaky golden test as known debt in final-summary + vault README.
+
+### 2026-05-25 08:25 BRT — User → Conductor (debt payoff authorization)
+- Debt: golden e2e test #1 in `tests/e2e/exercise-note.spec.ts` ~33-50% flaky (React Query in-memory cache race).
+- Authorized: **Option A** — admin-seed + deep-link, mirroring tests #3-#6 pattern (~30 LOC test-only). Round 3 I↔T budget dispensation.
+- **Conductor decision**: Invoke Implementer round 3 with surgical test-only fix.
+
+### 2026-05-25 08:50 BRT — Conductor → Implementer (r3 debt payoff)
+- **Round**: Implement↔Test r3
+- **Inputs passed**: test-report-v2 + Option A spec. Stability bar = `--repeat-each=10` 10/10 pass.
+- **Returned**: `done`. Test-only diff (1 file, +80/-76). Golden refactored to admin-seed + deep-link. 10/10 on stability bar. 6/6 full suite. 2 deviations: removed `purgeQueryCache` first → 1/10 fail (second race against AsyncStorage persister); re-added at single annotated site → 10/10.
+- **Conductor decision**: Route to Tester r3 for INDEPENDENT verification (prior round had Implementer-vs-Tester reproducibility divergence; cache race is timing-dependent).
+
+### 2026-05-25 09:10 BRT — Conductor → Tester (r3 debt payoff)
+- **Round**: Implement↔Test r3
+- **Inputs passed**: implementation.md round-3 section. Stability bar = 20/20 golden across 2 independent dev-server boots, 6/6 × 2 full suite, source diff empty.
+- **Returned**: `pass`. 20/20 golden across boots 1+2 (durations 7.4-10.4s). 12/12 full suite × 2. Typecheck/lint/364-unit green. `git diff main -- src/* app/* supabase/*` empty.
+- **Conductor decision**: Pipeline closes FULL done. Commit + push the test-only fix (no deploy needed — production untouched).

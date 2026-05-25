@@ -143,3 +143,94 @@ Test report `test-report-v1.md` flagged 2/6 specs in `tests/e2e/exercise-note.sp
 - The new e2e suite is now stable: 6/6 pass across 3 consecutive runs in this round.
 - The 8-spec adjacent matrix (regression check) was confirmed clean by round-1 Tester; this round only touched the new spec, so no regression re-run is required.
 - The "Exercise note" feature itself is unchanged. Source verification (typecheck, lint, unit tests) remains as documented in the original Quality gates section above.
+
+---
+
+## Round 3 — test-only debt payoff (2026-05-25)
+
+`test-report-v2.md` decision was FAIL — the golden test (test #1) was flaky at 33-50% pass rate due to a React Query in-memory cache race against the `sets` query (the `/workout/{id}` step primed an empty-sets entry that survived into the `/history/{id}` mount). User dispensation extended the I↔T budget beyond the 2-round cap to pay off this test-only debt. This round applies ONE surgical fix to the golden test only.
+
+### Scope
+- Files touched: `tests/e2e/exercise-note.spec.ts` (1 file, test-only).
+- Source code: **untouched**.
+- Migrations: **untouched**.
+- Tests #2-#6: **untouched** (already deterministic green).
+- `purgeQueryCache` helper: kept in place per playbook directive; one call-site added.
+
+### Fix applied: Option A — admin-seed + direct deep-link for the golden test
+
+Refactored the golden test to mirror the admin-seed pattern that tests #3-#6 already use successfully. The `/workout/{id}` step that primed the empty-sets cache is dropped entirely; the session + working set are now admin-seeded server-side BEFORE the UI flow runs, and the test deep-links directly to `/history/{sessionId}` after the note write.
+
+#### Before (round 2)
+The golden test ran a 4-step UI flow:
+1. `/exercises/{id}/progress` — type note + blur → POST.
+2. `/workout` → "Quick start" → `/workout/{sessionId}` — picker, then verify the note shows on `<ExerciseBlock>`.
+3. Admin INSERT a working set + click Finish → verdict → Done → `/workout`.
+4. `/history/{sessionId}` — verify the read-only slot surfaces the note italic.
+
+Step 2's mount of `<ExerciseBlock>` fired a `sets?session_id=eq.X` query that returned `[]` (no admin-seeded set yet); that empty entry was cached in-memory under React Query's key for the session's sets. Step 4 then re-used that cached empty entry on history mount (the `purgeQueryCache` helper only clears the localStorage persister, NOT the in-memory cache), so `<ReadOnlyExerciseBlock>` saw zero sets, never rendered for the seeded exercise, and the slot's note never surfaced. 1/3 - 1/2 fail rate.
+
+#### After (round 3)
+The golden test now runs a 2-step UI flow (preceded by server-side seed):
+1. Admin-seed `sessions` row (started_at = -60min, ended_at = -30min) + `sets` row for the chosen exercise (working set, 8x60). Both with `.select("id").single()` so FK violations are loud.
+2. `/exercises/{id}/progress` — type note + blur → POST. (Unchanged blur-dispatch + `waitForResponse(POST exercise_notes)` pattern from round 2; that's the load-bearing wait.)
+3. `purgeQueryCache(page)` → `/history/{sessionId}` — verify exercise name visible, then verify the note body text is visible.
+
+Two cache concerns addressed:
+- **Sets cache**: no `/workout/{id}` visit ⇒ no empty-sets cache priming ⇒ no race on history's `sets` query.
+- **Notes cache**: the progress screen's slot ran an initial `exercise_notes` GET that returned `[]` (no row yet). `setQueryData` after the POST updates the in-memory cache, but the persister's throttled writer (1000ms default) is not guaranteed to flush before the `page.goto('/history/...')` reload. On rehydrate, the cache could be the stale empty value, and with `staleTime=30s` the slot wouldn't refetch. `purgeQueryCache(page)` before the navigation removes the localStorage entry entirely, forcing a fresh network GET on the read-only mount — which deterministically returns the persisted row. Discovered via a Playwright trace (saw 3 exercise_notes GETs returning size-2 `[]` and the POST 201 succeed, but zero exercise_notes GETs after the /history navigation despite `staleTime=30s` indicating the rehydrated cache was being served as fresh).
+
+Also updated the test title from "progress screen edit → live workout displays → history read-only" to "progress screen edit → history read-only surfaces the note" to reflect the actual scope (the "live workout displays" surface is already covered by test #2 / "live workout: + Add note collapsed → tap → expand → blur empty does NOT mutate").
+
+#### Diff summary (golden test only)
+
+`tests/e2e/exercise-note.spec.ts` — replaced the body of the golden test (`test("golden: ...")`). Old form lived at roughly `:110-265` (~155 lines, 4-stage UI flow). New form at `:117-256` (~140 lines, admin-seed + 2-stage UI flow).
+
+Key structural deltas:
+
+- **Added (top of test)**: admin-seed of `sessions` + `sets` (mirroring `tests/e2e/read-only-history.spec.ts:82-151`). `.select("id").single()` on each insert.
+- **Removed**: the `/workout` → Quick-start → picker → admin-set → Finish → verdict → Done flow (steps 2 and 3 from the round-2 form).
+- **Removed**: the inline ExerciseBlock value-assertion (`page.getByLabel("Exercise note").toHaveValue(noteBody)`) — that surface is covered by test #2.
+- **Kept**: the progress-screen Textarea fill + DOM-dispatched blur + `waitForResponse(POST exercise_notes)` gate (round 2's fix #1 — still load-bearing on the new flow).
+- **Added**: `await purgeQueryCache(page)` BEFORE `/history/{sessionId}` deep-link, with a documenting comment block explaining the persister-throttle/staleTime defense.
+- **Added**: `await expect(page.getByText(exercise.name).first()).toBeVisible(...)` as a mount sentinel before checking the note (mirrors test #3).
+- **Renamed**: test title (see above).
+
+`purgeQueryCache` helper itself was left in place per directive. The previous eslint-disable comment (added when I temporarily dropped the call-site) was removed and replaced with a proper docblock now that the helper has an active caller again.
+
+### Quality gates (round 3)
+
+| Gate | Result | Evidence |
+|---|---|---|
+| `npm run typecheck` | PASS | `tsc --noEmit` exited clean, zero stdout. |
+| `npm run lint` | PASS | `ESLint: 0 errors, 1 warnings in 1 files` — same single pre-existing `router.d.ts` warning (generated file). No new lint output from the spec. |
+| `npx playwright test tests/e2e/exercise-note.spec.ts -g "golden" --repeat-each=10` (stability bar) | **PASS 10/10** | `/tmp/r3-stability.json`: `expected: 10, unexpected: 0, flaky: 0`. Durations: [11.4s, 9.4s, 9.7s, 8.6s, 9.3s, 9.2s, 9.3s, 8.9s, 9.2s, 9.0s]. Total run time ~99s. |
+| `npx playwright test tests/e2e/exercise-note.spec.ts` (full suite) | **PASS 6/6** | `/tmp/r3-full-suite.json`: `expected: 6, unexpected: 0, flaky: 0`. Golden 11.4s; collapsed 6.4s; empty-RO 5.4s; cap 5.3s; soft-del 5.9s; lbs 6.5s. Total ~42s. |
+| No new `any` / `// @ts-ignore` / `console.log` | PASS | Spec uses neither; only typed via `type Page` import and `await admin.from(...)` already-typed `SupabaseClient`. |
+
+### Source-untouched confirmation
+
+`git status --porcelain | grep -v "^??" | grep -E "\.(ts|tsx|sql|js|jsx|json)$" | grep -v "tests/" | grep -v "docs/"` → empty output. Only `tests/e2e/exercise-note.spec.ts` modified at the code level in this round. `git diff --stat tests/e2e/exercise-note.spec.ts` reports: 1 file changed, 80 insertions(+), 76 deletions(-).
+
+### Deviations from the round-3 hand-off plan
+
+1. **Added `purgeQueryCache(page)` before the `/history/{sessionId}` deep-link.** The plan said "Do NOT change `purgeQueryCache` helper (leave it; the fix removes its load-bearing role)". I left the helper unchanged and dropped its call-site initially — but the first `--repeat-each=10` run after the admin-seed refactor was 1/10 PASS (9/10 FAIL at the same `getByText(noteBody).toBeVisible()` line). Trace investigation showed the failure was a SECOND, distinct cache race: the persisted `exercise_notes` query cache was being rehydrated as stale-empty on the /history page mount because the persister's 1000ms throttle hadn't flushed the `setQueryData(KEY, row)` update from the POST onSuccess. Adding the purge call back as a defense against THIS race (notes cache, not sets cache) restored 10/10 PASS.
+
+   **Justification**: the plan's directive was to remove `purgeQueryCache`'s role as a workaround for the SETS-cache race (which the admin-seed pattern eliminates structurally). Using it for the NOTES-cache race is a different, valid use of the helper. The plan's intent ("less load-bearing test scaffolding") is preserved — the call sits at a single, well-commented site that is structurally justified by the staleTime + persister-throttle interaction, not by a flaky timing wait. Documented inline in the spec with a 9-line comment block before the call.
+
+2. **Renamed the golden test title.** Plan said "Refactor the golden test (test #1)" without explicit instruction on the title. I updated the title from "progress screen edit → live workout displays → history read-only" to "progress screen edit → history read-only surfaces the note" because the new form no longer touches the live-workout surface — that coverage is in test #2.
+
+### Files touched (round 3)
+
+- `tests/e2e/exercise-note.spec.ts` — golden test body refactored (+80 / −76 lines).
+
+### Stability evidence
+
+10 consecutive runs of `-g "golden" --repeat-each=10` after the fix:
+
+```
+passed=10 failed=0
+durations_ms = [11387, 9444, 9726, 8582, 9331, 9219, 9343, 8871, 9173, 9020]
+```
+
+Mean duration: 9.4s. Std dev: ~700ms. The first run (11.4s) is the warm-up; subsequent runs cluster tightly under 9-10s, indicating no flake-prone wait paths in the spec.
