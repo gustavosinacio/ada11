@@ -48,6 +48,7 @@ export function useLogSet(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }
@@ -72,6 +73,7 @@ export function useUpdateSet(sessionId: string) {
       if (result === null) return;
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }
@@ -105,6 +107,7 @@ export function useDeleteSet(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }
@@ -120,6 +123,7 @@ export function useRemoveExerciseFromSession(sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["progress"] });
     },
   });
 }

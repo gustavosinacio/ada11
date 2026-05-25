@@ -184,7 +184,10 @@ test.describe("Soft-deleted exercises remain visible in history (web)", () => {
       // Finish.
       page.once("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
+      // Finish lands on the verdict screen (added by the end-of-session-verdict
+      // feature); the test deep-links to history next so the verdict URL is
+      // a sufficient post-Finish gate.
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 10_000 });
 
       // ------------------------------------------------------------------
       // 3) Open history detail — X block renders, no (deleted) suffix yet,
@@ -307,6 +310,12 @@ test.describe("Soft-deleted exercises remain visible in history (web)", () => {
       // ------------------------------------------------------------------
       // 6) MAJOR-1 fix: picker on the history detail must NOT show X.
       // ------------------------------------------------------------------
+      // The read-only history view (run 2026-05-23_1855_read-only-history-view)
+      // hides the "Add exercise" affordance by default — tap the header Pencil
+      // to enter Edit mode first. `force: true` bypasses pointer-events checks
+      // because Expo Router web keeps a transparent backdrop overlay from the
+      // prior workout route that intercepts pointer events on the header zone.
+      await page.getByLabel("Edit workout", { exact: true }).last().click({ force: true });
       // Two "Add exercise" buttons can be in the DOM (workout/[sessionId] +
       // history/[id] both retained by expo-router on web). Use the visible
       // one — the workout one is hidden by the active route stack.

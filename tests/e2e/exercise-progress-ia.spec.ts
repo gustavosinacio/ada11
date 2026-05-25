@@ -184,7 +184,10 @@ test.describe("Exercise progress IA (web)", () => {
 
       page.on("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
+      // Finish lands on the verdict screen (added by the end-of-session-verdict
+      // feature); the test re-enters the progress screen via direct goto, so
+      // the verdict URL is a sufficient post-Finish gate.
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 10_000 });
 
       // Re-enter the same exercise's progress — must render without breakage.
       // (After useFinishSession's ["progress"] invalidation, the next mount refetches.)
@@ -284,7 +287,8 @@ test.describe("Exercise progress IA (web)", () => {
       // ChooseActionModal opens — click "Check all and finish" to commit.
       await page.getByText("Finish", { exact: true }).last().click();
       await page.getByText("Check all and finish", { exact: true }).click();
-      await page.waitForURL(/\/workout$/, { timeout: 15_000 });
+      // Finish via the bulk-check-all branch lands on the verdict screen.
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 15_000 });
 
       // Go to History tab and open the just-finished session.
       await page.getByText("History", { exact: true }).first().click();

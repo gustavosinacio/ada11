@@ -169,7 +169,10 @@ test.describe("Remove exercise from session (web)", () => {
       // ---- Finish the session ----
       page.once("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
+      // Finish lands on the verdict screen (added by the end-of-session-verdict
+      // feature); the test only needs to confirm Finish succeeded before
+      // deep-linking elsewhere, so the verdict URL is enough.
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 10_000 });
 
       // ---- History detail via deep-link: no trash icons rendered ----
       await page.goto(`/history/${sessionId}`, { waitUntil: "domcontentloaded" });
@@ -210,7 +213,8 @@ test.describe("Remove exercise from session (web)", () => {
       // Cleanup — finish the session.
       page.once("dialog", (d) => void d.accept());
       await page.getByText("Finish", { exact: true }).last().click();
-      await page.waitForURL(/\/workout$/, { timeout: 10_000 });
+      // Finish lands on the verdict screen.
+      await page.waitForURL(/\/workout\/verdict\//, { timeout: 10_000 });
     } finally {
       await deleteUserSafe(userId);
     }

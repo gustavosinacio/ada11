@@ -192,3 +192,25 @@ supabase.from("sets").select("*")
 // Drops belonging to a working set
 supabase.from("sets").select("*").eq("parent_set_id", workingSetId);
 ```
+
+## Embedded-resource filters: `sets` joined to `sessions`
+
+When a query reads `sets` via a PostgREST embed (`sessions!inner`), filters on the **embedded** table go through the same `.is(...)` / `.not(...)` shape with a dotted path:
+
+```ts
+// Reads sets from FINISHED, NON-DELETED sessions, excluding warmups and uncommitted sets.
+// Note BOTH deleted_at filters: the parent `sets.deleted_at` AND the embedded `sessions.deleted_at`.
+supabase
+  .from("sets")
+  .select("completed_at, weight, reps, set_type, sessions!inner(started_at, ended_at)")
+  .is("deleted_at", null)                          // sets.deleted_at
+  .is("sessions.deleted_at", null)                 // sessions.deleted_at (embedded — dotted path)
+  .not("completed_at", "is", null)                 // sets.completed_at
+  .not("sessions.ended_at", "is", null)            // sessions.ended_at (embedded)
+  .neq("set_type", "warmup");
+```
+
+**Forgetting `.is("sessions.deleted_at", null)` is a leak vector**: `softDeleteSession` only stamps `sessions.deleted_at` — the child `sets` rows keep `deleted_at = null`, so the join surfaces them despite the session being "deleted" from the user's perspective. Three queries previously suffered this leak (`listWeeklyVolumeRows`, `listSetsForExercise`, `getLastWorkingSetForExercise`) — fixed in `docs/runs/2026-05-25_0933_soft-deleted-session-volume-leak/`.
+
+The dotted-path filter compiles cleanly against `@supabase/supabase-js@^2.47.0` — no need for `.not("sessions.deleted_at", "is", null)` style. PostgREST flattens the embed to `?sessions.deleted_at=is.null` on the wire.
+

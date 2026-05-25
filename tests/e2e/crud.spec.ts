@@ -147,7 +147,11 @@ test.describe("Ada11 CRUD flows (web)", () => {
 
       const name = `Cable Curl ${Date.now()}`;
       await page.getByPlaceholder("e.g. Barbell Bench Press").fill(name);
-      await page.getByPlaceholder("e.g. Chest").fill("Biceps");
+      // Muscles is a chip selector (<MuscleGroupPicker>) of `MUSCLE_GROUPS`
+      // anatomical labels (Chest / Upper back / Lower back / Shoulders / Arms
+      // / Legs / Core) — pick the one closest to the seed exercise's intent.
+      // RN-Web renders each chip as a `<Pressable>` wrapping a `<Text>`.
+      await page.getByText("Arms", { exact: true }).click();
       // Exact match — "e.g. Barbell" is also a substring of "e.g. Barbell Bench Press".
       await page.getByPlaceholder("e.g. Barbell", { exact: true }).fill("Cable");
       await page.getByText("Save exercise").last().click();
