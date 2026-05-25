@@ -3,6 +3,7 @@ import { Calculator, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   Pressable,
   ScrollView,
   Text,
@@ -38,6 +39,7 @@ import {
   useUpdateSet,
   useUpdateSetMeta,
 } from "~/hooks/use-sets";
+import { computeAutoFillPayload } from "~/utils/auto-fill-set";
 import { sumLiveVolume } from "~/utils/volume-target";
 
 export default function LiveWorkoutScreen() {
@@ -489,31 +491,64 @@ function LiveWorkoutScreenInner() {
               removeDisabled={logSet.isPending}
               showCheckable
               showVolumeTarget
-              onToggleSetChecked={async (id, nextChecked) => {
-                // Optimistic auto-start (post-render observer above is the
-                // canonical trigger). Firing here too snaps the overlay
-                // BEFORE the mutation completes, eliminating the visible
-                // ~250ms delay that an observer-only approach would have.
-                // The observer is the safety net for races where this
-                // click-time path silently no-ops (e.g.
-                // react-native-web Pressable stale-responder; see comment
-                // on `checkedWorkingSetIdsRef` above).
-                if (nextChecked) {
+              onToggleSetChecked={async (
+                id,
+                nextChecked,
+                { previousSet, currentInput },
+              ) => {
+                // Uncheck direction: byte-identical to today.
+                if (!nextChecked) {
+                  try {
+                    await uncheckSetM.mutateAsync(id);
+                  } catch (err) {
+                    console.warn("Toggle set check failed", err);
+                  }
+                  return;
+                }
+
+                // UX polish: dismiss the soft keyboard when the user taps the
+                // check button. Not load-bearing for auto-fill correctness —
+                // the typed values flow through `currentInput` from
+                // <SetInput>'s local state, so there is no cache read to
+                // synchronize. Matches the iOS gym-app idiom of "tap a
+                // non-input control, keyboard goes away".
+                Keyboard.dismiss();
+
+                try {
                   const toggled = (setsByExercise.get(ex.id) ?? []).find(
                     (s) => s.id === id,
                   );
-                  if (toggled?.set_type === "working") {
+                  const isWorking = toggled?.set_type === "working";
+
+                  // 1. Auto-fill BEFORE checkSet so the F10 "checked =
+                  //    committed" invariant holds (no window where a checked
+                  //    set has null weight/reps). Helper returns null when
+                  //    there is nothing to fill — skip the write entirely
+                  //    on the common "both fields already typed" path.
+                  if (isWorking) {
+                    const patch = computeAutoFillPayload({
+                      currentInput,
+                      previous: previousSet,
+                    });
+                    if (patch) {
+                      await updateSet.mutateAsync({ id, patch });
+                    }
+                  }
+
+                  // 2. Optimistic rest-timer auto-start. Stays AFTER the
+                  //    auto-fill `await` so a failed updateSet short-circuits
+                  //    via the catch below and the timer never starts for an
+                  //    aborted check. The post-render observer above is the
+                  //    safety net for the existing stale-responder race.
+                  if (isWorking) {
                     const rest = restByExercise.get(ex.id);
                     if (rest && rest > 0) restTimer.start(rest);
                   }
-                }
 
-                try {
-                  if (nextChecked) {
-                    await checkSetM.mutateAsync(id);
-                  } else {
-                    await uncheckSetM.mutateAsync(id);
-                  }
+                  // 3. Flip completed_at via checkSet. Two PostgREST
+                  //    round-trips on the auto-fill path (updateSet,
+                  //    checkSet); a single round-trip on the no-fill path.
+                  await checkSetM.mutateAsync(id);
                 } catch (err) {
                   console.warn("Toggle set check failed", err);
                 }

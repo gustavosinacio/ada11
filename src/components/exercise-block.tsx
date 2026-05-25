@@ -36,8 +36,21 @@ type Props = {
   /** Live-session only. Forwarded to each <SetInput>. Default: false. */
   showCheckable?: boolean;
   /** Forwarded toggle handler. Required when showCheckable === true.
-   *  `nextChecked` is the state the row will be in after the toggle. */
-  onToggleSetChecked?: (setId: string, nextChecked: boolean) => void;
+   *  `nextChecked` is the state the row will be in after the toggle.
+   *  `options.previousSet` is the placeholder source (in-session previous
+   *  if any, else `useLastWorkingSet` fallback, else null) — sourced from
+   *  the existing `previousByRowId` Map. `options.currentInput` carries the
+   *  LIVE typed strings from `<SetInput>`'s local state (mid-typing,
+   *  not-yet-blurred values). The screen-level handler uses both to compute
+   *  the check-time auto-fill payload. */
+  onToggleSetChecked?: (
+    setId: string,
+    nextChecked: boolean,
+    options: {
+      previousSet: SetRow | null;
+      currentInput: { weight: string; reps: string };
+    },
+  ) => void | Promise<void>;
   /** Live-session only. When true, mounts `<VolumeTargetSlot>` below the
    *  header so the block subscribes to `useExerciseProgress(exercise.id)`
    *  and renders the per-exercise volume-target strip. Default: false. */
@@ -237,7 +250,11 @@ export function ExerciseBlock({
           exerciseName={exercise.name}
           onToggleChecked={
             onToggleSetChecked
-              ? (nextChecked) => onToggleSetChecked(s.id, nextChecked)
+              ? (nextChecked, currentInput) =>
+                  onToggleSetChecked(s.id, nextChecked, {
+                    previousSet: previousByRowId.get(s.id) ?? null,
+                    currentInput,
+                  })
               : undefined
           }
           onCommit={(patch) => onUpdateSet(s.id, patch)}

@@ -19,8 +19,16 @@ type Props = {
   /** Live-session only. When true, render the leading check button and apply
    *  the "checked" tint when row.completed_at != null. Default: false. */
   showCheckable?: boolean;
-  /** Forwarded toggle handler. */
-  onToggleChecked?: (nextChecked: boolean) => void;
+  /** Forwarded toggle handler. `currentInput` carries the LIVE local-state
+   *  values of the row's weight/reps text inputs — the typed-but-not-blurred
+   *  strings the user has on screen RIGHT NOW. The row's cached
+   *  `weight`/`reps` may differ (the user can tap the check button before
+   *  blurring). The check-time auto-fill predicate reads from these strings
+   *  so a value typed without a blur is honored, never clobbered. */
+  onToggleChecked?: (
+    nextChecked: boolean,
+    currentInput: { weight: string; reps: string },
+  ) => void;
   /** Reps/weight commit on blur or submit. RPE/notes flow through onUpdateMeta. */
   onCommit: (patch: { reps: number | null; weight: string | null }) => void;
   /** Called when the per-row menu commits an RPE or notes change. */
@@ -112,7 +120,7 @@ export function SetInput({
       <View className="flex-row items-center gap-2 px-4 py-2">
         {showCheckable ? (
           <Pressable
-            onPress={() => onToggleChecked?.(!isChecked)}
+            onPress={() => onToggleChecked?.(!isChecked, { weight, reps })}
             accessibilityRole="button"
             accessibilityLabel={
               isChecked ? "Unmark set as completed" : "Mark set as completed"
