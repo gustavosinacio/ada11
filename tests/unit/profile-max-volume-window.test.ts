@@ -50,6 +50,8 @@ const LABEL_MAP: Record<MaxVolumeWindowWeeks, string> = {
   10: "10w",
   20: "20w",
   30: "30w",
+  40: "40w",
+  50: "50w",
 };
 
 function makeClient() {
@@ -103,7 +105,7 @@ describe("Profile — max-volume-window label map", () => {
   });
 
   it("MAX_VOLUME_WINDOW_OPTIONS is the single source of truth (ordered enum)", () => {
-    expect([...MAX_VOLUME_WINDOW_OPTIONS]).toEqual([0, 10, 20, 30]);
+    expect([...MAX_VOLUME_WINDOW_OPTIONS]).toEqual([0, 10, 20, 30, 40, 50]);
   });
 });
 

@@ -28,6 +28,8 @@ const MAX_VOLUME_WINDOW_LABELS: Record<MaxVolumeWindowWeeks, string> = {
   10: "10w",
   20: "20w",
   30: "30w",
+  40: "40w",
+  50: "50w",
 };
 
 export default function ProfileScreen() {

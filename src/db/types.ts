@@ -48,25 +48,74 @@ export type LengthUnit = "cm" | "in";
  *   10 → trailing 10 ISO weeks.
  *   20 → trailing 20 ISO weeks.
  *   30 → trailing 30 ISO weeks.
+ *   40 → trailing 40 ISO weeks.
+ *   50 → trailing 50 ISO weeks.
  *
  * The integer-encoded enum is the source of truth at every layer (Drizzle
  * column, PostgREST row, hook API, Profile segmented control). Mirrored by
  * the `user_preferences_max_volume_window_weeks_check` constraint in
- * `supabase/migrations/0009_max_volume_window.sql`.
+ * `supabase/migrations/0009_max_volume_window.sql` (extended to add 40, 50
+ * in `supabase/migrations/0015_max_volume_window_40_50.sql`).
  */
-export type MaxVolumeWindowWeeks = 0 | 10 | 20 | 30;
+export type MaxVolumeWindowWeeks = 0 | 10 | 20 | 30 | 40 | 50;
 
 /**
  * Canonical ordered list of supported window sizes. Iterated by the Profile
  * segmented control and by tests that enumerate every valid value.
  */
 export const MAX_VOLUME_WINDOW_OPTIONS: readonly MaxVolumeWindowWeeks[] = [
-  0, 10, 20, 30,
+  0, 10, 20, 30, 40, 50,
 ] as const;
 
 // Row types matching PostgREST output (snake_case).
 // Drizzle's InferSelectModel returns camelCase, but the Supabase JS client
 // returns columns as-is — so screens and hooks consume these.
+
+/**
+ * Canonical equipment values. Catalog rows store lowercase canonical tokens
+ * (normalised in `supabase/migrations/0014_backfill_exercise_muscles.sql`).
+ * User-owned legacy rows MAY hold arbitrary strings — picker treats unknown
+ * values as "none" without crashing.
+ */
+export type Equipment =
+  | "barbell"
+  | "bodyweight"
+  | "cable"
+  | "dumbbell"
+  | "machine";
+
+export const EQUIPMENT_OPTIONS: readonly Equipment[] = [
+  "barbell",
+  "bodyweight",
+  "cable",
+  "dumbbell",
+  "machine",
+] as const;
+
+const EQUIPMENT_LABELS: Record<Equipment, string> = {
+  barbell: "Barbell",
+  bodyweight: "Bodyweight",
+  cable: "Cable",
+  dumbbell: "Dumbbell",
+  machine: "Machine",
+};
+
+export function equipmentLabel(value: Equipment): string {
+  return EQUIPMENT_LABELS[value];
+}
+
+/**
+ * Display equipment from a possibly-legacy string. Canonical lowercase values
+ * render with the labeled capitalisation ("barbell" → "Barbell"); unknown
+ * legacy strings render verbatim so existing user-owned rows aren't lost.
+ */
+export function formatEquipment(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if ((EQUIPMENT_OPTIONS as readonly string[]).includes(value)) {
+    return equipmentLabel(value as Equipment);
+  }
+  return value;
+}
 
 export type MuscleGroup =
   | "Chest"

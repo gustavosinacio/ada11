@@ -14,6 +14,12 @@ import {
   useLifetimeBestWeek,
   usePrsThisWeek,
 } from "~/hooks/use-progress-page";
+import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
+import {
+  bucketLifetimeWeeklyVolumes,
+  findBestWeek,
+} from "~/utils/progress-page-math";
+import { formatVolume } from "~/utils/units";
 
 const TOP_N = 5;
 
@@ -39,6 +45,16 @@ export function ProgressHero(): React.JSX.Element {
   const nowQ = useCurrentWeekVolume();
   const prsQ = usePrsThisWeek();
   const exercisesQ = useAllExercises();
+  // All-time best week, regardless of the user's max-volume-window. When the
+  // window is set (non-zero), we show this alongside the windowed Max so the
+  // user keeps the lifetime context. When window === 0 they're the same
+  // value, so we suppress the secondary line.
+  const lifetimeQ = useLifetimeWeeklyVolume();
+  const allTimeBestKg = useMemo(() => {
+    if (!lifetimeQ.data) return 0;
+    const best = findBestWeek(bucketLifetimeWeeklyVolumes(lifetimeQ.data));
+    return best?.totalKg ?? 0;
+  }, [lifetimeQ.data]);
 
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -163,6 +179,14 @@ export function ProgressHero(): React.JSX.Element {
               unit={unit}
               a11yPrefix="Weekly volume — "
             />
+            {weeks !== 0 && allTimeBestKg > 0 && allTimeBestKg !== maxKg ? (
+              <Text
+                accessibilityLabel={`All-time best week: ${formatVolume(allTimeBestKg, unit)}`}
+                className="mt-1 text-sm text-gray-600 dark:text-gray-400"
+              >
+                All-time best: {formatVolume(allTimeBestKg, unit)}
+              </Text>
+            ) : null}
             <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {weeks === 0
                 ? "Max = best week ever · Now = this week · To PR = remaining"
