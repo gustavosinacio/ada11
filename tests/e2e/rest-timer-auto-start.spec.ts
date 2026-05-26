@@ -25,6 +25,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
+
 dotenv.config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -67,20 +69,13 @@ async function deleteUserSafe(userId: string) {
 }
 
 async function getSeedExerciseByName(
-  userId: string,
+  _userId: string,
   preferred: string,
 ): Promise<{ id: string; name: string }> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
-  if (error || !data || data.length === 0) {
-    throw new Error(`No exercises for ${userId}: ${error?.message}`);
-  }
-  const match = data.find((r) => r.name === preferred);
-  if (match) return { id: match.id, name: match.name };
-  return { id: data[0]!.id, name: data[0]!.name };
+  // `_userId` retained for call-site readability + future flexibility, but
+  // exercises now live in a shared canonical catalog (user_id IS NULL).
+  // Helper looks them up by name, falling back to the first canonical row.
+  return pickCanonicalExercise(admin, preferred);
 }
 
 /**
@@ -197,13 +192,13 @@ async function gotoLiveSession(page: Page, sessionId: string) {
     timeout: 15_000,
   });
   // Wait for the routine_exercises query to resolve. Every test in this spec
-  // seeds a routine with two exercises ("Bench Press" + "Back Squat"); the
+  // seeds a routine with two exercises ("Bench Press" + "Squat (Barbell)"); the
   // second exercise has no sets so it ONLY renders once routine_exercises
   // returns. The rest-timer auto-start handler reads `restByExercise` —
   // which is also derived from this query — so clicking before this resolves
-  // would silently no-op. Anchoring on "Back Squat" makes the wait visible
+  // would silently no-op. Anchoring on "Squat (Barbell)" makes the wait visible
   // and deterministic.
-  await expect(page.getByText("Back Squat", { exact: true })).toBeVisible({
+  await expect(page.getByText("Squat (Barbell)", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -269,7 +264,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -312,7 +307,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -351,7 +346,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -401,7 +396,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -468,7 +463,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -491,7 +486,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
 
       await expectOverlayIdle(page);
 
-      // The Back Squat block renders second (position=1 in the routine); its
+      // The Squat (Barbell) block renders second (position=1 in the routine); its
       // unchecked set is the only check button. Targeting "first" works
       // because the Bench Press block has no sets yet → no check buttons there.
       await page.getByLabel("Mark set as completed").first().click();
@@ -508,7 +503,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,
@@ -575,7 +570,7 @@ test.describe("Rest-timer auto-start on check (web)", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       const routineId = await seedRoutineWithTwoExercises({
         userId,
         withRestExerciseId: withRest.id,

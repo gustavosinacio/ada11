@@ -138,8 +138,10 @@ test.describe("Ada11 CRUD flows (web)", () => {
       await page.getByText("Exercises", { exact: true }).first().click();
       await page.waitForURL(/\/exercises/, { timeout: 10_000 });
 
-      // The seed_new_user trigger inserts ~30 lifts, so the list should not be empty.
-      // Find and click the "+" plus icon header button via accessibility label.
+      // The canonical catalog (user_id IS NULL) is visible to every signed-in
+      // user via the widened RLS SELECT policy, so the list is non-empty even
+      // before the new user creates anything. Find and click the "+" plus
+      // icon header button via accessibility label.
       const newExBtn = page.getByLabel("New exercise");
       await expect(newExBtn).toBeVisible({ timeout: 10_000 });
       await newExBtn.click();
@@ -320,10 +322,13 @@ test.describe("Ada11 CRUD flows (web)", () => {
       // Seed one set so the strip bar has non-zero volume in the current week.
       // (Without sets, the strip would have nothing to bucket and the
       //  asymmetry assertion would be vacuous.)
+      // Exercises moved to a shared canonical catalog (user_id IS NULL,
+      // visible via RLS) in migration 0011 — the per-user seed no longer
+      // runs.
       const { data: exRow, error: exErr } = await admin
         .from("exercises")
         .select("id")
-        .eq("user_id", userId)
+        .is("user_id", null)
         .is("deleted_at", null)
         .limit(1)
         .single();

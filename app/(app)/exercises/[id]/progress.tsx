@@ -47,21 +47,40 @@ export default function ExerciseProgressScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const chartWidth = Math.min(screenWidth - 48, 500);
 
+  // Pencil is suppressed for canonical (admin-managed) exercises so the user
+  // cannot reach the edit screen for a row they don't own. Defense-in-depth:
+  // the edit screen itself ALSO renders read-only for canonical rows (see
+  // `app/(app)/exercises/[id]/index.tsx`), so deep-links / route history
+  // can't bypass this gate either.
+  //
+  // The predicate is hide-only-when-known-canonical (rather than show-only-
+  // when-known-user-owned). During the initial loading window `exercise.data`
+  // is undefined; treating that as `canEdit = true` avoids a flash where the
+  // pencil disappears then reappears for user-owned rows. For canonical rows
+  // the pencil briefly renders before being hidden once `data` resolves — a
+  // sub-second one-way transition, never tappable into the edit screen for
+  // canonical content because the destination screen also gates.
+  const canEdit = exercise.data ? exercise.data.user_id !== null : true;
   const screenHeader = (
     <Stack.Screen
       options={{
         title: exercise.data?.name ?? "Progress",
         headerShown: true,
-        headerRight: () => (
-          <Pressable
-            onPress={() => router.push(`/(app)/exercises/${id}`)}
-            accessibilityLabel="Edit exercise"
-            accessibilityRole="button"
-            className="px-3 py-1"
-          >
-            <Pencil color={colorScheme === "dark" ? "#fff" : "#000"} size={20} />
-          </Pressable>
-        ),
+        headerRight: canEdit
+          ? () => (
+              <Pressable
+                onPress={() => router.push(`/(app)/exercises/${id}`)}
+                accessibilityLabel="Edit exercise"
+                accessibilityRole="button"
+                className="px-3 py-1"
+              >
+                <Pencil
+                  color={colorScheme === "dark" ? "#fff" : "#000"}
+                  size={20}
+                />
+              </Pressable>
+            )
+          : undefined,
       }}
     />
   );

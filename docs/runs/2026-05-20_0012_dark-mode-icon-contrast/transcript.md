@@ -50,3 +50,22 @@
 - **Action**: write regression-report.md, retro.md, update state.md.
 - **Output**: pipeline-fix playbook v0 drafted in retro.md.
 - **Next**: archive to vault, ping user with manual-verification checklist.
+
+### 2026-05-20 00:30 — User: deploy authorization
+- **Input**: user selected option (a) — commit + deploy.
+
+### 2026-05-20 00:31 — Conductor: commit
+- **Action**: `git add` the 3 source files + the run folder; commit as `0ab8dda` ("fix(ui): adapt header + routine-add icon colors to color scheme").
+- **Excluded**: prior-session changes (CLAUDE.md, .claude/skills/), user's in-progress work (measurements-tracking run, schema/types/units edits, iphone-shakedown.md).
+
+### 2026-05-20 00:32 — Conductor: deploy
+- **Tool**: `npm run deploy:web` (`expo export --platform web && eas deploy --prod --non-interactive`).
+- **Result**: deployment promoted to production. URLs:
+  - Production: https://ada11.expo.app
+  - Deployment-specific: https://ada11--7hk8c6ln0e.expo.app
+- **Next**: user force-refreshes PWA on iPhone and confirms icons visible in dark + light modes.
+
+### 2026-05-20 00:34 — User: manual verification result
+- **Input**: "fixes confirmados. Tudo funcionando".
+- **Verdict**: pass on PWA standalone (iPhone, dark + light modes).
+- **Routing decision**: close run as `done`. Update regression-report and state. Sync vault.

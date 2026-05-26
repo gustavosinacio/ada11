@@ -76,19 +76,32 @@ test.describe("Exercise progress IA (web)", () => {
     const userId = await createConfirmedUser(email);
 
     try {
+      // Seed a user-owned exercise. Post-canonical migration, canonical rows
+      // (e.g. seeded "Bench Press") render without an "Edit exercise" pencil
+      // because canonical = read-only. The pencil + edit + save + delete
+      // flow this test exercises is the user-owned contract — so we seed a
+      // user-owned row and click that instead of a canonical lift.
+      const ownName = `IA Golden ${Date.now()}`;
+      const { data: own, error: ownErr } = await admin
+        .from("exercises")
+        .insert({ user_id: userId, name: ownName, muscles: ["Chest"] })
+        .select("id")
+        .single();
+      if (ownErr || !own) throw new Error(`own seed: ${ownErr?.message}`);
+
       await signInAndLand(page, email);
 
-      // Go to Exercises list (seeded by trigger ~30 lifts).
+      // Go to Exercises list. The user-owned row we just seeded is visible
+      // alongside the canonical catalog.
       await page.getByText("Exercises", { exact: true }).first().click();
       await page.waitForURL(/\/exercises$/, { timeout: 10_000 });
 
-      // Tap a known seeded row; fall back to first list pressable if not present.
-      const candidate = page.getByText("Bench Press", { exact: true }).first();
-      if (await candidate.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await candidate.click();
-      } else {
-        await page.getByRole("button").filter({ hasText: /./ }).nth(0).click();
-      }
+      // Tap the user-owned row (deterministic — name uses a unique
+      // timestamp).
+      await expect(page.getByText(ownName, { exact: true }).first()).toBeVisible({
+        timeout: 10_000,
+      });
+      await page.getByText(ownName, { exact: true }).first().click();
 
       // URL is .../exercises/<uuid>/progress (NOT .../exercises/<uuid>).
       await page.waitForURL(/\/exercises\/[0-9a-f-]+\/progress$/, { timeout: 10_000 });
@@ -156,18 +169,26 @@ test.describe("Exercise progress IA (web)", () => {
     const userId = await createConfirmedUser(email);
 
     try {
+      // Seed a user-owned exercise so the post-finish re-entry pencil
+      // assertion (canonical = no pencil) reflects the user-owned contract.
+      const ownName = `IA Cache ${Date.now()}`;
+      const { data: own, error: ownErr } = await admin
+        .from("exercises")
+        .insert({ user_id: userId, name: ownName, muscles: ["Chest"] })
+        .select("id")
+        .single();
+      if (ownErr || !own) throw new Error(`own seed: ${ownErr?.message}`);
+
       await signInAndLand(page, email);
 
-      // Pick an exercise and remember its id.
+      // Pick the user-owned exercise and remember its id.
       await page.getByText("Exercises", { exact: true }).first().click();
       await page.waitForURL(/\/exercises$/, { timeout: 10_000 });
 
-      const candidate = page.getByText("Bench Press", { exact: true }).first();
-      if (await candidate.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await candidate.click();
-      } else {
-        await page.getByRole("button").filter({ hasText: /./ }).nth(0).click();
-      }
+      await expect(page.getByText(ownName, { exact: true }).first()).toBeVisible({
+        timeout: 10_000,
+      });
+      await page.getByText(ownName, { exact: true }).first().click();
       await page.waitForURL(/\/exercises\/[0-9a-f-]+\/progress$/, { timeout: 10_000 });
       const exerciseId = page.url().match(/\/exercises\/([0-9a-f-]+)\/progress$/)![1];
 

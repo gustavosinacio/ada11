@@ -32,6 +32,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
+
 dotenv.config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -74,26 +76,18 @@ async function deleteUserSafe(userId: string) {
 }
 
 async function getSeedExerciseByName(
-  userId: string,
+  _userId: string,
   preferred: string,
 ): Promise<{ id: string; name: string }> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
-  if (error || !data || data.length === 0) {
-    throw new Error(`No exercises for ${userId}: ${error?.message}`);
-  }
-  const match = data.find((r) => r.name === preferred);
-  if (match) return { id: match.id, name: match.name };
-  return { id: data[0]!.id, name: data[0]!.name };
+  // `_userId` retained for call-site readability + future flexibility, but
+  // exercises now live in a shared canonical catalog (user_id IS NULL).
+  return pickCanonicalExercise(admin, preferred);
 }
 
 /**
  * Same shape as rest-timer-auto-start.spec.ts so the live screen has a
  * stable two-exercise layout and a routine_exercises query that resolves
- * deterministically (with the second exercise — "Back Squat" — anchoring
+ * deterministically (with the second exercise — "Squat (Barbell)" — anchoring
  * the wait in gotoLiveSession below).
  */
 async function seedRoutineWithTwoExercises(opts: {
@@ -272,7 +266,7 @@ async function gotoLiveSession(
   // Anchor on the second routine exercise so we know routine_exercises has
   // resolved before any check — otherwise the gate that reads
   // `restByExercise` could silently no-op. Same pattern as rest-timer spec.
-  await expect(page.getByText("Back Squat", { exact: true })).toBeVisible({
+  await expect(page.getByText("Squat (Barbell)", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
   // Fix 3 (race 2 mitigation): wait for `useLastWorkingSet` to have resolved
@@ -306,7 +300,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -358,7 +352,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -437,7 +431,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -506,7 +500,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       // No prior finished session for the exercise.
       const routineId = await seedRoutineWithTwoExercises({
         userId,
@@ -552,7 +546,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -602,7 +596,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -668,7 +662,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -744,7 +738,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -822,7 +816,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       // Prior session canonical kg = 120; in lbs that's
       //   120 / 0.45359237 ≈ 264.5547 → .toFixed(1) === "264.6".
       await seedFinishedSession({
@@ -883,7 +877,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,
@@ -956,7 +950,7 @@ test.describe("Auto-fill placeholder on check", () => {
     const userId = await createConfirmedUser(email);
     try {
       const withRest = await getSeedExerciseByName(userId, "Bench Press");
-      const withoutRest = await getSeedExerciseByName(userId, "Back Squat");
+      const withoutRest = await getSeedExerciseByName(userId, "Squat (Barbell)");
       await seedFinishedSession({
         userId,
         exerciseId: withRest.id,

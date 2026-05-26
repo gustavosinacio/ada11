@@ -9,6 +9,12 @@ import { defineConfig } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Restrict discovery to `*.spec.ts` files only. The default Playwright
+  // glob (`*.spec.ts | *.test.ts`) would already exclude the helper module
+  // at `tests/e2e/_helpers/canonical-exercise.ts` (named without `.spec.`),
+  // but pinning the pattern explicitly keeps future helper modules safe
+  // from accidental test-discovery if anyone names one `*.test.ts`.
+  testMatch: /.*\.spec\.ts$/,
   timeout: 60_000,
   fullyParallel: false, // auth tests share user lifecycle; keep them sequential
   workers: 1,

@@ -17,6 +17,8 @@ import {
   useUpdateExercise,
 } from "~/hooks/use-exercises";
 
+const EM_DASH = "—";
+
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Too long"),
   muscles: z
@@ -107,6 +109,60 @@ export default function EditExerciseScreen() {
           {error instanceof Error ? error.message : "Failed to load"}
         </Text>
       </View>
+    );
+  }
+
+  // Canonical (shared catalog) row -> read-only screen. Defense-in-depth with
+  // the progress-screen pencil gate; covers deep links and route history that
+  // bypass the pencil. `useForm` above stays mounted unconditionally (hook
+  // ordering must be stable across renders); this branch simply renders no
+  // Controllers and omits Save / Cancel / Delete affordances.
+  if (data && data.user_id === null) {
+    return (
+      <ScrollView
+        className="flex-1 bg-white dark:bg-black"
+        contentContainerClassName="px-6 py-6"
+      >
+        <Stack.Screen options={{ title: "Exercise", headerShown: true }} />
+
+        <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+          Name
+        </Text>
+        <Text className="mb-6 text-base text-black dark:text-white">
+          {data.name}
+        </Text>
+
+        <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+          Muscles
+        </Text>
+        <Text className="mb-6 text-base text-black dark:text-white">
+          {(data.muscles ?? []).length > 0
+            ? (data.muscles ?? []).join(", ")
+            : EM_DASH}
+        </Text>
+
+        <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+          Equipment
+        </Text>
+        <Text className="mb-6 text-base text-black dark:text-white">
+          {data.equipment ?? EM_DASH}
+        </Text>
+
+        <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+          Notes
+        </Text>
+        <Text className="mb-6 text-base text-black dark:text-white">
+          {data.notes ?? EM_DASH}
+        </Text>
+
+        <View className="mt-2 gap-3">
+          <Button
+            label="Back"
+            variant="secondary"
+            onPress={() => router.back()}
+          />
+        </View>
+      </ScrollView>
     );
   }
 

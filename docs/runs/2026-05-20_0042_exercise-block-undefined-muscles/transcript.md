@@ -59,3 +59,23 @@
 
 ### 2026-05-20 00:55 — Conductor: awaiting deploy decision
 - **Next**: ask user to commit + deploy, or hold for additional review.
+
+### 2026-05-20 01:00 — User: deploy authorization
+- **Input**: "a" — commit + deploy.
+
+### 2026-05-20 01:00 — Conductor: commit
+- **Action**: staged 6 source files + run folder; commit `12684ef` ("fix(cache): defensive muscles reads + persister buster for stale cache").
+- **Excluded**: pipeline-fix infrastructure (playbook-fix.md, agents/*, _template-fix/, skill) from prior in-session setup, plus user's untracked measurements work — both belong in separate commits.
+
+### 2026-05-20 01:01 — Conductor: deploy (web)
+- **Tool**: `npm run deploy:web` (`expo export --platform web && eas deploy --prod --non-interactive`).
+- **Result**: deployed. URLs:
+  - Production: https://ada11.expo.app
+  - Deployment-specific: https://ada11--plm6t243v4.expo.app
+- **Caveat**: web deploy ONLY ships the web bundle. The reported bug is on **iOS native dev build**; iOS needs a local `npx expo run:ios --device` (or `--simulator`) rebuild to pick up the new code. The PWA-on-iOS is also fine to verify but the original red-box was native.
+- **Next**: user rebuilds iOS native, replays manual-verification checklist from `regression-report.md`.
+
+### 2026-05-20 01:11 — User: manual verification result
+- **Input**: "Fix confirmado".
+- **Verdict**: pass on iOS native dev build, post `expo run:ios --device` rebuild. Cache buster discarded stale blob on first launch (as designed); ExerciseBlock rendered across History and Workout flows.
+- **Routing decision**: close run as `done`. Update regression-report, state, transcript. Sync vault.

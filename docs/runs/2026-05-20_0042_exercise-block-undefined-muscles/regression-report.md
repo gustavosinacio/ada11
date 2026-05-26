@@ -77,11 +77,11 @@ Web (PWA) sanity:
 
 ## Decision
 
-**pass** — automated gates green for the diff, fix is structurally sound (defensive reads + buster), adjacent surfaces compile and share the new pattern.
+**pass** — automated gates green for the diff, fix is structurally sound (defensive reads + buster), adjacent surfaces compile and share the new pattern. User confirmed end-to-end on iOS native dev build post-deploy.
 
-**Pending**: user-side manual verification on iOS following the checklist above.
+## Post-deploy manual verification
 
-## Post-deploy manual verification (filled in after user confirms)
-- Verified by user on <environment>: <pass | fail>.
-- Confirmation timestamp (BRT): <YYYY-MM-DD HH:mm>.
-- User statement: "<verbatim>"
+- **Verified by user on iOS native dev build (rebuilt via `expo run:ios --device` after the deploy)**: pass.
+- Confirmation timestamp (BRT): 2026-05-20 01:11.
+- User statement: "Fix confirmado".
+- Cache buster behavior confirmed: first launch with previously-poisoned AsyncStorage discarded the stale blob (buster mismatch) and refetched; ExerciseBlock rendered without the red-box across History and Workout flows.

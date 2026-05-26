@@ -98,10 +98,14 @@ async function seedEndedSessionWithTwoBlocks(
     .single();
   if (sessErr || !sess) throw new Error(`session seed: ${sessErr?.message}`);
 
+  // Exercises now live in a shared canonical catalog (user_id IS NULL,
+  // visible via RLS to every authenticated user). Helper-shaped equivalent
+  // would need a 2-row variant; inline-filtering on `user_id IS NULL` keeps
+  // the `.limit(2)` shape unchanged.
   const { data: exRows, error: exErr } = await admin
     .from("exercises")
     .select("id, name")
-    .eq("user_id", userId)
+    .is("user_id", null)
     .is("deleted_at", null)
     .order("name")
     .limit(2);

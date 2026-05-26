@@ -33,6 +33,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import fs from "node:fs";
+
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
 import path from "node:path";
 
 dotenv.config({ path: ".env.local" });
@@ -83,21 +85,10 @@ test.afterAll(async () => {
 });
 
 async function getSeedExerciseByName(
-  userId: string,
+  _userId: string,
   preferred: string,
 ): Promise<{ id: string; name: string }> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
-  if (error || !data || data.length === 0) {
-    throw new Error(`No exercises for ${userId}: ${error?.message}`);
-  }
-  const match = data.find((r) => r.name === preferred);
-  if (match) return { id: match.id, name: match.name };
-  // Fallback to first.
-  return { id: data[0]!.id, name: data[0]!.name };
+  return pickCanonicalExercise(admin, preferred);
 }
 
 async function seedFinishedPRSession(opts: {

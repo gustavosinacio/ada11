@@ -28,10 +28,14 @@
 
 ## Current state
 - Owner: conductor
-- Phase: regression report done; awaiting deploy + user PWA/iOS verification
-- Status: code-ready
+- Phase: done
+- Status: done
 - Started (BRT): 2026-05-20 00:44
-- Updated (BRT): 2026-05-20 00:55
+- Updated (BRT): 2026-05-20 01:11
+- Commit: `12684ef`
+- Web Production URL: https://ada11.expo.app
+- Deployment URL: https://ada11--plm6t243v4.expo.app
+- User verification: pass (iOS native dev build, post-rebuild)
 
 ## Triage decision
 - Pipeline-worthy: YES.

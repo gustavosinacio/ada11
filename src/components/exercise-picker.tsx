@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { CreatedByYouChip } from "~/components/created-by-you-chip";
 import type { ExerciseRow } from "~/db/types";
 import { useExercises } from "~/hooks/use-exercises";
 
@@ -126,11 +127,14 @@ export function ExercisePicker({ visible, onClose, onPick, excludeIds }: Props) 
                   }`}
                 >
                   <View className="flex-1 pr-3">
-                    <Text
-                      className={`text-base ${already ? "text-gray-400" : "text-black dark:text-white"}`}
-                    >
-                      {item.name}
-                    </Text>
+                    <View className="flex-row items-center">
+                      <Text
+                        className={`text-base ${already ? "text-gray-400" : "text-black dark:text-white"}`}
+                      >
+                        {item.name}
+                      </Text>
+                      {item.user_id !== null ? <CreatedByYouChip /> : null}
+                    </View>
                     {(muscles.length > 0 || item.equipment) && (
                       <Text className="mt-0.5 text-sm text-gray-500">
                         {[

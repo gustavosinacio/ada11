@@ -23,6 +23,8 @@ import * as dotenv from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
+
 dotenv.config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -70,17 +72,9 @@ test.afterAll(async () => {
   await Promise.all(Array.from(createdUserIds).map(deleteUserSafe));
 });
 
-async function getSeedExerciseId(userId: string): Promise<string> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .limit(1);
-  if (error || !data || data.length === 0) {
-    throw new Error(`No seeded exercise for ${userId}: ${error?.message}`);
-  }
-  return data[0]!.id;
+async function getSeedExerciseId(_userId: string): Promise<string> {
+  const { id } = await pickCanonicalExercise(admin);
+  return id;
 }
 
 function mondayNWeeksAgoUtc(weekOffset: number): Date {

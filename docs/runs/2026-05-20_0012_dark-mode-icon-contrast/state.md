@@ -16,10 +16,14 @@ Follow-up clarifications from the user:
 
 ## Current state
 - Owner: conductor
-- Phase: done (code shipped, awaiting user-side PWA visual confirmation)
-- Status: done-pending-manual-verification
+- Phase: done
+- Status: done
 - Started (BRT): 2026-05-20 00:12
-- Updated (BRT): 2026-05-20 00:25
+- Updated (BRT): 2026-05-20 00:34
+- Commit: `0ab8dda`
+- Production URL: https://ada11.expo.app
+- Deployment URL: https://ada11--7hk8c6ln0e.expo.app
+- User verification: pass (PWA standalone, dark + light modes)
 
 ## Phases
 - [x] Repro — confirmed via screenshot + user clarification

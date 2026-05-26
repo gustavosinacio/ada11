@@ -42,4 +42,10 @@ Action for user:
 
 ## Decision
 
-**pass** — automated gates green, code-level changes match plan, no regressions detected. **Pending**: user-side manual verification on the PWA standalone environment.
+**pass** — automated gates green, code-level changes match plan, no regressions detected.
+
+## Post-deploy manual verification
+
+- **Verified by user on PWA standalone (iPhone)**: pass.
+- Confirmation timestamp (BRT): 2026-05-20 00:34.
+- User statement: "fixes confirmados. Tudo funcionando".

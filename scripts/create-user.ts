@@ -42,7 +42,16 @@ async function main() {
   console.log(`   user_id: ${data.user.id}`);
 
   // Verify the seed trigger fired.
-  const [{ data: prefs }, { count: exCount }] = await Promise.all([
+  // After migration 0011_canonical_exercises.sql, `seed_new_user` no longer
+  // inserts per-user exercises — the catalog is shared (user_id IS NULL).
+  // Print BOTH counts so the diagnostic stays useful: per-user (expected 0)
+  // and canonical (expected ~31, visible to every authenticated user via
+  // the widened RLS SELECT policy).
+  const [
+    { data: prefs },
+    { count: userCount },
+    { count: canonicalCount },
+  ] = await Promise.all([
     admin
       .from("user_preferences")
       .select("user_id, weight_unit")
@@ -51,10 +60,15 @@ async function main() {
       .from("exercises")
       .select("id", { count: "exact", head: true })
       .eq("user_id", data.user.id),
+    admin
+      .from("exercises")
+      .select("id", { count: "exact", head: true })
+      .is("user_id", null),
   ]);
 
   console.log(`   user_preferences row: ${prefs?.length === 1 ? "yes" : "MISSING"}`);
-  console.log(`   exercises seeded: ${exCount ?? 0}`);
+  console.log(`   exercises seeded (per-user): ${userCount ?? 0}`);
+  console.log(`   canonical visible (via RLS): ${canonicalCount ?? 0}`);
 }
 
 main().catch((err) => {

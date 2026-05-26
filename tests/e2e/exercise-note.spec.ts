@@ -29,6 +29,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
+
 dotenv.config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -82,18 +84,8 @@ async function signInAndLand(page: Page, email: string) {
   await page.waitForURL(/\/workout/, { timeout: 15_000 });
 }
 
-async function pickSeedExercise(userId: string): Promise<{ id: string; name: string }> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .order("name", { ascending: true });
-  if (error || !data || data.length === 0) {
-    throw new Error(`No exercises for ${userId}: ${error?.message}`);
-  }
-  const bench = data.find((r) => r.name === "Bench Press");
-  return bench ?? (data[0] as { id: string; name: string });
+async function pickSeedExercise(_userId: string): Promise<{ id: string; name: string }> {
+  return pickCanonicalExercise(admin, "Bench Press");
 }
 
 /**
@@ -439,7 +431,20 @@ test.describe("Exercise note feature (web)", () => {
   }) => {
     const email = `e2e-exnote-softdel-${Date.now()}@test.com`;
     const userId = await createConfirmedUser(email);
-    const exercise = await pickSeedExercise(userId);
+    // Use a user-owned exercise (not a canonical one): soft-deleting a
+    // canonical row would leak across the shared catalog and affect every
+    // subsequent test in the run.
+    const { data: exercise, error: createErr } = await admin
+      .from("exercises")
+      .insert({
+        user_id: userId,
+        name: `Note Soft-Delete Target ${Date.now()}`,
+        muscles: ["Chest"],
+      })
+      .select("id, name")
+      .single();
+    if (createErr || !exercise)
+      throw new Error(`user-owned exercise seed: ${createErr?.message}`);
 
     // Pre-seed the note via admin so the test is deterministic regardless of
     // editor behavior — this test focuses on the soft-delete visibility
@@ -452,7 +457,7 @@ test.describe("Exercise note feature (web)", () => {
     });
     if (insErr) throw new Error(`note insert: ${insErr.message}`);
 
-    // Soft-delete the exercise.
+    // Soft-delete the (user-owned) exercise.
     const { error: delErr } = await admin
       .from("exercises")
       .update({ deleted_at: new Date().toISOString() })

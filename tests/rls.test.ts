@@ -191,7 +191,215 @@ async function main() {
       throw new Error("FAIL: B spoofed an exercise_note insert on A's row");
     }
 
-    console.log("✅ RLS test passed — B cannot read/update/delete A's data.");
+    // -------------------------------------------------------------------
+    // canonical exercises (user_id IS NULL) — added in migration
+    // 0011_canonical_exercises.sql. SELECT policy widens to
+    // `user_id IS NULL OR auth.uid() = user_id`; INSERT/UPDATE/DELETE
+    // stay scoped to `auth.uid() = user_id` so canonical rows are
+    // app-immutable (service role bypasses RLS for admin edits).
+    // -------------------------------------------------------------------
+    const canonicalName = `Canonical RLS Test ${Date.now()}`;
+    const { data: canonical, error: cInsErr } = await admin
+      .from("exercises")
+      .insert({ user_id: null, name: canonicalName })
+      .select()
+      .single();
+    if (cInsErr || !canonical) {
+      throw new Error(`canonical insert (admin): ${cInsErr?.message}`);
+    }
+    const canonicalId = canonical.id as string;
+
+    try {
+      // A reads canonical — must return the row (widened SELECT).
+      const { data: aReadC } = await clientA
+        .from("exercises")
+        .select("id, name")
+        .eq("id", canonicalId);
+      if ((aReadC ?? []).length !== 1) {
+        throw new Error(
+          `FAIL: A cannot read canonical exercise (got ${(aReadC ?? []).length} rows)`,
+        );
+      }
+
+      // B reads same canonical — must also return the row.
+      const { data: bReadC } = await clientB
+        .from("exercises")
+        .select("id, name")
+        .eq("id", canonicalId);
+      if ((bReadC ?? []).length !== 1) {
+        throw new Error(
+          `FAIL: B cannot read canonical exercise (got ${(bReadC ?? []).length} rows)`,
+        );
+      }
+
+      // A cannot UPDATE canonical — UPDATE policy still gates on
+      // auth.uid() = user_id; canonical has user_id IS NULL so 0 rows affected.
+      const { data: aUpdC } = await clientA
+        .from("exercises")
+        .update({ name: "hijacked" })
+        .eq("id", canonicalId)
+        .select();
+      if ((aUpdC ?? []).length > 0) {
+        throw new Error("FAIL: A updated a canonical exercise via RLS");
+      }
+      // Re-read via admin to confirm the name is unchanged.
+      const { data: postUpd } = await admin
+        .from("exercises")
+        .select("name")
+        .eq("id", canonicalId)
+        .single();
+      if (postUpd?.name !== canonicalName) {
+        throw new Error(
+          `FAIL: canonical name was actually mutated (expected ${canonicalName}, got ${postUpd?.name})`,
+        );
+      }
+
+      // A cannot DELETE canonical — DELETE policy uses auth.uid() = user_id.
+      const { data: aDelC } = await clientA
+        .from("exercises")
+        .delete()
+        .eq("id", canonicalId)
+        .select();
+      if ((aDelC ?? []).length > 0) {
+        throw new Error("FAIL: A deleted a canonical exercise via RLS");
+      }
+      // Re-read via admin to confirm the row is still present.
+      const { data: postDel } = await admin
+        .from("exercises")
+        .select("id")
+        .eq("id", canonicalId);
+      if ((postDel ?? []).length !== 1) {
+        throw new Error("FAIL: canonical row was actually deleted by A");
+      }
+
+      // A cannot INSERT a row with user_id = NULL (only the service role can).
+      // Supabase JS surfaces this as either an error or zero affected rows.
+      const { data: aInsSpoof, error: aInsSpoofErr } = await clientA
+        .from("exercises")
+        .insert({ user_id: null, name: "spoof-canonical" })
+        .select();
+      if (!aInsSpoofErr && (aInsSpoof ?? []).length > 0) {
+        throw new Error("FAIL: A inserted a canonical row via RLS");
+      }
+
+      // Anonymous (no JWT) SELECT of canonical: pins U1's default ("looser"
+      // variant — `user_id IS NULL OR auth.uid() = user_id` evaluates TRUE
+      // for canonical rows when `auth.uid() IS NULL`). Tightening this to
+      // `auth.uid() IS NOT NULL AND (...)` in a future migration must
+      // break this arm and force a conscious choice.
+      const anonClient = createClient(url, anon, {
+        auth: { persistSession: false },
+      });
+      const { data: anonRead } = await anonClient
+        .from("exercises")
+        .select("id")
+        .is("user_id", null)
+        .limit(1);
+      if ((anonRead ?? []).length < 1) {
+        throw new Error(
+          "FAIL: anon client cannot read canonical exercises (U1 looser-variant pin tripped)",
+        );
+      }
+    } finally {
+      // Service role bypasses RLS — cleanup the canonical test row.
+      await admin.from("exercises").delete().eq("id", canonicalId);
+    }
+
+    // -------------------------------------------------------------------
+    // routine_exercise_sets — added in migration 0013_routine_exercise_sets.sql.
+    // Same 4-policy RLS shape as exercises / measurement_entries / exercise_notes.
+    // -------------------------------------------------------------------
+
+    // A creates a routine and a routine_exercise attached to A's RLS Test
+    // Lift (aEx, owned by A). The routine_exercise_set is then attached to
+    // that routine_exercise.
+    const { data: aRoutine, error: rInsErr } = await clientA
+      .from("routines")
+      .insert({ user_id: a.user.id, name: "RLS Test Routine" })
+      .select()
+      .single();
+    if (rInsErr || !aRoutine) {
+      throw new Error(`A routine insert: ${rInsErr?.message}`);
+    }
+
+    const { data: aRoutEx, error: reInsErr } = await clientA
+      .from("routine_exercises")
+      .insert({
+        user_id: a.user.id,
+        routine_id: aRoutine.id,
+        exercise_id: aEx.id,
+        position: 0,
+      })
+      .select()
+      .single();
+    if (reInsErr || !aRoutEx) {
+      throw new Error(`A routine_exercise insert: ${reInsErr?.message}`);
+    }
+
+    const { data: aSet, error: rsInsErr } = await clientA
+      .from("routine_exercise_sets")
+      .insert({
+        user_id: a.user.id,
+        routine_exercise_id: aRoutEx.id,
+        set_number: 1,
+        set_type: "working",
+        target_reps: 8,
+        target_weight: "60.00",
+      })
+      .select()
+      .single();
+    if (rsInsErr || !aSet) {
+      throw new Error(`A routine_exercise_set insert: ${rsInsErr?.message}`);
+    }
+
+    // B reads — must return zero rows.
+    const { data: bRsRead } = await clientB
+      .from("routine_exercise_sets")
+      .select("*")
+      .eq("id", aSet.id);
+    if ((bRsRead ?? []).length > 0) {
+      throw new Error("FAIL: B can read A's routine_exercise_set");
+    }
+
+    // B updates — must affect zero rows.
+    const { data: bRsUpd } = await clientB
+      .from("routine_exercise_sets")
+      .update({ target_reps: 999 })
+      .eq("id", aSet.id)
+      .select();
+    if ((bRsUpd ?? []).length > 0) {
+      throw new Error("FAIL: B updated A's routine_exercise_set");
+    }
+
+    // B deletes — must affect zero rows.
+    const { data: bRsDel } = await clientB
+      .from("routine_exercise_sets")
+      .delete()
+      .eq("id", aSet.id)
+      .select();
+    if ((bRsDel ?? []).length > 0) {
+      throw new Error("FAIL: B deleted A's routine_exercise_set");
+    }
+
+    // B insert spoof — INSERT policy `with check (auth.uid() = user_id)` rejects.
+    const { data: bRsSpoofData, error: bRsSpoofErr } = await clientB
+      .from("routine_exercise_sets")
+      .insert({
+        user_id: a.user.id,
+        routine_exercise_id: aRoutEx.id,
+        set_number: 99,
+        set_type: "working",
+      })
+      .select();
+    if (!bRsSpoofErr && (bRsSpoofData ?? []).length > 0) {
+      throw new Error(
+        "FAIL: B spoofed a routine_exercise_set insert on A's row",
+      );
+    }
+
+    console.log(
+      "✅ RLS test passed — B cannot read/update/delete A's data; canonical rows visible to both users + immutable via RLS; routine_exercise_sets arm OK.",
+    );
   } finally {
     await admin.auth.admin.deleteUser(a.user.id);
     await admin.auth.admin.deleteUser(b.user.id);

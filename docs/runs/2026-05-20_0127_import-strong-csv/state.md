@@ -13,19 +13,27 @@
 
 ## Baseline
 - Branch: main
-- Commit: `15fab51`
+- Commit at start: `15fab51`
+- Final commit: `49aac97`
 
 ## Current state
 - Owner: conductor
-- Step: code-ready; awaiting user db:push + import run
-- Status: code-ready
+- Step: done — import landed end-to-end
+- Status: done
 - Started (BRT): 2026-05-20 01:27
-- Updated (BRT): 2026-05-20 02:05
+- Updated (BRT): 2026-05-20 16:15
+
+## Final result (verified via dry-run after real run)
+- 12,381 CSV rows parsed.
+- 774 cardio rows dropped.
+- 11,607 strength sets imported across 642 sessions.
+- 96 new exercises created with `source='strong'`.
+- Last dry-run: 642 sessions already complete, 0 partial, 0 to insert — confirms idempotent steady state.
 
 ## Budgets remaining
 - Design ↔ Validate rounds: 2 / 3 (1 used)
 - Implement ↔ Review rounds: 1 / 2 (1 used)
-- Implement ↔ Test rounds: 1 / 2 (1 used)
+- Implement ↔ Test rounds: 1 / 2 (1 used — implicit via real-run discovery)
 - Implementer soft-callbacks: 2 / 2 (0 used)
 
 ## Artifacts produced
@@ -36,15 +44,21 @@
 - [x] review-v1.md
 - [x] test-report-v1.md
 - [x] final-summary.md
-- [ ] retro.md (post-run, filled in by owner)
+- [x] retro.md
 
 ## Decisions / events log
-- 2026-05-20 01:27 — Run started. Baseline `15fab51`. User pre-aligned on import approach via 6-question scoping.
-- 2026-05-20 01:30 — Discovery written. CSV: 12,381 rows, 156 unique exercise names, dates 2019-11-08 → 2026-05-18, pathological durations up to "143h 49min", quoted notes with commas.
-- 2026-05-20 01:32 — Design v1 written. Two-pass CLI; new migration `0006`; schema delta minimal (nullable `source` on sessions+exercises).
-- 2026-05-20 01:34 — Validation v1 done. Decision: **go**. 0 blockers, 2 majors, 4 minors.
-- 2026-05-20 01:51 — User approved fix plan ("Sim").
-- 2026-05-20 01:55 — Implementer phase: installed devDeps (papaparse, @types/papaparse, date-fns-tz), wrote migration + schema + types + script + package.json + docs/development.md section. ~430 lines of script.
-- 2026-05-20 01:58 — Static gates: typecheck pass, lint 2 transient warnings (array-type) fixed via `Array<T>` → `T[]`, 51/51 unit pass, web export builds 21+ routes.
-- 2026-05-20 02:02 — Review v1 done. Decision: pass. 0 blockers/majors; 4 minors (paginate listUsers, date-without-seconds tolerance, CHECK constraint extension policy, iCloud sync conflict).
-- 2026-05-20 02:05 — Test report v1 done. Decision: pass. Static + structural; dynamic verification = user manual checklist (env + service-role required).
+- 2026-05-20 01:27 — Run started. Baseline `15fab51`. User pre-aligned via 6-question scoping.
+- 2026-05-20 01:30 — Discovery written. CSV: 12,381 rows, 156 unique exercise names.
+- 2026-05-20 01:32 — Design v1 (two-pass CLI + migration 0006 source flag).
+- 2026-05-20 01:34 — Validation v1: go, 0 blockers, 2 majors (MAJ-1 partial-failure recovery, MAJ-2 zero-set sessions), 4 minors.
+- 2026-05-20 01:51 — User approved fix plan.
+- 2026-05-20 02:05 — Implementation v1, review v1, test-report v1 written. All static gates green. Commit `1fb33ac`.
+- 2026-05-20 08:50 — User report: `tsx: command not found`. Fix commit `4d52375`: `npx tsx` prefix.
+- 2026-05-20 09:00 — User report: ADMIN_EMAIL not set. Fix commit `6fed145`: auto-load `.env.local` via dotenv + helpful error.
+- 2026-05-20 15:30 — Mapping curation finalized after multiple review passes (13 unify edits + drop/create-new decisions).
+- 2026-05-20 15:55 — First dry-run (buggy undercount, fixed in commit `f7b0835`); second dry-run reports 642 sessions / 11607 sets.
+- 2026-05-20 16:00 — Real import attempt #1: 642 sessions inserted, but timestamp lookup mismatch ("Could not find inserted session id" for many) → most sets orphaned. **4 bugs surfaced** by the live run.
+- 2026-05-20 16:10 — Hardening commit `49aac97`: tsKey normalization + Phase 1 idempotency + batched DELETE + paginated set-count query.
+- 2026-05-20 16:12 — Real import attempt #2: MAJ-1 recovery deletes+reinserts the partial 511; ETIMEDOUT mid-batch.
+- 2026-05-20 16:13 — Real import attempt #3 (with hardening): converges. 511 sessions reinserted, 8649 sets inserted, 131 already complete (those were the ones the first attempt happened to insert before the failure mode kicked in). Done.
+- 2026-05-20 16:15 — Final verification dry-run: 642 already complete, 0 partial. Run closed as done.

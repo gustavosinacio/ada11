@@ -53,9 +53,7 @@ Examples (delete these once filling in real ones):
 
 ### Findings
 
-(fill in during the session)
-
--
+- 🟢 UX (web-only): routine edit screen (`/routines/[id]`) is confusing on web — "Save details" button only covers name+notes, exercise targets autosave on blur with no visible "Saved" indicator, and there's no clear "done/exit" gesture. On iPhone the native back button serves as the exit + the data is confirmed saved on return to list, so this is fine on the primary surface. Lower priority. Possible fixes: rename "Save details" → "Save name & notes", add a subtle "Saved ✓" indicator on autosave fields, or add a "Done" button on web only.
 
 ## Strong features I missed having
 

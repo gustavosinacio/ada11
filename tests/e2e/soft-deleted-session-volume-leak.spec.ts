@@ -39,6 +39,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 
+import { pickCanonicalExercise } from "./_helpers/canonical-exercise";
+
 dotenv.config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -93,19 +95,9 @@ async function signInAndLand(page: Page, email: string) {
 }
 
 async function pickSeedExercise(
-  userId: string,
+  _userId: string,
 ): Promise<{ id: string; name: string }> {
-  const { data, error } = await admin
-    .from("exercises")
-    .select("id, name")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .order("name", { ascending: true });
-  if (error || !data || data.length === 0) {
-    throw new Error(`No exercises for ${userId}: ${error?.message}`);
-  }
-  const bench = data.find((r) => r.name === "Bench Press");
-  return bench ?? (data[0] as { id: string; name: string });
+  return pickCanonicalExercise(admin, "Bench Press");
 }
 
 /**

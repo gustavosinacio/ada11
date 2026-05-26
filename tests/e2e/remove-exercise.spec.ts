@@ -111,11 +111,11 @@ test.describe("Remove exercise from session (web)", () => {
 
       // Add two ad-hoc exercises.
       await addExerciseFromPicker(page, "Bench Press");
-      await addExerciseFromPicker(page, "Back Squat");
+      await addExerciseFromPicker(page, "Squat (Barbell)");
 
       // Confirm trash icons present for both blocks.
       const benchTrash = page.getByLabel("Remove Bench Press from workout");
-      const squatTrash = page.getByLabel("Remove Back Squat from workout");
+      const squatTrash = page.getByLabel("Remove Squat (Barbell) from workout");
       await expect(benchTrash).toBeVisible({ timeout: 5_000 });
       await expect(squatTrash).toBeVisible({ timeout: 5_000 });
 
@@ -146,7 +146,7 @@ test.describe("Remove exercise from session (web)", () => {
       await page.getByLabel("Close").click();
       await expect(page.getByText("Pick exercise")).not.toBeVisible({ timeout: 5_000 });
 
-      // ---- Remove Back Squat (zero logged sets) ----
+      // ---- Remove Squat (Barbell) (zero logged sets) ----
       let squatDialogMessage = "";
       page.once("dialog", (d) => {
         squatDialogMessage = d.message();
@@ -155,7 +155,7 @@ test.describe("Remove exercise from session (web)", () => {
       await squatTrash.click();
       await expect(squatTrash).toBeHidden({ timeout: 5_000 });
 
-      expect(squatDialogMessage).toContain("Remove Back Squat?");
+      expect(squatDialogMessage).toContain("Remove Squat (Barbell)?");
       expect(squatDialogMessage).toContain("This exercise will be removed");
       // Should NOT contain the "logged sets" copy.
       expect(squatDialogMessage).not.toContain("logged set");
