@@ -4,11 +4,12 @@ import { Controller, useForm } from "react-hook-form";
 import { ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 
+import { EquipmentPicker } from "~/components/equipment-picker";
 import { MuscleGroupPicker } from "~/components/muscle-group-picker";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
-import { MUSCLE_GROUPS } from "~/db/types";
+import { EQUIPMENT_OPTIONS, MUSCLE_GROUPS } from "~/db/types";
 import { useCreateExercise } from "~/hooks/use-exercises";
 
 const schema = z.object({
@@ -16,7 +17,10 @@ const schema = z.object({
   muscles: z
     .array(z.enum(MUSCLE_GROUPS as unknown as [string, ...string[]]))
     .min(1, "Pick at least one muscle group"),
-  equipment: z.string().trim().max(40).optional().or(z.literal("")),
+  equipment: z
+    .enum(EQUIPMENT_OPTIONS as unknown as [string, ...string[]])
+    .nullable()
+    .optional(),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
@@ -32,7 +36,7 @@ export default function NewExerciseScreen() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", muscles: [], equipment: "", notes: "" },
+    defaultValues: { name: "", muscles: [], equipment: null, notes: "" },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -40,7 +44,7 @@ export default function NewExerciseScreen() {
       await create.mutateAsync({
         name: values.name,
         muscles: values.muscles,
-        equipment: values.equipment ? values.equipment : null,
+        equipment: values.equipment ?? null,
         notes: values.notes ? values.notes : null,
       });
       router.back();
@@ -89,13 +93,11 @@ export default function NewExerciseScreen() {
       <Controller
         control={control}
         name="equipment"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <Input
+        render={({ field: { onChange, value } }) => (
+          <EquipmentPicker
             label="Equipment (optional)"
-            placeholder="e.g. Barbell"
-            value={value ?? ""}
-            onBlur={onBlur}
-            onChangeText={onChange}
+            value={value ?? null}
+            onChange={onChange}
             error={errors.equipment?.message}
           />
         )}

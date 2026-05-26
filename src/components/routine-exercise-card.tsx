@@ -8,7 +8,11 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { confirmDelete } from "~/components/confirm-delete";
 import type { RoutineExerciseEntry } from "~/api/routine-exercises";
-import type { RoutineExerciseSetRow, SetType } from "~/db/types";
+import {
+  formatEquipment,
+  type RoutineExerciseSetRow,
+  type SetType,
+} from "~/db/types";
 
 type Props = {
   entry: RoutineExerciseEntry;
@@ -137,7 +141,7 @@ export function RoutineExerciseCard({
               <Text className="mt-0.5 text-sm text-gray-500">
                 {[
                   muscles.length > 0 ? muscles.join(", ") : null,
-                  entry.exercise.equipment,
+                  formatEquipment(entry.exercise.equipment),
                 ]
                   .filter(Boolean)
                   .join(" · ")}

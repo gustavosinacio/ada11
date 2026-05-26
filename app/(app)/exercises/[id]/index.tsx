@@ -6,11 +6,17 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 
 import { confirmDelete } from "~/components/confirm-delete";
+import { EquipmentPicker } from "~/components/equipment-picker";
 import { MuscleGroupPicker } from "~/components/muscle-group-picker";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
-import { MUSCLE_GROUPS } from "~/db/types";
+import {
+  EQUIPMENT_OPTIONS,
+  MUSCLE_GROUPS,
+  equipmentLabel,
+  type Equipment,
+} from "~/db/types";
 import {
   useExercise,
   useSoftDeleteExercise,
@@ -24,7 +30,10 @@ const schema = z.object({
   muscles: z
     .array(z.enum(MUSCLE_GROUPS as unknown as [string, ...string[]]))
     .min(1, "Pick at least one muscle group"),
-  equipment: z.string().trim().max(40).optional().or(z.literal("")),
+  equipment: z
+    .enum(EQUIPMENT_OPTIONS as unknown as [string, ...string[]])
+    .nullable()
+    .optional(),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
@@ -44,15 +53,23 @@ export default function EditExerciseScreen() {
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", muscles: [], equipment: "", notes: "" },
+    defaultValues: { name: "", muscles: [], equipment: null, notes: "" },
   });
 
   useEffect(() => {
     if (data) {
+      // Legacy rows may hold non-canonical equipment strings; the picker
+      // treats unknown values as "none" rather than crashing. We pass through
+      // recognised values and normalise everything else to null on edit.
+      const knownEquip = EQUIPMENT_OPTIONS.includes(
+        data.equipment as Equipment,
+      )
+        ? (data.equipment as Equipment)
+        : null;
       reset({
         name: data.name,
         muscles: data.muscles ?? [],
-        equipment: data.equipment ?? "",
+        equipment: knownEquip,
         notes: data.notes ?? "",
       });
     }
@@ -66,7 +83,7 @@ export default function EditExerciseScreen() {
         patch: {
           name: values.name,
           muscles: values.muscles,
-          equipment: values.equipment ? values.equipment : null,
+          equipment: values.equipment ?? null,
           notes: values.notes ? values.notes : null,
         },
       });
@@ -145,7 +162,11 @@ export default function EditExerciseScreen() {
           Equipment
         </Text>
         <Text className="mb-6 text-base text-black dark:text-white">
-          {data.equipment ?? EM_DASH}
+          {data.equipment
+            ? EQUIPMENT_OPTIONS.includes(data.equipment as Equipment)
+              ? equipmentLabel(data.equipment as Equipment)
+              : data.equipment
+            : EM_DASH}
         </Text>
 
         <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
@@ -204,12 +225,11 @@ export default function EditExerciseScreen() {
       <Controller
         control={control}
         name="equipment"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <Input
+        render={({ field: { onChange, value } }) => (
+          <EquipmentPicker
             label="Equipment (optional)"
-            value={value ?? ""}
-            onBlur={onBlur}
-            onChangeText={onChange}
+            value={value ?? null}
+            onChange={onChange}
             error={errors.equipment?.message}
           />
         )}

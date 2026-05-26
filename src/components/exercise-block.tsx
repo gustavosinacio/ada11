@@ -6,7 +6,13 @@ import type { UpdateSetMetaInput } from "~/api/sets";
 import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { SetInput } from "~/components/set-input";
 import { VolumeTargetSlot } from "~/components/volume-target-slot";
-import type { ExerciseRow, SetRow, SetType, WeightUnit } from "~/db/types";
+import {
+  formatEquipment,
+  type ExerciseRow,
+  type SetRow,
+  type SetType,
+  type WeightUnit,
+} from "~/db/types";
 import { useLastWorkingSet } from "~/hooks/use-sets";
 
 type Props = {
@@ -169,7 +175,7 @@ export function ExerciseBlock({
                 muscles.length > 0
                   ? muscles.join(", ")
                   : null,
-                exercise.equipment,
+                formatEquipment(exercise.equipment),
               ]
                 .filter(Boolean)
                 .join(" · ")}

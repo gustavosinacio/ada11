@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { CreatedByYouChip } from "~/components/created-by-you-chip";
-import type { ExerciseRow } from "~/db/types";
+import { formatEquipment, type ExerciseRow } from "~/db/types";
 
 type Props = {
   exercise: ExerciseRow;
@@ -12,7 +12,7 @@ type Props = {
 export function ExerciseListItem({ exercise, onPress }: Props) {
   const muscles = exercise.muscles ?? [];
   const musclesText = muscles.length > 0 ? muscles.join(", ") : null;
-  const subtitleParts = [musclesText, exercise.equipment].filter(
+  const subtitleParts = [musclesText, formatEquipment(exercise.equipment)].filter(
     (s): s is string => Boolean(s),
   );
   const subtitle = subtitleParts.join(" · ");
