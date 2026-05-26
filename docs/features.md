@@ -2,6 +2,10 @@
 
 ## Done
 
+[x] Create-routine lands on the builder, not the routines list. `app/(app)/routines/new.tsx` now `router.replace`s into `/routines/{newId}` on save (instead of `router.back()`), so the user can add exercises immediately after picking the name + notes — no round-trip via the workout list + Edit pencil. `replace` (not `push`) so the browser/native back button skips the now-empty create form. Minimal 1-line behaviour change; existing routes/screens untouched.
+
+
+
 [x] Reorder exercises / sets — delay eliminated via optimistic UI updates. `useReorderRoutineExercises` and `useReorderRoutineExerciseSets` now rewrite the TanStack cache synchronously in `onMutate` so the chevron tap is instant; the actual server-side two-phase swap (2N sequential PATCHes for N items) runs in the background, with `onError` restoring the previous order on failure and `onSettled` invalidating to reconcile. The user's spec said "if we can't remove the delay, show a loading state" — optimistic removes the delay outright, no loading state needed. No new tests (UI-only behavioural change; existing reorder e2e specs still pass because the final state matches).
 
 [x] Body parts backfilled for 54 canonical exercises. Migration `0014_backfill_exercise_muscles.sql` populates `muscles` on every canonical (`user_id IS NULL`) exercise that was previously empty, using the existing 7-group vocabulary (Arms / Chest / Core / Legs / Lower back / Shoulders / Upper back). Idempotent — each UPDATE includes a `muscles IS NULL OR muscles = '{}'` guard so re-runs are no-ops. Also normalises `equipment` to lowercase (8 distinct case-mixed values → 5 canonical: barbell / bodyweight / cable / dumbbell / machine). Zero user-owned exercises were affected — investigation script confirmed all empty-muscle rows were canonical. Verified: `0/54 missing` post-migration.

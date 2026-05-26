@@ -31,11 +31,15 @@ export default function NewRoutineScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await create.mutateAsync({
+      const created = await create.mutateAsync({
         name: values.name,
         notes: values.notes ? values.notes : null,
       });
-      router.back();
+      // Land on the routine builder so exercises can be added straight away
+      // — `router.back()` would dump the user on the routines list and
+      // force a tap-edit round-trip to do the same thing. `replace` so the
+      // back button skips this create form (it's now an empty shell).
+      router.replace(`/(app)/routines/${created.id}`);
     } catch (err) {
       // surface inline below
       console.warn("Failed to create routine", err);
