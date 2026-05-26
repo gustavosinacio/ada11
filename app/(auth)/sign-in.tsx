@@ -1,10 +1,28 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import * as Linking from "expo-linking";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 
 import { supabase } from "~/lib/supabase";
+
+/**
+ * Resolves the URL Supabase should embed in the confirmation email's link.
+ * On web: the current page's origin (so a confirmation email triggered from
+ * `https://ada11.expo.app` deep-links back there, while a localhost sign-up
+ * still hits localhost). On native: the app's deep-link scheme (`ada11://`).
+ *
+ * The target URL still has to be on the project's Redirect URLs allow-list
+ * in the Supabase Dashboard for it to take effect — otherwise Supabase falls
+ * back to the Site URL. See `docs/auth-redirect-urls.md` (or the Dashboard).
+ */
+function authRedirectUrl(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return Linking.createURL("/");
+}
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -36,7 +54,10 @@ export default function SignInScreen() {
       const { data, error } =
         mode === "sign-in"
           ? await supabase.auth.signInWithPassword(values)
-          : await supabase.auth.signUp(values);
+          : await supabase.auth.signUp({
+              ...values,
+              options: { emailRedirectTo: authRedirectUrl() },
+            });
       if (error) {
         setBanner({ kind: "error", message: error.message });
       } else if (mode === "sign-up" && !data.session) {
