@@ -3,13 +3,49 @@ import type { ExerciseRow, RoutineExerciseRow } from "~/db/types";
 
 export type RoutineExerciseEntry = RoutineExerciseRow & { exercise: ExerciseRow };
 
+/**
+ * Patch shape for `updateRoutineExercise`. Post-0013 the per-set targets
+ * (`target_sets`, `target_reps`, `target_weight`) moved to
+ * `routine_exercise_sets`; only the per-exercise fields survive here.
+ */
 export type RoutineExerciseTargets = {
-  target_sets?: number | null;
-  target_reps?: number | null;
-  target_weight?: string | null;
   target_rest_seconds?: number | null;
   notes?: string | null;
 };
+
+type SupabaseLikeError = {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+/**
+ * Thrown by `addExerciseToRoutine` when the new `(routine_id, exercise_id)`
+ * partial-unique (`routine_exercises_routine_exercise_uq`, migration 0013)
+ * rejects an insert. The picker UI already filters duplicates via
+ * `excludeIds`, so the typed error is defense-in-depth against
+ * soft-delete-then-readd races and admin-seed paths.
+ *
+ * Follows the typed-23505 discriminator precedent at
+ * `src/api/measurements.ts:50` and `src/api/exercise-notes.ts:91-92`.
+ * `addExerciseToRoutine` did not previously decode 23505 errors; the
+ * physical `(routine_id, position)` unique was caught only at the DB
+ * boundary and surfaced as a raw 23505 toast.
+ */
+export class DuplicateRoutineExerciseError extends Error {
+  readonly code = "ROUTINE_EXERCISE_DUPLICATE" as const;
+  constructor() {
+    super("Exercise already in routine");
+    this.name = "DuplicateRoutineExerciseError";
+  }
+}
+
+function isDuplicateRoutineExerciseConstraint(err: SupabaseLikeError): boolean {
+  if (err.code !== "23505") return false;
+  const haystack = `${err.message ?? ""} ${err.details ?? ""}`;
+  return haystack.includes("routine_exercises_routine_exercise_uq");
+}
 
 export async function listRoutineExercises(
   routineId: string,
@@ -51,15 +87,17 @@ export async function addExerciseToRoutine(input: {
       routine_id: input.routineId,
       exercise_id: input.exerciseId,
       position: nextPosition,
-      target_sets: input.targets?.target_sets ?? null,
-      target_reps: input.targets?.target_reps ?? null,
-      target_weight: input.targets?.target_weight ?? null,
       target_rest_seconds: input.targets?.target_rest_seconds ?? null,
       notes: input.targets?.notes ?? null,
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isDuplicateRoutineExerciseConstraint(error)) {
+      throw new DuplicateRoutineExerciseError();
+    }
+    throw error;
+  }
   return data as RoutineExerciseRow;
 }
 
@@ -70,9 +108,6 @@ export async function updateRoutineExercise(
   const { data, error } = await supabase
     .from("routine_exercises")
     .update({
-      target_sets: patch.target_sets ?? null,
-      target_reps: patch.target_reps ?? null,
-      target_weight: patch.target_weight ?? null,
       target_rest_seconds: patch.target_rest_seconds ?? null,
       notes: patch.notes ?? null,
     })

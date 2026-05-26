@@ -15,10 +15,11 @@ import { z } from "zod";
 
 import { confirmDelete } from "~/components/confirm-delete";
 import { ExercisePicker } from "~/components/exercise-picker";
-import { RoutineExerciseRow } from "~/components/routine-exercise-row";
+import { RoutineExerciseCard } from "~/components/routine-exercise-card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import type { RoutineExerciseSetRow } from "~/db/types";
 import {
   useAddExerciseToRoutine,
   useRemoveExerciseFromRoutine,
@@ -26,6 +27,13 @@ import {
   useRoutineExercises,
   useUpdateRoutineExercise,
 } from "~/hooks/use-routine-exercises";
+import {
+  useAddRoutineExerciseSet,
+  useRemoveRoutineExerciseSet,
+  useReorderRoutineExerciseSets,
+  useRoutineExerciseSets,
+  useUpdateRoutineExerciseSet,
+} from "~/hooks/use-routine-exercise-sets";
 import {
   useRoutine,
   useSoftDeleteRoutine,
@@ -52,6 +60,12 @@ export default function RoutineBuilderScreen() {
   const updateEx = useUpdateRoutineExercise(id ?? "");
   const removeEx = useRemoveExerciseFromRoutine(id ?? "");
   const reorderEx = useReorderRoutineExercises(id ?? "");
+
+  const setsQ = useRoutineExerciseSets(id);
+  const addSet = useAddRoutineExerciseSet(id ?? "");
+  const updateSet = useUpdateRoutineExerciseSet(id ?? "");
+  const removeSet = useRemoveRoutineExerciseSet(id ?? "");
+  const reorderSets = useReorderRoutineExerciseSets(id ?? "");
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -133,6 +147,18 @@ export default function RoutineBuilderScreen() {
 
   const entries = exercisesQ.data ?? [];
 
+  // Group routine sets by routine_exercise_id for O(1) per-card lookup. Sorted
+  // by set_number ASC already at the API layer.
+  const setsByExercise = (() => {
+    const map = new Map<string, RoutineExerciseSetRow[]>();
+    for (const s of setsQ.data ?? []) {
+      const list = map.get(s.routine_exercise_id) ?? [];
+      list.push(s);
+      map.set(s.routine_exercise_id, list);
+    }
+    return map;
+  })();
+
   return (
     <ScrollView
       className="flex-1 bg-white dark:bg-black"
@@ -208,14 +234,15 @@ export default function RoutineBuilderScreen() {
           </View>
         ) : (
           entries.map((entry, idx) => (
-            <RoutineExerciseRow
+            <RoutineExerciseCard
               key={entry.id}
               entry={entry}
+              setsForExercise={setsByExercise.get(entry.id) ?? []}
               isFirst={idx === 0}
               isLast={idx === entries.length - 1}
               onMoveUp={() => move(idx, -1)}
               onMoveDown={() => move(idx, 1)}
-              onRemove={async () => {
+              onRemoveExercise={async () => {
                 const ok = await confirmDelete({
                   title: `Remove ${entry.exercise.name}?`,
                   message: "It stays in your library.",
@@ -227,22 +254,57 @@ export default function RoutineBuilderScreen() {
                   console.warn("Failed to remove", err);
                 }
               }}
-              onChangeTargets={async (patch) => {
+              onChangeRest={async (seconds) => {
                 try {
                   await updateEx.mutateAsync({
                     id: entry.id,
                     patch: {
-                      target_sets: entry.target_sets,
-                      target_reps: entry.target_reps,
-                      target_weight: entry.target_weight,
-                      target_rest_seconds: entry.target_rest_seconds,
-                      ...patch,
+                      target_rest_seconds: seconds,
+                      notes: entry.notes,
                     },
                   });
                 } catch (err) {
-                  console.warn("Failed to update targets", err);
+                  console.warn("Failed to update rest", err);
                 }
               }}
+              onAddSet={async (input) => {
+                try {
+                  await addSet.mutateAsync({
+                    routine_exercise_id: entry.id,
+                    set_type: input.set_type,
+                    parent_set_id: input.parent_set_id ?? null,
+                  });
+                } catch (err) {
+                  console.warn("Failed to add set", err);
+                }
+              }}
+              onUpdateSet={async (setId, patch) => {
+                try {
+                  await updateSet.mutateAsync({ id: setId, patch });
+                } catch (err) {
+                  console.warn("Failed to update set", err);
+                }
+              }}
+              onRemoveSet={async (setId) => {
+                try {
+                  await removeSet.mutateAsync(setId);
+                } catch (err) {
+                  console.warn("Failed to remove set", err);
+                }
+              }}
+              onReorderSets={async (orderedIds) => {
+                try {
+                  await reorderSets.mutateAsync({
+                    routineExerciseId: entry.id,
+                    orderedIds,
+                  });
+                } catch (err) {
+                  console.warn("Failed to reorder sets", err);
+                }
+              }}
+              confirmRemoveSet={(s) =>
+                s.target_reps != null && s.target_weight != null
+              }
             />
           ))
         )}

@@ -1,5 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
+import { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,14 +14,22 @@ import { RoutineListItem } from "~/components/routine-list-item";
 import { Button } from "~/components/ui/button";
 import type { RoutineRow } from "~/db/types";
 import { useRoutines } from "~/hooks/use-routines";
-import { useActiveSession, useStartSession } from "~/hooks/use-sessions";
+import {
+  useActiveSession,
+  useStartSession,
+  useStartSessionFromRoutine,
+} from "~/hooks/use-sessions";
 
 export default function WorkoutHome() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const active = useActiveSession();
   const start = useStartSession();
+  const startFromRoutineMut = useStartSessionFromRoutine();
   const routines = useRoutines();
+  // Per-routine in-flight guard. Mirrors `pickingId` at
+  // `src/components/exercise-picker.tsx:32`. State, not ref — same precedent.
+  const [pendingRoutineId, setPendingRoutineId] = useState<string | null>(null);
 
   // MAJ-NEW-1 fix: gate the entire render branch on active.isLoading so the
   // start handlers' `active.data` check has no race window during the initial
@@ -53,14 +62,23 @@ export default function WorkoutHome() {
       router.push(`/(app)/workout/${active.data.id}`);
       return;
     }
+    if (pendingRoutineId) return;
+    setPendingRoutineId(r.id);
     try {
-      const row = await start.mutateAsync({
+      const row = await startFromRoutineMut.mutateAsync({
         routine_id: r.id,
         name: r.name,
       });
       router.replace(`/(app)/workout/${row.id}`);
     } catch (err) {
+      // MAJ-2 (design-v2): seed failure rejects the mutation; we land here.
+      // The user stays on the routines list. The orphan empty session row
+      // remains in the DB and appears in History as in-progress; the user
+      // can resume or delete it from there. No silent navigation into a
+      // broken live screen.
       console.warn("Start failed", err);
+    } finally {
+      setPendingRoutineId(null);
     }
   };
 
@@ -127,6 +145,7 @@ export default function WorkoutHome() {
               onPress={() => startFromRoutine(item)}
               onEditPress={() => router.push(`/(app)/routines/${item.id}`)}
               disabled={hasActive}
+              pending={pendingRoutineId === item.id}
             />
           )}
           refreshing={routines.isRefetching}

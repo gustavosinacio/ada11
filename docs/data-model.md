@@ -35,13 +35,33 @@ routine_exercises        Template entries (which exercises in which routine)
   routine_id            uuid FK -> routines.id (cascade)
   exercise_id           uuid FK -> exercises.id (restrict)
   position              integer NOT NULL                          -- order within routine
-  target_sets           integer?
-  target_reps           integer?
-  target_weight         numeric(6,2)?                              -- kg
   target_rest_seconds   integer?                                   -- for rest timer
   notes                 text?
   created_at, updated_at, deleted_at
-  index: (routine_id), unique (routine_id, position)
+  index: (routine_id)
+  partial unique (routine_id, position) WHERE deleted_at IS NULL  -- 0012
+  partial unique (routine_id, exercise_id) WHERE deleted_at IS NULL  -- 0013
+
+routine_exercise_sets    Per-set targets within a routine_exercise
+  id                    uuid PK
+  user_id               uuid FK -> auth.users.id (cascade)        -- denormalized for RLS
+  routine_exercise_id   uuid FK -> routine_exercises.id (cascade)
+  set_number            integer NOT NULL                           -- 1, 2, 3 within routine_exercise
+  set_type              text NOT NULL                              -- 'warmup' | 'working' | 'dropset'
+  target_reps           integer?
+  target_weight         numeric(6,2)?                              -- kg
+  parent_set_id         uuid? FK -> routine_exercise_sets.id (set null)  -- drop sets chain
+  notes                 text?
+  created_at, updated_at, deleted_at
+  index: (routine_exercise_id, set_number)
+  partial unique (routine_exercise_id, set_number) WHERE deleted_at IS NULL  -- 0013
+
+  CHECK routine_exercise_sets_set_type_valid:
+    set_type IN ('warmup', 'working', 'dropset')
+
+  CHECK routine_exercise_sets_parent_matches_type:
+    (set_type = 'dropset' AND parent_set_id IS NOT NULL)
+    OR (set_type IN ('warmup', 'working') AND parent_set_id IS NULL)
 
 sessions                 A workout instance
   id           uuid PK

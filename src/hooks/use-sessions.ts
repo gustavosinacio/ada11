@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { seedSetsForSession } from "~/api/routine-exercise-sets";
 import {
   finishSession,
   getActiveSession,
@@ -11,6 +12,7 @@ import {
   updateSessionNotes,
   updateSessionTimes,
 } from "~/api/sessions";
+import { supabase } from "~/lib/supabase";
 
 const KEYS = {
   all: ["sessions"] as const,
@@ -47,6 +49,49 @@ export function useStartSession() {
     onSuccess: (row) => {
       qc.setQueryData(KEYS.active, row);
       qc.invalidateQueries({ queryKey: KEYS.all });
+    },
+  });
+}
+
+/**
+ * Start a session from a routine AND pre-seed `sets` rows from the routine's
+ * per-set config in one mutation.
+ *
+ * Failure policy: HARD FAIL (MAJ-2 in design-v2). No try/catch around
+ * `seedSetsForSession` — any seed error propagates to `mutateAsync`'s caller.
+ * The caller (`startFromRoutine` in `app/(app)/workout/index.tsx`) has its
+ * own `catch (err) { console.warn("Start failed", err); }` that keeps the
+ * user on the routines list. The orphan empty session row remains in the DB;
+ * it shows up in History as in-progress and the user can resume or delete
+ * it manually.
+ *
+ * No rollback: a rollback is itself a write that can fail, and an empty
+ * session is salvageable rather than destructive.
+ */
+export function useStartSessionFromRoutine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { routine_id: string; name?: string | null }) => {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      if (!userId) throw new Error("Not authenticated");
+
+      const session = await startSession({
+        routine_id: input.routine_id,
+        name: input.name ?? null,
+      });
+      // No try/catch — propagate seed failures (MAJ-2 hard-fail policy).
+      await seedSetsForSession({
+        session_id: session.id,
+        routine_id: input.routine_id,
+        user_id: userId,
+      });
+      return session;
+    },
+    onSuccess: (row) => {
+      qc.setQueryData(KEYS.active, row);
+      qc.invalidateQueries({ queryKey: KEYS.all });
+      qc.invalidateQueries({ queryKey: ["sets", row.id] });
     },
   });
 }

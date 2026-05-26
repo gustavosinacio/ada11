@@ -9,7 +9,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -47,9 +46,14 @@ export const exercises = pgTable(
   "exercises",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => authUsers.id, { onDelete: "cascade" }),
+    // Nullable: `null` = canonical (shared catalog, admin-managed via service
+    // role); non-null = a user-owned exercise. See migration
+    // 0011_canonical_exercises.sql. RLS SELECT widens to
+    // `user_id IS NULL OR auth.uid() = user_id`; the mutating policies stay
+    // scoped to `auth.uid() = user_id`, so canonical rows are app-immutable.
+    userId: uuid("user_id").references(() => authUsers.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     muscles: text("muscles").array().notNull().default(sql`'{}'::text[]`),
     equipment: text("equipment"),
@@ -57,9 +61,12 @@ export const exercises = pgTable(
     source: text("source"),
     ...timestamps,
   },
-  (t) => ({
-    userIdx: index("exercises_user_idx").on(t.userId),
-  }),
+  // canonical-exercises: index `exercises_user_idx` dropped in 0011 — no client
+  // query exercises it, the planner seq-scans 127 rows. Reintroduce as a
+  // partial index `(user_id) WHERE user_id IS NOT NULL` if user-owned row
+  // volume ever climbs (matches the SQL-source-of-truth precedent for partial
+  // indexes — see measurement_entries_user_day_idx and
+  // exercise_notes_user_exercise_active_uq comments below).
 );
 
 export const routines = pgTable(
@@ -92,19 +99,21 @@ export const routineExercises = pgTable(
       .notNull()
       .references(() => exercises.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
-    targetSets: integer("target_sets"),
-    targetReps: integer("target_reps"),
-    targetWeight: numeric("target_weight", { precision: 6, scale: 2 }),
     targetRestSeconds: integer("target_rest_seconds"),
     notes: text("notes"),
     ...timestamps,
   },
   (t) => ({
     routineIdx: index("routine_exercises_routine_idx").on(t.routineId),
-    routinePosUnique: uniqueIndex("routine_exercises_routine_position_uq").on(
-      t.routineId,
-      t.position,
-    ),
+    // Partial uniques live in SQL — drizzle-orm 0.38 has no .where() on
+    // uniqueIndex:
+    //   - `routine_exercises_routine_position_uq` on (routine_id, position)
+    //     WHERE deleted_at IS NULL — `0012_routine_exercises_unique_partial.sql`.
+    //   - `routine_exercises_routine_exercise_uq` on (routine_id, exercise_id)
+    //     WHERE deleted_at IS NULL — `0013_routine_exercise_sets.sql` (step 6).
+    //     Defense-in-depth on the bulk-seed natural-key in
+    //     `seedSetsForSession`; the picker already filters via `excludeIds`.
+    // Same convention as 0008/0010 partial uniques.
   }),
 );
 
@@ -213,6 +222,49 @@ export const measurementEntries = pgTable(
     // cannot be expressed ergonomically in Drizzle's typed index builder
     // (no first-class support for `date(... AT TIME ZONE ...)` or partial
     // predicates). Source of truth is supabase/migrations/0005_measurements.sql.
+  }),
+);
+
+export const routineExerciseSets = pgTable(
+  "routine_exercise_sets",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    routineExerciseId: uuid("routine_exercise_id")
+      .notNull()
+      .references(() => routineExercises.id, { onDelete: "cascade" }),
+    setNumber: integer("set_number").notNull(),
+    setType: text("set_type").notNull(), // 'warmup' | 'working' | 'dropset'
+    targetReps: integer("target_reps"),
+    targetWeight: numeric("target_weight", { precision: 6, scale: 2 }),
+    parentSetId: uuid("parent_set_id"),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (t) => ({
+    routineExerciseIdx: index("routine_exercise_sets_routine_exercise_idx").on(
+      t.routineExerciseId,
+      t.setNumber,
+    ),
+    parentFk: foreignKey({
+      columns: [t.parentSetId],
+      foreignColumns: [t.id],
+      name: "routine_exercise_sets_parent_set_id_fk",
+    }).onDelete("set null"),
+    setTypeCheck: check(
+      "routine_exercise_sets_set_type_valid",
+      sql`${t.setType} IN ('warmup','working','dropset')`,
+    ),
+    parentInvariant: check(
+      "routine_exercise_sets_parent_matches_type",
+      sql`(${t.setType} = 'dropset' AND ${t.parentSetId} IS NOT NULL)
+          OR (${t.setType} IN ('warmup','working') AND ${t.parentSetId} IS NULL)`,
+    ),
+    // Partial UNIQUE (routine_exercise_id, set_number) WHERE deleted_at IS NULL
+    // lives in supabase/migrations/0013_routine_exercise_sets.sql (Drizzle 0.38
+    // does not support partial uniques directly). SQL is source of truth.
   }),
 );
 

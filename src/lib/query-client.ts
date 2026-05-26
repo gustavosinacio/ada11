@@ -24,4 +24,4 @@ export const queryPersister = createAsyncStoragePersister({
 // Bump when a schema change makes previously persisted query data
 // incompatible with the current runtime (e.g. new required field added).
 // The PersistQueryClientProvider invalidates persisted cache when this changes.
-export const queryCacheBuster = "schema-2026-05-21-set-check";
+export const queryCacheBuster = "schema-2026-05-26-routine-sets";

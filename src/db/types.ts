@@ -5,6 +5,7 @@ import {
   exercises,
   measurementEntries,
   routineExercises,
+  routineExerciseSets,
   routines,
   sessions,
   sets,
@@ -20,6 +21,9 @@ export type NewRoutine = InferInsertModel<typeof routines>;
 
 export type RoutineExercise = InferSelectModel<typeof routineExercises>;
 export type NewRoutineExercise = InferInsertModel<typeof routineExercises>;
+
+export type RoutineExerciseSet = InferSelectModel<typeof routineExerciseSets>;
+export type NewRoutineExerciseSet = InferInsertModel<typeof routineExerciseSets>;
 
 export type Session = InferSelectModel<typeof sessions>;
 export type NewSession = InferInsertModel<typeof sessions>;
@@ -85,7 +89,13 @@ export const MUSCLE_GROUPS: readonly MuscleGroup[] = [
 
 export type ExerciseRow = {
   id: string;
-  user_id: string;
+  // `null` = canonical row (shared catalog, admin-managed via service role
+  // — visible to every authenticated user via the widened RLS SELECT policy
+  // `user_id IS NULL OR auth.uid() = user_id` introduced in
+  // supabase/migrations/0011_canonical_exercises.sql).
+  // Non-null = user-owned exercise (the "Created by you" chip predicate is
+  // `user_id !== null`).
+  user_id: string | null;
   name: string;
   muscles: string[];
   equipment: string | null;
@@ -112,10 +122,22 @@ export type RoutineExerciseRow = {
   routine_id: string;
   exercise_id: string;
   position: number;
-  target_sets: number | null;
-  target_reps: number | null;
-  target_weight: string | null;
   target_rest_seconds: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type RoutineExerciseSetRow = {
+  id: string;
+  user_id: string;
+  routine_exercise_id: string;
+  set_number: number;
+  set_type: SetType; // 'warmup' | 'working' | 'dropset'
+  target_reps: number | null;
+  target_weight: string | null; // numeric(6,2) — kg, internal
+  parent_set_id: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

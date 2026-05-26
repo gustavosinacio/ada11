@@ -8,6 +8,12 @@ type Props = {
   onPress?: () => void;
   onEditPress?: () => void;
   disabled?: boolean;
+  /**
+   * Fired when this routine's Start is in flight. Maps to the existing
+   * `disabled` visual (same opacity/dimming) — no new design tokens. OR'd
+   * with `disabled` at render time. Future spinner-on-pending is follow-up.
+   */
+  pending?: boolean;
 };
 
 /**
@@ -23,14 +29,16 @@ export function RoutineListItem({
   onPress,
   onEditPress,
   disabled = false,
+  pending = false,
 }: Props) {
-  const opacityClass = disabled ? "opacity-60" : "";
+  const effectivelyDisabled = disabled || pending;
+  const opacityClass = effectivelyDisabled ? "opacity-60" : "";
   return (
     <View
       className={`flex-row items-stretch border-b border-gray-100 dark:border-gray-900 ${opacityClass}`}
     >
       <Pressable
-        onPress={disabled ? undefined : onPress}
+        onPress={effectivelyDisabled ? undefined : onPress}
         accessibilityRole="button"
         accessibilityLabel={`Start workout: ${routine.name}`}
         className="flex-1 flex-row items-center px-4 py-4 active:bg-gray-50 dark:active:bg-gray-950"
