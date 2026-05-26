@@ -31,8 +31,8 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
 
 /**
  * Lists all auth.users via the SECURITY DEFINER `admin_list_users()` RPC.
- * Server-side guard raises 42501 if the caller is not an admin — the RPC
- * surfaces that as a PostgREST error which becomes a thrown Error here.
+ * Server-side guard raises 42501 if the caller is not an admin — surfaces
+ * here as a thrown PostgrestError.
  */
 export async function adminListUsers(): Promise<AdminUserRow[]> {
   const { data, error } = await supabase.rpc("admin_list_users");
@@ -42,15 +42,18 @@ export async function adminListUsers(): Promise<AdminUserRow[]> {
 
 export type AdminRoutineRow = RoutineRow;
 
+/**
+ * Admin-only RPC. The original client-side query (`from('routines').eq('user_id', X)`)
+ * leaked admin RLS into every page — see 0017 migration header. Now goes
+ * through `admin_routines_for_user`, which checks `is_admin(auth.uid())`
+ * before bypassing RLS via SECURITY DEFINER.
+ */
 export async function adminListRoutinesForUser(
   userId: string,
 ): Promise<AdminRoutineRow[]> {
-  const { data, error } = await supabase
-    .from("routines")
-    .select("*")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc("admin_routines_for_user", {
+    target_user_id: userId,
+  });
   if (error) throw error;
   return (data ?? []) as AdminRoutineRow[];
 }
@@ -60,12 +63,9 @@ export type AdminSessionRow = SessionRow;
 export async function adminListSessionsForUser(
   userId: string,
 ): Promise<AdminSessionRow[]> {
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .order("started_at", { ascending: false });
+  const { data, error } = await supabase.rpc("admin_sessions_for_user", {
+    target_user_id: userId,
+  });
   if (error) throw error;
   return (data ?? []) as AdminSessionRow[];
 }
@@ -76,53 +76,18 @@ export type AdminRoutineDetail = {
   sets: RoutineExerciseSetRow[];
 };
 
-/** Read-only detail load for one routine — routine + entries (with their
- * exercise FK joined) + all per-set targets across the routine. */
+/**
+ * Single RPC round-trip — server-side jsonb_build_object packs routine +
+ * entries (with `exercise` joined) + per-set targets into one payload.
+ */
 export async function adminGetRoutineDetail(
   routineId: string,
 ): Promise<AdminRoutineDetail> {
-  const [routineRes, entriesRes, setsRes] = await Promise.all([
-    supabase
-      .from("routines")
-      .select("*")
-      .eq("id", routineId)
-      .is("deleted_at", null)
-      .single(),
-    supabase
-      .from("routine_exercises")
-      .select("*, exercise:exercises(*)")
-      .eq("routine_id", routineId)
-      .is("deleted_at", null)
-      .order("position", { ascending: true }),
-    supabase
-      .from("routine_exercise_sets")
-      .select("*")
-      .in(
-        "routine_exercise_id",
-        // Inline subquery via PostgREST `in.(values)` is not possible; we
-        // accept a small over-fetch and filter client-side. For typical
-        // routines (≤10 exercises × ≤8 sets) this is a non-issue.
-        (
-          await supabase
-            .from("routine_exercises")
-            .select("id")
-            .eq("routine_id", routineId)
-            .is("deleted_at", null)
-        ).data?.map((r) => r.id) ?? [],
-      )
-      .is("deleted_at", null)
-      .order("set_number", { ascending: true }),
-  ]);
-  if (routineRes.error) throw routineRes.error;
-  if (entriesRes.error) throw entriesRes.error;
-  if (setsRes.error) throw setsRes.error;
-  return {
-    routine: routineRes.data as RoutineRow,
-    entries: (entriesRes.data ?? []) as (RoutineExerciseRow & {
-      exercise: ExerciseRow;
-    })[],
-    sets: (setsRes.data ?? []) as RoutineExerciseSetRow[],
-  };
+  const { data, error } = await supabase.rpc("admin_routine_detail", {
+    target_routine_id: routineId,
+  });
+  if (error) throw error;
+  return data as AdminRoutineDetail;
 }
 
 export type AdminSessionDetail = {
@@ -130,30 +95,12 @@ export type AdminSessionDetail = {
   sets: (SetRow & { exercise: ExerciseRow })[];
 };
 
-/** Read-only detail load for one session — session row + all non-deleted
- * sets joined with their exercise. Server-side ordered by set_number
- * (matching the live workout's stable-order convention from `sets.ts`). */
 export async function adminGetSessionDetail(
   sessionId: string,
 ): Promise<AdminSessionDetail> {
-  const [sessionRes, setsRes] = await Promise.all([
-    supabase
-      .from("sessions")
-      .select("*")
-      .eq("id", sessionId)
-      .is("deleted_at", null)
-      .single(),
-    supabase
-      .from("sets")
-      .select("*, exercise:exercises(*)")
-      .eq("session_id", sessionId)
-      .is("deleted_at", null)
-      .order("set_number", { ascending: true }),
-  ]);
-  if (sessionRes.error) throw sessionRes.error;
-  if (setsRes.error) throw setsRes.error;
-  return {
-    session: sessionRes.data as SessionRow,
-    sets: (setsRes.data ?? []) as (SetRow & { exercise: ExerciseRow })[],
-  };
+  const { data, error } = await supabase.rpc("admin_session_detail", {
+    target_session_id: sessionId,
+  });
+  if (error) throw error;
+  return data as AdminSessionDetail;
 }
