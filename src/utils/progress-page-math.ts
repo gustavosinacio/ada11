@@ -532,3 +532,55 @@ export function computeStreaks(
 
   return { current, best };
 }
+
+// ---------------------------------------------------------------------------
+// presentSessionVolumeChart
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a per-session volume time-series for `<ProgressChart>`. Returns one
+ * `DataPoint` per finished session (sessions with `ended_at != null`),
+ * ordered by `started_at` ascending (oldest left, newest right).
+ *
+ * Volume kernel = `groupSessionVolumes` (same as the History rows + verdict
+ * screen) — cross-surface consistency by construction.
+ *
+ * Cost: O(N) on `rows.length` (one pass for grouping + one pass for ordering).
+ * The user flagged "this might be a costly calculation" on the original spec
+ * — the kernel is in-memory aggregation over an already-paginated dataset
+ * (`useLifetimeWeeklyVolume()` caches the full per-set roll-up at TanStack
+ * staleTime 60s). Postgres-side window-function aggregation was an
+ * alternative but unnecessary at current data volumes.
+ *
+ * `label` is the short date of the session's `started_at` (year-aware via
+ * `formatShortDate`).
+ */
+export function presentSessionVolumeChart(
+  rows: WeeklyVolumeRow[],
+): { label: string; value: number; sessionId: string; startedAt: string }[] {
+  const byId = new Map<string, { startedAt: string; volumeKg: number }>();
+  // Track started_at by session_id (rows of same session repeat it).
+  for (const row of rows) {
+    const startedAt = row.sessions.started_at;
+    if (!byId.has(row.session_id)) {
+      byId.set(row.session_id, { startedAt, volumeKg: 0 });
+    }
+  }
+  const volumes = groupSessionVolumes(rows);
+  for (const [id, vol] of volumes) {
+    const entry = byId.get(id);
+    if (entry) entry.volumeKg = vol;
+  }
+  const list = [...byId.entries()].map(([sessionId, { startedAt, volumeKg }]) => ({
+    sessionId,
+    startedAt,
+    volumeKg,
+  }));
+  list.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  return list.map(({ sessionId, startedAt, volumeKg }) => ({
+    sessionId,
+    startedAt,
+    label: formatShortDate(parseISO(startedAt)),
+    value: volumeKg,
+  }));
+}
