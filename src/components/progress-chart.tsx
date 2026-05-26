@@ -15,7 +15,11 @@ type Props = {
   formatValue?: (v: number) => string;
 };
 
-const PADDING = { top: 20, right: 16, bottom: 40, left: 48 };
+// Left padding fits a 6-character formatted volume ("99,999 kg" ≈ 60px), so
+// session-volume + measurement charts don't clip the leading digit on
+// thousands-separator numbers. Was 48px (sized for 2-3 digit values) until
+// the per-session volume chart shipped 5-digit totals.
+const PADDING = { top: 20, right: 16, bottom: 40, left: 64 };
 
 export function ProgressChart({
   data,

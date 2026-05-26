@@ -1,11 +1,22 @@
-import { useMemo } from "react";
-import { Dimensions, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Dimensions, Pressable, Text, View } from "react-native";
 
 import { ProgressChart } from "~/components/progress-chart";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { presentSessionVolumeChart } from "~/utils/progress-page-math";
 import { formatVolume } from "~/utils/units";
+
+type WindowOption = 12 | 26 | 52 | "all";
+
+const WINDOW_OPTIONS: { value: WindowOption; label: string }[] = [
+  { value: 12, label: "12w" },
+  { value: 26, label: "26w" },
+  { value: 52, label: "52w" },
+  { value: "all", label: "All" },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Per-session volume time-series — one point per finished session, oldest
@@ -14,42 +25,87 @@ import { formatVolume } from "~/utils/units";
  * (below). Volume kernel = `groupSessionVolumes`, the same as History rows
  * and the verdict screen — cross-surface consistency by construction.
  *
- * Cost concern flagged in features.md was unfounded: the dataset is already
- * paginated server-side by `useLifetimeWeeklyVolume()` (TanStack staleTime
- * 60s), and the per-session grouping is O(N) in-memory.
+ * Window selector: 12w (default) / 26w / 52w / All. Filters rows by
+ * `sessions.started_at` before grouping so the chart density stays readable.
+ * State is component-local (not persisted) — independent of the user's
+ * `max_volume_window_weeks` preference, which governs PR/Max surfaces.
  */
 export function SessionVolumeChartSection(): React.JSX.Element | null {
   const unit = useWeightUnit();
   const { data, isLoading } = useLifetimeWeeklyVolume();
+  const [windowWeeks, setWindowWeeks] = useState<WindowOption>(12);
 
-  // Keep `value` in kg — formatVolume converts to the user's unit for both
-  // the axis labels and any callout. Axis arithmetic stays in kg so the chart
-  // doesn't have to re-scale when the user toggles unit.
+  // Filter rows by started_at >= now - windowWeeks * 7d before grouping. The
+  // presenter still does the heavy lifting; we just trim the input set.
   const points = useMemo(() => {
     if (!data) return [];
-    return presentSessionVolumeChart(data).map((p) => ({
+    let filtered = data;
+    if (windowWeeks !== "all") {
+      const cutoffMs = Date.now() - windowWeeks * 7 * DAY_MS;
+      filtered = data.filter(
+        (row) => new Date(row.sessions.started_at).getTime() >= cutoffMs,
+      );
+    }
+    return presentSessionVolumeChart(filtered).map((p) => ({
       label: p.label,
       value: p.value,
     }));
-  }, [data]);
+  }, [data, windowWeeks]);
 
   if (isLoading) return null;
-  if (points.length === 0) return null;
 
   const width = Dimensions.get("window").width - 32;
 
   return (
     <View className="mt-2 px-4 pb-2">
-      <Text className="mb-1 text-xs uppercase tracking-wide text-gray-500">
-        Volume per session
-      </Text>
-      <ProgressChart
-        data={points}
-        width={width}
-        height={180}
-        title=""
-        formatValue={(v) => formatVolume(v, unit)}
-      />
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text className="text-xs uppercase tracking-wide text-gray-500">
+          Volume per session
+        </Text>
+        <View className="flex-row gap-1">
+          {WINDOW_OPTIONS.map((opt) => {
+            const selected = windowWeeks === opt.value;
+            return (
+              <Pressable
+                key={String(opt.value)}
+                onPress={() => setWindowWeeks(opt.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Show last ${opt.label}`}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                className={`rounded-full px-2.5 py-1 ${
+                  selected
+                    ? "bg-black dark:bg-white"
+                    : "border border-gray-300 dark:border-gray-700"
+                }`}
+              >
+                <Text
+                  className={`text-xs font-medium ${
+                    selected
+                      ? "text-white dark:text-black"
+                      : "text-gray-700 dark:text-gray-300"
+                  }`}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+      {points.length === 0 ? (
+        <Text className="py-4 text-center text-sm text-gray-500">
+          No sessions in this range
+        </Text>
+      ) : (
+        <ProgressChart
+          data={points}
+          width={width}
+          height={180}
+          title=""
+          formatValue={(v) => formatVolume(v, unit)}
+        />
+      )}
     </View>
   );
 }
