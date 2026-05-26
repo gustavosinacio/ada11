@@ -46,10 +46,10 @@ export async function listSetsForSession(sessionId: string): Promise<SetRow[]> {
     .select("*")
     .eq("session_id", sessionId)
     .is("deleted_at", null)
-    // Pin nulls last so unchecked drafts appear after checked sets, and break
-    // intra-session timestamp ties (e.g. after bulkCheckAllInSession) with the
-    // unique set_number per (session_id, exercise_id).
-    .order("completed_at", { ascending: true, nullsFirst: false })
+    // Stable position per (session_id, exercise_id) — set_number is monotonic
+    // at insert time, so rows hold their slot regardless of check state. The
+    // previous completed_at-first ordering surfaced a UX bug: checking a set
+    // below an unchecked one bubbled it above the unchecked rows.
     .order("set_number", { ascending: true });
   if (error) throw error;
   return (data ?? []) as SetRow[];
