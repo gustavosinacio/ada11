@@ -161,6 +161,14 @@ export default function AppLayout() {
             tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
           }}
         />
+        {/*
+          Admin page lives outside the bottom-tab visible set (href: null
+          mirrors routines / measurements). Reachable from the Profile
+          screen via a conditionally-rendered link when useIsAdmin() is
+          true. Server-side RLS + the admin_list_users() function guard
+          are the authoritative gate; this is just a navigation hint.
+        */}
+        <Tabs.Screen name="admin" options={{ href: null }} />
       </Tabs>
     </View>
   );

@@ -1,8 +1,9 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, Ruler } from "lucide-react-native";
+import { ChevronRight, Ruler, Shield } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Button } from "~/components/ui/button";
+import { useIsAdmin } from "~/hooks/use-admin";
 import {
   MAX_VOLUME_WINDOW_OPTIONS,
   type LengthUnit,
@@ -210,6 +211,8 @@ export default function ProfileScreen() {
         <ChevronRight color="#9ca3af" size={20} />
       </Pressable>
 
+      <AdminLink />
+
       <Text className="mb-2 text-sm font-medium uppercase text-gray-500">
         About
       </Text>
@@ -220,6 +223,26 @@ export default function ProfileScreen() {
 
       <Button label="Sign out" variant="destructive" onPress={signOut} />
     </ScrollView>
+  );
+}
+
+function AdminLink() {
+  const router = useRouter();
+  const { data: isAdmin } = useIsAdmin();
+  if (!isAdmin) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Admin"
+      onPress={() => router.push("/(app)/admin")}
+      className="mb-6 flex-row items-center justify-between rounded-lg border border-gray-200 px-4 py-4 dark:border-gray-800"
+    >
+      <View className="flex-row items-center">
+        <Shield color="#9ca3af" size={20} />
+        <Text className="ml-3 text-base text-black dark:text-white">Admin</Text>
+      </View>
+      <ChevronRight color="#9ca3af" size={20} />
+    </Pressable>
   );
 }
 
