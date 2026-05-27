@@ -1,9 +1,13 @@
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
+import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import type { SessionSets } from "~/api/progress";
 import type { WeightUnit } from "~/db/types";
-import { presentExerciseSessionRow } from "~/utils/exercise-session-row-format";
+import {
+  presentExerciseSessionRow,
+  presentSetVolumeLines,
+} from "~/utils/exercise-session-row-format";
 import { formatDisplayDate } from "~/utils/format-display-date";
 
 type Props = {
@@ -22,7 +26,9 @@ type Props = {
  *
  * Line 1: visible date (no time). Line 2: aggregate "N × volume" — only
  * rendered when the presenter returns a non-empty `volumeLabel`
- * (warmup-only sessions degrade gracefully to a date-only row).
+ * (warmup-only sessions degrade gracefully to a date-only row). Below that,
+ * one line per non-warmup set ("100 × 8 — 800 kg") so the row shows the
+ * actual sets, not just the count + total. Per-set volumes sum to the total.
  *
  * A11y label includes the time-of-day so same-day sessions stay
  * disambiguated for screen readers and automation (design-v2 MAJ-1).
@@ -32,6 +38,7 @@ export function ExerciseSessionRow({ session, unit, onPress }: Props) {
     sets: session.sets,
     unit,
   });
+  const setLines = presentSetVolumeLines({ sets: session.sets, unit });
   const visibleDate = formatDisplayDate(session.started_at, {
     includeWeekday: true,
   });
@@ -54,6 +61,11 @@ export function ExerciseSessionRow({ session, unit, onPress }: Props) {
           </Text>
           {volumeLabel !== "" ? (
             <Text className="mt-0.5 text-sm text-gray-500">{volumeLabel}</Text>
+          ) : null}
+          {setLines.length > 0 ? (
+            <View className="mt-1.5">
+              <SetVolumeBreakdown lines={setLines} />
+            </View>
           ) : null}
         </View>
         <ChevronRight color="#9ca3af" size={18} />

@@ -97,6 +97,53 @@ describe("computeVolumeTarget — no-pr state", () => {
   });
 });
 
+describe("computeVolumeTarget — previousMaxSets (max-session breakdown)", () => {
+  it("chasing: returns the sets of the session that achieved previousMaxKg", () => {
+    const winner = [
+      mkSet({ set_number: 1, weight: "100", reps: 8, session_id: "s2" }),
+      mkSet({ set_number: 2, weight: "110", reps: 6, session_id: "s2" }),
+    ]; // 800 + 660 = 1460
+    const past = [
+      mkSession("s1", [mkSet({ set_number: 1, weight: "100", reps: 5 })]), // 500
+      mkSession("s2", winner), // 1460 — the max
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          weight: "50",
+          reps: 2,
+          completed_at: "2026-05-21T10:05:00Z",
+        }),
+      ],
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.previousMaxKg).toBe(1460);
+    // Exact reference: the winning session's set array, not the runner-up's.
+    expect(state.previousMaxSets).toBe(winner);
+  });
+
+  it("surpassed: still carries the max session's sets", () => {
+    const winner = [mkSet({ set_number: 1, weight: "100", reps: 10 })]; // 1000
+    const state = computeVolumeTarget({
+      pastSessions: [mkSession("s1", winner)],
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          weight: "200",
+          reps: 10,
+          completed_at: "2026-05-21T10:05:00Z",
+        }),
+      ], // 2000 > 1000 → surpassed
+    });
+    expect(state.kind).toBe("surpassed");
+    if (state.kind !== "surpassed") return;
+    expect(state.previousMaxSets).toBe(winner);
+  });
+});
+
 describe("computeVolumeTarget — chasing state", () => {
   it("returns chasing with correct gap and reps when current weight is finite", () => {
     // Previous best session: 100 × 10 = 1000 kg.

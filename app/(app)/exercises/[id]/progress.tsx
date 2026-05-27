@@ -14,12 +14,14 @@ import {
 import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { ExerciseSessionRow } from "~/components/exercise-session-row";
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
+import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import { useAllExercise } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
-import { formatShortDate } from "~/utils/format-display-date";
+import { presentSetVolumeLines } from "~/utils/exercise-session-row-format";
+import { formatDisplayDate, formatShortDate } from "~/utils/format-display-date";
 import { epley1RM } from "~/utils/formulas";
-import { formatWeight, kgToLbs } from "~/utils/units";
+import { formatVolume, formatWeight, kgToLbs } from "~/utils/units";
 
 /**
  * Per-exercise progress chart.
@@ -85,46 +87,55 @@ export default function ExerciseProgressScreen() {
     />
   );
 
-  const { e1rmData, volumeData, bestE1rm, totalSessions } = useMemo(() => {
-    const sessions = progressQ.data ?? [];
-    const e1rm: DataPoint[] = [];
-    const vol: DataPoint[] = [];
-    let best = 0;
+  const { e1rmData, volumeData, bestE1rm, totalSessions, maxVolumeSession, maxVolumeKg } =
+    useMemo(() => {
+      const sessions = progressQ.data ?? [];
+      const e1rm: DataPoint[] = [];
+      const vol: DataPoint[] = [];
+      let best = 0;
+      let maxVolKg = 0;
+      let maxVolSession: (typeof sessions)[number] | null = null;
 
-    for (const s of sessions) {
-      const label = formatShortDate(s.started_at);
-      let sessionBestE1rm = 0;
-      let sessionVolume = 0;
+      for (const s of sessions) {
+        const label = formatShortDate(s.started_at);
+        let sessionBestE1rm = 0;
+        let sessionVolume = 0;
 
-      for (const set of s.sets) {
-        if (set.set_type === "warmup") continue;
-        const w = set.weight ? parseFloat(set.weight) : 0;
-        const r = set.reps ?? 0;
-        if (w > 0 && r > 0) {
-          const est = epley1RM(w, r);
-          if (est > sessionBestE1rm) sessionBestE1rm = est;
-          sessionVolume += w * r;
+        for (const set of s.sets) {
+          if (set.set_type === "warmup") continue;
+          const w = set.weight ? parseFloat(set.weight) : 0;
+          const r = set.reps ?? 0;
+          if (w > 0 && r > 0) {
+            const est = epley1RM(w, r);
+            if (est > sessionBestE1rm) sessionBestE1rm = est;
+            sessionVolume += w * r;
+          }
+        }
+
+        if (sessionBestE1rm > 0) {
+          const displayE1rm = unit === "kg" ? sessionBestE1rm : kgToLbs(sessionBestE1rm);
+          e1rm.push({ label, value: displayE1rm });
+          if (sessionBestE1rm > best) best = sessionBestE1rm;
+        }
+        if (sessionVolume > 0) {
+          const displayVol = unit === "kg" ? sessionVolume : kgToLbs(sessionVolume);
+          vol.push({ label, value: displayVol });
+          if (sessionVolume > maxVolKg) {
+            maxVolKg = sessionVolume;
+            maxVolSession = s;
+          }
         }
       }
 
-      if (sessionBestE1rm > 0) {
-        const displayE1rm = unit === "kg" ? sessionBestE1rm : kgToLbs(sessionBestE1rm);
-        e1rm.push({ label, value: displayE1rm });
-        if (sessionBestE1rm > best) best = sessionBestE1rm;
-      }
-      if (sessionVolume > 0) {
-        const displayVol = unit === "kg" ? sessionVolume : kgToLbs(sessionVolume);
-        vol.push({ label, value: displayVol });
-      }
-    }
-
-    return {
-      e1rmData: e1rm,
-      volumeData: vol,
-      bestE1rm: best,
-      totalSessions: sessions.length,
-    };
-  }, [progressQ.data, unit]);
+      return {
+        e1rmData: e1rm,
+        volumeData: vol,
+        bestE1rm: best,
+        totalSessions: sessions.length,
+        maxVolumeSession: maxVolSession,
+        maxVolumeKg: maxVolKg,
+      };
+    }, [progressQ.data, unit]);
 
   // The query returns ASC for chart plotting (left→right oldest→newest).
   // The "Sessions" list below wants newest first, so reverse a shallow copy.
@@ -190,6 +201,30 @@ export default function ExerciseProgressScreen() {
               }
             />
           </View>
+
+          {maxVolumeSession ? (
+            <View className="mt-6 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <Text className="text-sm font-medium uppercase text-gray-500">
+                Max volume session
+              </Text>
+              <View className="mb-2 mt-1 flex-row items-baseline justify-between">
+                <Text className="text-base font-semibold text-black dark:text-white">
+                  {formatDisplayDate(maxVolumeSession.started_at, {
+                    includeWeekday: true,
+                  })}
+                </Text>
+                <Text className="text-base font-semibold tabular-nums text-black dark:text-white">
+                  {formatVolume(maxVolumeKg, unit)}
+                </Text>
+              </View>
+              <SetVolumeBreakdown
+                lines={presentSetVolumeLines({
+                  sets: maxVolumeSession.sets,
+                  unit,
+                })}
+              />
+            </View>
+          ) : null}
 
           <View className="mt-6">
             {/* keep in sync with SECTION_HEADER on history/week/[isoWeek].tsx:20-21 */}

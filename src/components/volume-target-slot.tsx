@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 
+import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import type { SetRow } from "~/db/types";
 import {
   useMaxVolumeWindowWeeks,
   useWeightUnit,
 } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
+import { presentSetVolumeLines } from "~/utils/exercise-session-row-format";
 import { formatVolume, formatWeight } from "~/utils/units";
 import { computeVolumeTarget } from "~/utils/volume-target";
 import { computeWindowStart } from "~/utils/window-utils";
@@ -61,6 +63,9 @@ export function VolumeTargetSlot({
     const maxDisplay = formatVolume(state.previousMaxKg, unit);
     const nowDisplay = formatVolume(state.runningKg, unit);
     const gapDisplay = formatVolume(state.gapKg, unit);
+    // Per-set breakdown of the session that achieved the Max, so the user can
+    // see *how* the previous best was built (Feature: volume per set on max).
+    const maxLines = presentSetVolumeLines({ sets: state.previousMaxSets, unit });
     // MAJ-1 fix (option c): suppress the reps clause when nothing has been
     // checked yet (`runningKg === 0`). Without this, a draft `100 × 5` (still
     // unchecked) renders as "Now 0 kg · ≈ 10 reps @ 100 kg" — internally
@@ -113,6 +118,14 @@ export function VolumeTargetSlot({
             </>
           ) : null}
         </Text>
+        {maxLines.length > 0 ? (
+          <View className="mt-1">
+            <Text className="mb-0.5 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Max session — volume per set
+            </Text>
+            <SetVolumeBreakdown lines={maxLines} />
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -122,6 +135,10 @@ export function VolumeTargetSlot({
   const overflowDisplay = formatVolume(state.overflowKg, unit);
   const surMaxDisplay = formatVolume(state.previousMaxKg, unit);
   const surNowDisplay = formatVolume(state.runningKg, unit);
+  const surMaxLines = presentSetVolumeLines({
+    sets: state.previousMaxSets,
+    unit,
+  });
   const copy = isMatch
     ? "Matched your previous best — one more rep is a PR"
     : `New PR! +${overflowDisplay} over your previous`;
@@ -148,6 +165,14 @@ export function VolumeTargetSlot({
           {surNowDisplay}
         </Text>
       </Text>
+      {surMaxLines.length > 0 ? (
+        <View className="mt-1">
+          <Text className="mb-0.5 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            Prev. max session — volume per set
+          </Text>
+          <SetVolumeBreakdown lines={surMaxLines} />
+        </View>
+      ) : null}
     </View>
   );
 }

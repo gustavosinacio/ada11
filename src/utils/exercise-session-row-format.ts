@@ -12,8 +12,9 @@
  * vitest like the other presenters (`session-row-format.ts`,
  * `set-display.ts`).
  */
-import type { SetRow, WeightUnit } from "~/db/types";
+import type { SetRow, SetType, WeightUnit } from "~/db/types";
 
+import { displayReps, displayWeight } from "~/utils/set-display";
 import { formatVolume } from "~/utils/units";
 import { sumPastVolume } from "~/utils/volume-target";
 
@@ -58,4 +59,54 @@ export function presentExerciseSessionRow(input: {
       : "";
 
   return { count, volumeKg, volumeLabel };
+}
+
+/** One non-warmup set, presented for a per-set "weight × reps — volume" line. */
+export type SetVolumeLine = {
+  setNumber: number;
+  setType: SetType;
+  /** `"100 × 8"` — weight in the display unit (via `displayWeight`, no unit
+   *  suffix for compactness), reps as integer. `"—"` for missing parts. */
+  label: string;
+  /** Per-set volume in kg: `weight × reps` when both are usable (`w>0 && r>0`),
+   *  else 0. The sum of these equals `sumPastVolume(sets)` by construction. */
+  volumeKg: number;
+  /** `formatVolume(volumeKg, unit)` when `volumeKg > 0`, else `""` (so a sloppy
+   *  set with null/zero weight/reps renders no volume chip). */
+  volumeLabel: string;
+};
+
+/**
+ * Per-set breakdown for the "Sessions" rows on `/(app)/exercises/{id}/progress`
+ * and for the max-volume session callouts (live `<VolumeTargetSlot>` + progress
+ * page). Skips warmups — mirrors `sumPastVolume`'s set scope — so the per-set
+ * `volumeKg` values sum exactly to the session's displayed total volume.
+ *
+ * Includes non-warmup sets even when `weight`/`reps` are null/0 (they render
+ * `"—"` and contribute 0 volume) so the line count matches the user's
+ * perception of "I did N sets" — same convention as `count` above.
+ */
+export function presentSetVolumeLines(input: {
+  sets: SetRow[];
+  unit: WeightUnit;
+}): SetVolumeLine[] {
+  const { sets, unit } = input;
+  const lines: SetVolumeLine[] = [];
+
+  for (const s of sets) {
+    if (s.set_type === "warmup") continue;
+    const w = s.weight ? parseFloat(s.weight) : NaN;
+    const r = s.reps ?? 0;
+    const counts = Number.isFinite(w) && w > 0 && r > 0;
+    const volumeKg = counts ? w * r : 0;
+    lines.push({
+      setNumber: s.set_number,
+      setType: s.set_type,
+      label: `${displayWeight(s.weight, unit)} × ${displayReps(s.reps)}`,
+      volumeKg,
+      volumeLabel: volumeKg > 0 ? formatVolume(volumeKg, unit) : "",
+    });
+  }
+
+  return lines;
 }

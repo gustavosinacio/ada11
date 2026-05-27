@@ -2,9 +2,15 @@
 
 ## Done
 
+[x] Exercise progress "Sessions" rows now show each set (weight × reps) with its per-set volume, not just "N × total volume". New pure presenter `presentSetVolumeLines(sets, unit)` in `exercise-session-row-format.ts` (the deferred per-set line the file already anticipated) + shared `<SetVolumeBreakdown>` component. Per-set volumes sum to the row total by construction — same scope as `sumPastVolume` (warmups excluded, `w>0 && r>0`). 8 new unit tests; no e2e assertion change needed (the aggregate `^\d+ × [\d,]+ (kg|lbs)$` regex still uniquely matches the total line — per-set labels like "100 × 8" have no unit suffix).
+
+[x] Volume per set on exercise max volume (both surfaces). `computeVolumeTarget` now also returns `previousMaxSets` — the sets of the best single-session volume. The live `<VolumeTargetSlot>` renders that session's per-set breakdown beneath the "Max …" line (chasing + surpassed states); the exercise progress page gains a "Max volume session" callout (date + total + per-set breakdown). Both reuse `<SetVolumeBreakdown>` + `presentSetVolumeLines`. 2 new kernel unit tests assert the winning session's set array is returned by reference.
+
+[x] Set checkbox loading state. While a check/uncheck mutation is in flight the checkbox swaps to an `ActivityIndicator` and disables re-taps (per-set `pendingCheckIds` set tracked on the workout screen, threaded `<ExerciseBlock>` → `<SetInput>` via `pendingCheckSetIds`/`checkPending`). Built on top of the optimistic flip from the prior change — the row still greens instantly, the spinner is a "saving" affordance, and the disable closes the rapid re-toggle race the rest-timer observer was guarding against. Existing auto-fill + rest-timer e2e pass (the re-check test's 5s/1.5s waits exceed the brief pending window).
+
+
+
 [x] Create-routine lands on the builder, not the routines list. `app/(app)/routines/new.tsx` now `router.replace`s into `/routines/{newId}` on save (instead of `router.back()`), so the user can add exercises immediately after picking the name + notes — no round-trip via the workout list + Edit pencil. `replace` (not `push`) so the browser/native back button skips the now-empty create form. Minimal 1-line behaviour change; existing routes/screens untouched.
-
-
 
 [x] Reorder exercises / sets — delay eliminated via optimistic UI updates. `useReorderRoutineExercises` and `useReorderRoutineExerciseSets` now rewrite the TanStack cache synchronously in `onMutate` so the chevron tap is instant; the actual server-side two-phase swap (2N sequential PATCHes for N items) runs in the background, with `onError` restoring the previous order on failure and `onSettled` invalidating to reconcile. The user's spec said "if we can't remove the delay, show a loading state" — optimistic removes the delay outright, no loading state needed. No new tests (UI-only behavioural change; existing reorder e2e specs still pass because the final state matches).
 

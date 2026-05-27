@@ -14,7 +14,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { SetRow } from "~/db/types";
-import { presentExerciseSessionRow } from "~/utils/exercise-session-row-format";
+import {
+  presentExerciseSessionRow,
+  presentSetVolumeLines,
+} from "~/utils/exercise-session-row-format";
 
 /**
  * Builds a `SetRow`-shaped row good enough for the presenter. The presenter
@@ -122,6 +125,79 @@ describe("presentExerciseSessionRow — sloppy data", () => {
       volumeKg: 0,
       volumeLabel: "",
     });
+  });
+});
+
+describe("presentSetVolumeLines — happy path", () => {
+  it("one line per non-warmup set with label + per-set volume", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, weight: "100", reps: 8 }),
+      makeSet({ set_number: 2, weight: "100", reps: 8 }),
+      makeSet({ set_number: 3, weight: "110", reps: 6 }),
+    ];
+    expect(presentSetVolumeLines({ sets, unit: "kg" })).toEqual([
+      { setNumber: 1, setType: "working", label: "100 × 8", volumeKg: 800, volumeLabel: "800 kg" },
+      { setNumber: 2, setType: "working", label: "100 × 8", volumeKg: 800, volumeLabel: "800 kg" },
+      { setNumber: 3, setType: "working", label: "110 × 6", volumeKg: 660, volumeLabel: "660 kg" },
+    ]);
+  });
+
+  it("per-set volumeKg sums to sumPastVolume (the row total)", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, set_type: "warmup", weight: "40", reps: 10 }),
+      makeSet({ set_number: 2, weight: "100", reps: 8 }),
+      makeSet({ set_number: 3, weight: "110", reps: 6 }),
+    ];
+    const lines = presentSetVolumeLines({ sets, unit: "kg" });
+    const sum = lines.reduce((acc, l) => acc + l.volumeKg, 0);
+    expect(sum).toBe(presentExerciseSessionRow({ sets, unit: "kg" }).volumeKg);
+  });
+});
+
+describe("presentSetVolumeLines — warmups + dropsets", () => {
+  it("excludes warmups, includes dropsets in the volume", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, set_type: "warmup", weight: "40", reps: 10 }),
+      makeSet({ set_number: 2, set_type: "working", weight: "100", reps: 8 }),
+      makeSet({ set_number: 3, set_type: "dropset", weight: "60", reps: 12 }),
+    ];
+    const lines = presentSetVolumeLines({ sets, unit: "kg" });
+    expect(lines.map((l) => l.setType)).toEqual(["working", "dropset"]);
+    expect(lines.map((l) => l.volumeKg)).toEqual([800, 720]);
+  });
+});
+
+describe("presentSetVolumeLines — sloppy data", () => {
+  it("renders em dashes and empty volumeLabel for null/zero parts (0 volume)", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, weight: null, reps: 8 }),
+      makeSet({ set_number: 2, weight: "100", reps: 0 }),
+      makeSet({ set_number: 3, weight: "100", reps: 8 }),
+    ];
+    const lines = presentSetVolumeLines({ sets, unit: "kg" });
+    expect(lines).toEqual([
+      { setNumber: 1, setType: "working", label: "— × 8", volumeKg: 0, volumeLabel: "" },
+      { setNumber: 2, setType: "working", label: "100 × 0", volumeKg: 0, volumeLabel: "" },
+      { setNumber: 3, setType: "working", label: "100 × 8", volumeKg: 800, volumeLabel: "800 kg" },
+    ]);
+  });
+
+  it("returns an empty array when there are no non-warmup sets", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, set_type: "warmup", weight: "40", reps: 10 }),
+    ];
+    expect(presentSetVolumeLines({ sets, unit: "kg" })).toEqual([]);
+  });
+});
+
+describe("presentSetVolumeLines — unit-awareness", () => {
+  it("converts the weight label + volume to lbs, keeps volumeKg canonical", () => {
+    const sets: SetRow[] = [makeSet({ set_number: 1, weight: "100", reps: 8 })];
+    const lines = presentSetVolumeLines({ sets, unit: "lbs" });
+    // displayWeight(100kg, lbs) ≈ 220.5; volume 800kg ≈ 1,764 lbs.
+    expect(lines[0]!.label).toBe("220.5 × 8");
+    expect(lines[0]!.volumeKg).toBe(800);
+    expect(lines[0]!.volumeLabel).toBe("1,764 lbs");
   });
 });
 

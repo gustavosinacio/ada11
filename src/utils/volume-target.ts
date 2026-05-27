@@ -14,6 +14,10 @@ export type VolumeTargetState =
   | {
       kind: "chasing";
       previousMaxKg: number;
+      /** Sets of the past session that achieved `previousMaxKg` — for the
+       *  per-set breakdown of the max-volume session. Empty only when
+       *  `previousMaxKg === 0` (which short-circuits to `no-pr`). */
+      previousMaxSets: SetRow[];
       runningKg: number;
       /** previousMaxKg - runningKg, > 0. */
       gapKg: number;
@@ -27,6 +31,8 @@ export type VolumeTargetState =
   | {
       kind: "surpassed";
       previousMaxKg: number;
+      /** Sets of the past session that achieved `previousMaxKg`. */
+      previousMaxSets: SetRow[];
       runningKg: number;
       /** runningKg - previousMaxKg, >= 0. Zero means "matched". */
       overflowKg: number;
@@ -132,6 +138,7 @@ export function computeVolumeTarget(
   const { pastSessions, currentSessionSets, windowStartMs } = input;
 
   let previousMaxKg = 0;
+  let previousMaxSets: SetRow[] = [];
   if (pastSessions) {
     for (const session of pastSessions) {
       // Window filter at the session level — never per-set — so a session is
@@ -141,7 +148,10 @@ export function computeVolumeTarget(
         if (startedMs < windowStartMs) continue;
       }
       const total = sumPastVolume(session.sets);
-      if (total > previousMaxKg) previousMaxKg = total;
+      if (total > previousMaxKg) {
+        previousMaxKg = total;
+        previousMaxSets = session.sets;
+      }
     }
   }
 
@@ -156,6 +166,7 @@ export function computeVolumeTarget(
     return {
       kind: "surpassed",
       previousMaxKg,
+      previousMaxSets,
       runningKg,
       overflowKg: Math.max(0, -gapKg),
     };
@@ -181,6 +192,7 @@ export function computeVolumeTarget(
   return {
     kind: "chasing",
     previousMaxKg,
+    previousMaxSets,
     runningKg,
     gapKg,
     currentWeightKg,
