@@ -17,6 +17,7 @@ import {
   equipmentLabel,
   type Equipment,
 } from "~/db/types";
+import { useIsAdmin } from "~/hooks/use-admin";
 import {
   useExercise,
   useSoftDeleteExercise,
@@ -45,6 +46,7 @@ export default function EditExerciseScreen() {
   const { data, isLoading, isError, error } = useExercise(id);
   const update = useUpdateExercise();
   const remove = useSoftDeleteExercise();
+  const isAdmin = useIsAdmin().data === true;
 
   const {
     control,
@@ -129,12 +131,14 @@ export default function EditExerciseScreen() {
     );
   }
 
-  // Canonical (shared catalog) row -> read-only screen. Defense-in-depth with
-  // the progress-screen pencil gate; covers deep links and route history that
-  // bypass the pencil. `useForm` above stays mounted unconditionally (hook
-  // ordering must be stable across renders); this branch simply renders no
-  // Controllers and omits Save / Cancel / Delete affordances.
-  if (data && data.user_id === null) {
+  // Canonical (shared catalog) row -> read-only screen for non-admins.
+  // Admins fall through to the editable form (backed by the 0018 "Admins
+  // update all exercises" RLS policy). Defense-in-depth with the
+  // progress-screen pencil gate; covers deep links and route history.
+  // `useForm` above stays mounted unconditionally (hook ordering must be
+  // stable across renders); this branch simply renders no Controllers and
+  // omits Save / Cancel / Delete affordances.
+  if (data && data.user_id === null && !isAdmin) {
     return (
       <ScrollView
         className="flex-1 bg-white dark:bg-black"
@@ -270,14 +274,20 @@ export default function EditExerciseScreen() {
           variant="secondary"
           onPress={() => router.back()}
         />
-        <View className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-800">
-          <Button
-            label="Delete exercise"
-            variant="destructive"
-            onPress={onDelete}
-            loading={remove.isPending}
-          />
-        </View>
+        {/* Delete is hidden for canonical (catalog) rows: an admin can edit a
+            built-in exercise's fields, but deleting one removes it from every
+            user's picker, so it's deliberately not exposed here. Owned rows
+            (incl. the admin's own) keep Delete. */}
+        {data?.user_id !== null ? (
+          <View className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-800">
+            <Button
+              label="Delete exercise"
+              variant="destructive"
+              onPress={onDelete}
+              loading={remove.isPending}
+            />
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );

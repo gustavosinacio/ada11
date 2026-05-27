@@ -15,6 +15,7 @@ import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
 import { ExerciseSessionRow } from "~/components/exercise-session-row";
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
+import { useIsAdmin } from "~/hooks/use-admin";
 import { useAllExercise } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
@@ -46,23 +47,23 @@ export default function ExerciseProgressScreen() {
   const exercise = useAllExercise(id);
   const progressQ = useExerciseProgress(id);
   const unit = useWeightUnit();
+  const isAdmin = useIsAdmin().data === true;
   const { width: screenWidth } = useWindowDimensions();
   const chartWidth = Math.min(screenWidth - 48, 500);
 
-  // Pencil is suppressed for canonical (admin-managed) exercises so the user
-  // cannot reach the edit screen for a row they don't own. Defense-in-depth:
-  // the edit screen itself ALSO renders read-only for canonical rows (see
-  // `app/(app)/exercises/[id]/index.tsx`), so deep-links / route history
-  // can't bypass this gate either.
+  // Pencil shows for rows the user can actually edit: their own (user_id set)
+  // or — for admins — any row, including canonical catalog entries
+  // (user_id IS NULL), backed by the "Admins update all exercises" RLS policy
+  // (migration 0018). The edit screen gates the same way, so deep-links /
+  // route history can't bypass it.
   //
-  // The predicate is hide-only-when-known-canonical (rather than show-only-
-  // when-known-user-owned). During the initial loading window `exercise.data`
-  // is undefined; treating that as `canEdit = true` avoids a flash where the
-  // pencil disappears then reappears for user-owned rows. For canonical rows
-  // the pencil briefly renders before being hidden once `data` resolves — a
-  // sub-second one-way transition, never tappable into the edit screen for
-  // canonical content because the destination screen also gates.
-  const canEdit = exercise.data ? exercise.data.user_id !== null : true;
+  // The predicate is hide-only-when-known-canonical-and-not-admin. During the
+  // initial loading window `exercise.data` is undefined; treating that as
+  // `canEdit = true` avoids a flash where the pencil disappears then reappears
+  // for user-owned rows.
+  const canEdit = exercise.data
+    ? exercise.data.user_id !== null || isAdmin
+    : true;
   const screenHeader = (
     <Stack.Screen
       options={{
