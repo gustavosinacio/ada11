@@ -188,6 +188,7 @@ export function ExerciseNoteSlot({
     <View className="px-4 pt-2">
       <Textarea
         ref={inputRef}
+        autoGrow
         value={draft}
         onChangeText={(t) => {
           setDraft(t);

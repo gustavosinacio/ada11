@@ -1,15 +1,42 @@
-import { forwardRef } from "react";
-import { Text, TextInput, View, type TextInputProps } from "react-native";
+import { forwardRef, useState } from "react";
+import {
+  Text,
+  TextInput,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputContentSizeChangeEventData,
+  type TextInputProps,
+} from "react-native";
 
 type Props = TextInputProps & {
   label?: string;
   error?: string;
+  /**
+   * When true, the field starts at a single line and grows to fit its content
+   * (tracked via `onContentSizeChange`) instead of rendering a fixed-height
+   * multi-line box. Used by the exercise-note slot so a one-line note isn't
+   * shown inside a tall empty box.
+   */
+  autoGrow?: boolean;
 };
 
+// ~one line of `text-base` plus the `py-3` vertical padding. Floors the
+// auto-grow height so an empty / single-line field still reads as an input.
+const AUTO_GROW_MIN_HEIGHT = 44;
+
 export const Textarea = forwardRef<TextInput, Props>(function Textarea(
-  { label, error, ...rest },
+  { label, error, autoGrow = false, onContentSizeChange, style, ...rest },
   ref,
 ) {
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+  const handleContentSizeChange = (
+    e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>,
+  ) => {
+    if (autoGrow) setContentHeight(e.nativeEvent.contentSize.height);
+    onContentSizeChange?.(e);
+  };
+
   return (
     <View className="mb-3">
       {label ? (
@@ -20,15 +47,29 @@ export const Textarea = forwardRef<TextInput, Props>(function Textarea(
       <TextInput
         ref={ref}
         multiline
-        numberOfLines={4}
+        numberOfLines={autoGrow ? undefined : 4}
         textAlignVertical="top"
         placeholderTextColor="#9ca3af"
+        onContentSizeChange={handleContentSizeChange}
         {...rest}
-        className={`min-h-24 rounded-lg border px-4 py-3 text-base text-black dark:text-white ${
+        className={`rounded-lg border px-4 py-3 text-base text-black dark:text-white ${
+          autoGrow ? "" : "min-h-24"
+        } ${
           error
             ? "border-red-500"
             : "border-gray-300 dark:border-gray-700"
         }`}
+        style={
+          autoGrow
+            ? [
+                {
+                  minHeight: AUTO_GROW_MIN_HEIGHT,
+                  height: contentHeight ?? AUTO_GROW_MIN_HEIGHT,
+                },
+                style,
+              ]
+            : style
+        }
       />
       {error ? <Text className="mt-1 text-sm text-red-500">{error}</Text> : null}
     </View>
