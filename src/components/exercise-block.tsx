@@ -58,6 +58,10 @@ type Props = {
       currentInput: { weight: string; reps: string };
     },
   ) => void | Promise<void>;
+  /** Set IDs whose check/uncheck mutation is currently in flight. Each such
+   *  set's check button shows a spinner and is disabled. Live-session only;
+   *  omitted on the history-edit caller (no check toggle there). */
+  pendingCheckSetIds?: Set<string>;
   /** Live-session only. When true, mounts `<VolumeTargetSlot>` below the
    *  header so the block subscribes to `useExerciseProgress(exercise.id)`
    *  and renders the per-exercise volume-target strip. Default: false. */
@@ -81,6 +85,7 @@ export function ExerciseBlock({
   onPressName,
   showCheckable = false,
   onToggleSetChecked,
+  pendingCheckSetIds,
   showVolumeTarget = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -256,6 +261,7 @@ export function ExerciseBlock({
           unit={unit}
           previousSet={previousByRowId.get(s.id) ?? null}
           showCheckable={showCheckable}
+          checkPending={pendingCheckSetIds?.has(s.id) ?? false}
           exerciseName={exercise.name}
           onToggleChecked={
             onToggleSetChecked

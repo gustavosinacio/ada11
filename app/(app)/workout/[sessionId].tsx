@@ -114,6 +114,13 @@ function LiveWorkoutScreenInner() {
   const [removedExerciseIds, setRemovedExerciseIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Set IDs whose check/uncheck mutation is in flight. Drives the per-set
+  // spinner + disabled press in <SetInput> so the user can't re-toggle a set
+  // until its background save settles (the optimistic green flip is still
+  // instant — this is a "saving" affordance on top of it).
+  const [pendingCheckIds, setPendingCheckIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Map exercise_id -> target_rest_seconds (from the routine, if any).
   const restByExercise = useMemo(() => {
@@ -491,66 +498,68 @@ function LiveWorkoutScreenInner() {
               removeDisabled={logSet.isPending}
               showCheckable
               showVolumeTarget
+              pendingCheckSetIds={pendingCheckIds}
               onToggleSetChecked={async (
                 id,
                 nextChecked,
                 { previousSet, currentInput },
               ) => {
-                // Uncheck direction: byte-identical to today.
-                if (!nextChecked) {
-                  try {
-                    await uncheckSetM.mutateAsync(id);
-                  } catch (err) {
-                    console.warn("Toggle set check failed", err);
-                  }
-                  return;
-                }
-
-                // UX polish: dismiss the soft keyboard when the user taps the
-                // check button. Not load-bearing for auto-fill correctness —
-                // the typed values flow through `currentInput` from
-                // <SetInput>'s local state, so there is no cache read to
-                // synchronize. Matches the iOS gym-app idiom of "tap a
-                // non-input control, keyboard goes away".
-                Keyboard.dismiss();
-
+                // Mark this set's checkbox as saving (spinner + disabled press
+                // in <SetInput>) until the mutation settles. Covers both
+                // directions so a rapid re-toggle can't race the in-flight
+                // PATCH. The optimistic onMutate still flips the cache
+                // instantly, so the row greens immediately underneath.
+                setPendingCheckIds((prev) => new Set(prev).add(id));
                 try {
+                  // Uncheck direction: optimistic clear of completed_at.
+                  if (!nextChecked) {
+                    await uncheckSetM.mutateAsync(id);
+                    return;
+                  }
+
+                  // UX polish: dismiss the soft keyboard when the user taps the
+                  // check button. Not load-bearing for auto-fill correctness —
+                  // the typed values flow through `currentInput` from
+                  // <SetInput>'s local state, so there is no cache read to
+                  // synchronize. Matches the iOS gym-app idiom of "tap a
+                  // non-input control, keyboard goes away".
+                  Keyboard.dismiss();
+
                   const toggled = (setsByExercise.get(ex.id) ?? []).find(
                     (s) => s.id === id,
                   );
                   const isWorking = toggled?.set_type === "working";
 
-                  // 1. Auto-fill BEFORE checkSet so the F10 "checked =
-                  //    committed" invariant holds (no window where a checked
-                  //    set has null weight/reps). Helper returns null when
-                  //    there is nothing to fill — skip the write entirely
-                  //    on the common "both fields already typed" path.
-                  if (isWorking) {
-                    const patch = computeAutoFillPayload({
-                      currentInput,
-                      previous: previousSet,
-                    });
-                    if (patch) {
-                      await updateSet.mutateAsync({ id, patch });
-                    }
-                  }
+                  // Compute the auto-fill payload from the LIVE typed strings.
+                  // null = nothing to fill (the common "both fields already
+                  // typed" path) — the check then writes only completed_at.
+                  // The fill is folded INTO checkSet (one atomic PATCH) so a
+                  // checked working set never exists without its weight/reps,
+                  // and useCheckSet's optimistic onMutate flips the cache
+                  // synchronously so the check button reads "done" instantly.
+                  const fill = isWorking
+                    ? computeAutoFillPayload({
+                        currentInput,
+                        previous: previousSet,
+                      })
+                    : null;
 
-                  // 2. Optimistic rest-timer auto-start. Stays AFTER the
-                  //    auto-fill `await` so a failed updateSet short-circuits
-                  //    via the catch below and the timer never starts for an
-                  //    aborted check. The post-render observer above is the
-                  //    safety net for the existing stale-responder race.
+                  // Optimistic rest-timer auto-start. The post-render observer
+                  // above is the safety net for the stale-responder race.
                   if (isWorking) {
                     const rest = restByExercise.get(ex.id);
                     if (rest && rest > 0) restTimer.start(rest);
                   }
 
-                  // 3. Flip completed_at via checkSet. Two PostgREST
-                  //    round-trips on the auto-fill path (updateSet,
-                  //    checkSet); a single round-trip on the no-fill path.
-                  await checkSetM.mutateAsync(id);
+                  await checkSetM.mutateAsync({ id, fill: fill ?? undefined });
                 } catch (err) {
                   console.warn("Toggle set check failed", err);
+                } finally {
+                  setPendingCheckIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                  });
                 }
               }}
             />

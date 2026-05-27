@@ -909,21 +909,26 @@ test.describe("Auto-fill placeholder on check", () => {
       });
 
       // Tap check → rest-timer overlay should flip to "Resting" near
-      // instantly (no extra round-trip on the auto-fill path because the
-      // helper returns null and the screen handler skips updateSet).
+      // instantly (no extra round-trip on the no-fill path because the
+      // helper returns null and the check writes only completed_at).
       await page.getByLabel("Mark set as completed", { exact: true }).first().click();
       await expect(page.getByText("Resting", { exact: true })).toBeVisible({
         timeout: 5_000,
       });
-      // The "Resting" overlay is the optimistic indicator (sync from
-      // `restTimer.start(rest)`); the "Unmark" label only renders after the
-      // awaited `checkSetM.mutateAsync` settles and the sets query
-      // invalidates. Wait for it before reading `completed_at` to avoid a
-      // read-race between step-3 (timer) and step-4 (checkSet) of the
-      // handler's check-direction side-effect order.
+      // Both "Resting" and the "Unmark" label are now OPTIMISTIC: the timer
+      // starts synchronously and useCheckSet's onMutate flips completed_at in
+      // the cache before the PATCH lands. So the label is no longer a
+      // persistence signal — poll the row until completed_at actually persists
+      // rather than reading the DB the instant the label appears.
       await expect(
         page.getByLabel("Unmark set as completed", { exact: true }).first(),
       ).toBeVisible({ timeout: 5_000 });
+
+      await expect
+        .poll(async () => (await getSet(setId)).completed_at, {
+          timeout: 5_000,
+        })
+        .not.toBeNull();
 
       const row = await getSet(setId);
       // Values unchanged (no auto-fill, no clobber).

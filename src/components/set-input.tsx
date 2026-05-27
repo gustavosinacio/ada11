@@ -1,6 +1,6 @@
 import { CheckSquare, MoreHorizontal, Square, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import type { UpdateSetMetaInput } from "~/api/sets";
 import { SetRowMenu } from "~/components/set-row-menu";
@@ -29,6 +29,12 @@ type Props = {
     nextChecked: boolean,
     currentInput: { weight: string; reps: string },
   ) => void;
+  /** Live-session only. True while this set's check/uncheck mutation is in
+   *  flight. Swaps the check icon for a spinner and disables the press so the
+   *  user can't re-toggle until the background save settles. The row's green
+   *  tint still flips instantly (optimistic), so this is a "saving" affordance
+   *  on top of the instant flip, not a wait-for-server gate. */
+  checkPending?: boolean;
   /** Reps/weight commit on blur or submit. RPE/notes flow through onUpdateMeta. */
   onCommit: (patch: { reps: number | null; weight: string | null }) => void;
   /** Called when the per-row menu commits an RPE or notes change. */
@@ -78,6 +84,7 @@ export function SetInput({
   previousSet,
   showCheckable = false,
   onToggleChecked,
+  checkPending = false,
   onCommit,
   onUpdateMeta,
   exerciseName,
@@ -136,14 +143,21 @@ export function SetInput({
       <View className="flex-row items-center gap-2 px-4 py-2">
         {showCheckable ? (
           <Pressable
-            onPress={() => onToggleChecked?.(!isChecked, { weight, reps })}
+            onPress={() => {
+              if (checkPending) return;
+              onToggleChecked?.(!isChecked, { weight, reps });
+            }}
+            disabled={checkPending}
             accessibilityRole="button"
+            accessibilityState={{ disabled: checkPending, busy: checkPending }}
             accessibilityLabel={
               isChecked ? "Unmark set as completed" : "Mark set as completed"
             }
             className="h-11 w-11 items-center justify-center"
           >
-            {isChecked ? (
+            {checkPending ? (
+              <ActivityIndicator size="small" color="#9ca3af" />
+            ) : isChecked ? (
               <CheckSquare color="#16a34a" size={20} />
             ) : (
               <Square color="#9ca3af" size={20} />

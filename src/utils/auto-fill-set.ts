@@ -6,11 +6,11 @@
  *
  * Caller responsibilities:
  *  - Gate on `set_type === "working"` (warmups/dropsets are out of spec).
- *  - Apply the returned patch via `updateSet.mutateAsync({ id, patch })`
- *    BEFORE flipping `completed_at` via `checkSet`, so the F10 "checked =
- *    committed" invariant holds (no window where a checked set has null
- *    weight/reps).
- *  - Treat a `null` return as "nothing to write, skip the updateSet call".
+ *  - Pass the returned patch as the `fill` argument to `checkSet` /
+ *    `useCheckSet` so the auto-fill and the `completed_at` flip land in ONE
+ *    atomic PATCH — the F10 "checked = committed" invariant then holds with
+ *    no two-writer window (no point where a checked set has null weight/reps).
+ *  - Treat a `null` return as "nothing to fill, check writes completed_at only".
  *
  * The predicate operates on the LIVE typed strings the user has on screen
  * (so a value typed-but-not-blurred is honored, never clobbered) and on the

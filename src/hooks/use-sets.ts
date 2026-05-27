@@ -12,10 +12,12 @@ import {
   uncheckSet,
   updateSet,
   updateSetMeta,
+  type CheckSetFill,
   type LogSetInput,
   type UpdateSetInput,
   type UpdateSetMetaInput,
 } from "~/api/sets";
+import type { SetRow } from "~/db/types";
 
 const KEYS = {
   forSession: (sessionId: string) => ["sets", sessionId] as const,
@@ -135,8 +137,35 @@ export function useRemoveExerciseFromSession(sessionId: string) {
 export function useCheckSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => checkSet(id),
-    onSuccess: () => {
+    mutationFn: ({ id, fill }: { id: string; fill?: CheckSetFill }) =>
+      checkSet(id, fill),
+    // Optimistic: stamp completed_at (plus any auto-fill weight/reps) into the
+    // cached row synchronously so the check button flips to "done" on the same
+    // frame as the tap — no waiting on the PATCH round-trip + invalidation
+    // refetch. Mirrors the reorder precedent in use-routine-exercises.ts. The
+    // weight/reps fold into the same write so F10 "checked = committed" stays
+    // atomic (no window where a checked working set has null weight/reps).
+    onMutate: async ({ id, fill }) => {
+      await qc.cancelQueries({ queryKey: KEYS.forSession(sessionId) });
+      const previous = qc.getQueryData<SetRow[]>(KEYS.forSession(sessionId));
+      const nowIso = new Date().toISOString();
+      qc.setQueryData<SetRow[]>(KEYS.forSession(sessionId), (old) =>
+        old?.map((s) => {
+          if (s.id !== id) return s;
+          const next: SetRow = { ...s, completed_at: nowIso };
+          if (fill?.weight !== undefined) next.weight = fill.weight;
+          if (fill?.reps !== undefined) next.reps = fill.reps;
+          return next;
+        }),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous !== undefined) {
+        qc.setQueryData(KEYS.forSession(sessionId), ctx.previous);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
     },
   });
@@ -146,7 +175,21 @@ export function useUncheckSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => uncheckSet(id),
-    onSuccess: () => {
+    // Optimistic clear of completed_at so the uncheck reads instant too.
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: KEYS.forSession(sessionId) });
+      const previous = qc.getQueryData<SetRow[]>(KEYS.forSession(sessionId));
+      qc.setQueryData<SetRow[]>(KEYS.forSession(sessionId), (old) =>
+        old?.map((s) => (s.id === id ? { ...s, completed_at: null } : s)),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.previous !== undefined) {
+        qc.setQueryData(KEYS.forSession(sessionId), ctx.previous);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: KEYS.forSession(sessionId) });
     },
   });

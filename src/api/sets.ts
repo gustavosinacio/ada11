@@ -233,14 +233,35 @@ export async function bulkSoftDeleteSetsForExerciseInSession(
   if (error) throw error;
 }
 
+/** Optional auto-fill written atomically with the check. Only positive
+ *  writes — see computeAutoFillPayload. Keys omitted are left untouched. */
+export type CheckSetFill = { weight?: string | null; reps?: number | null };
+
 /**
  * Flips a single set to "checked" by stamping completed_at = now().
  * No-op if already checked (idempotent at the call site via the toggle).
+ *
+ * When `fill` is provided, its weight/reps are written in the SAME PATCH as
+ * completed_at. Folding the auto-fill into one round-trip keeps the F10
+ * "checked = committed" invariant atomic — a checked working set can never
+ * exist (server- or client-side) without its weight/reps, with no two-writer
+ * window against a separate updateSet.
  */
-export async function checkSet(id: string): Promise<void> {
+export async function checkSet(
+  id: string,
+  fill?: CheckSetFill,
+): Promise<void> {
+  const payload: {
+    completed_at: string;
+    weight?: string | null;
+    reps?: number | null;
+  } = { completed_at: new Date().toISOString() };
+  if (fill?.weight !== undefined) payload.weight = fill.weight;
+  if (fill?.reps !== undefined) payload.reps = fill.reps;
+
   const { error } = await supabase
     .from("sets")
-    .update({ completed_at: new Date().toISOString() })
+    .update(payload)
     .eq("id", id)
     .is("deleted_at", null);
   if (error) throw error;
