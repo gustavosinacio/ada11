@@ -109,9 +109,9 @@ describe("entriesToWeightSeries", () => {
     expect(out[1]!.value).toBeCloseTo(220.462, 2);
   });
 
-  it("emits M/D labels from measured_at", () => {
+  it("emits dd/mm labels from measured_at", () => {
     const input: MeasurementEntryRow[] = [row("2026-05-20T12:00:00Z", "80.0")];
     const out = entriesToWeightSeries(input, "kg");
-    expect(out[0]!.label).toBe("5/20");
+    expect(out[0]!.label).toBe("20/05");
   });
 });

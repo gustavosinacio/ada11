@@ -7,8 +7,9 @@
 import { formatDisplayDate } from "~/utils/format-display-date";
 
 /**
- * "Mon, May 18, 4:30 PM" using the device locale. Year is appended only when
- * the date is NOT in the current local year (e.g. `"Mon, Nov 4, 2019, 4:30 PM"`).
+ * `"Mon, 18/05, 16:30"` (dd/mm + 24h, en-GB locale-locked). Year is appended
+ * as `yy` only when the date is NOT in the current local year (e.g.
+ * `"Mon, 04/11/19, 16:30"`).
  *
  * Thin wrapper around `formatDisplayDate` so every screen uses the same
  * year-conditional rule.

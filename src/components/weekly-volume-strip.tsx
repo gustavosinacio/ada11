@@ -62,13 +62,13 @@ type Props = {
  *
  *   Current-year window (current year = 2026):
  *     start = Apr 27 2026, end = Jun 21 2026
- *     → "Apr 27 – Jun 21"
+ *     → "27/04 – 21/06"
  *   Cross-year window (current year = 2026):
  *     start = Dec 29 2025, end = Jan 11 2026
- *     → "Dec 29, 2025 – Jan 11"        // only the prior-year end carries "2025"
+ *     → "29/12/25 – 11/01"        // only the prior-year end carries "25"
  *   Fully-prior-year window (current year = 2026):
  *     start = Nov 4 2019, end = Nov 10 2019
- *     → "Nov 4, 2019 – Nov 10, 2019"   // both ends carry the year
+ *     → "04/11/19 – 10/11/19"     // both ends carry the year
  */
 function formatVisibleRange(startMonday: Date, endMonday: Date): string {
   return `${formatDisplayDate(startMonday)} – ${formatDisplayDate(endMonday)}`;

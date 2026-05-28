@@ -202,11 +202,11 @@ describe("findBestWeek", () => {
     expect(findBestWeek(m)).toBeNull();
   });
 
-  it("findBestWeek surfaces a M/d label derived from the ISO-week key", () => {
+  it("findBestWeek surfaces a dd/mm label derived from the ISO-week key", () => {
     const m = new Map<string, number>();
     m.set("2026-W21", 1000); // Monday 2026-05-18
     const best = findBestWeek(m);
-    expect(best!.weekStartLabel).toBe("5/18");
+    expect(best!.weekStartLabel).toBe("18/05");
   });
 });
 

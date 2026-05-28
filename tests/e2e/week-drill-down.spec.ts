@@ -193,7 +193,7 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
 
       const currentMondayUtc = mondayNWeeksAgoUtc(0);
       const currentSegment = fmtYmd(currentMondayUtc);
-      const currentLabel = `${currentMondayUtc.getUTCMonth() + 1}/${currentMondayUtc.getUTCDate()}`;
+      const currentLabel = `${String(currentMondayUtc.getUTCDate()).padStart(2, "0")}/${String(currentMondayUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
       // Tap the current-week pressable by its accessibility label.
       const currentBar = page.getByRole("button", {
@@ -288,7 +288,7 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
       // Tap a rest-week (offset = 3, no sessions).
       const restMonday = mondayNWeeksAgoUtc(3);
       const restSegment = fmtYmd(restMonday);
-      const restLabel = `${restMonday.getUTCMonth() + 1}/${restMonday.getUTCDate()}`;
+      const restLabel = `${String(restMonday.getUTCDate()).padStart(2, "0")}/${String(restMonday.getUTCMonth() + 1).padStart(2, "0")}`;
 
       const restBar = page.getByRole("button", {
         name: `View week of ${restLabel}`,
@@ -434,7 +434,7 @@ test.describe("Week drill-down — tap a bar opens the per-week screen", () => {
       });
 
       const currentMonday = mondayNWeeksAgoUtc(0);
-      const currentLabel = `${currentMonday.getUTCMonth() + 1}/${currentMonday.getUTCDate()}`;
+      const currentLabel = `${String(currentMonday.getUTCDate()).padStart(2, "0")}/${String(currentMonday.getUTCMonth() + 1).padStart(2, "0")}`;
       const currentBar = page.getByRole("button", {
         name: `View week of ${currentLabel}`,
       });
