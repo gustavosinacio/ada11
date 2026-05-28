@@ -1,14 +1,16 @@
 # Features
 
+[ ] When opening an exercise from clicking it's name on the workout in session i go to the progress screen. When i click the go back arrow on the top, i am sent to the exercises list. I should be sent back to where i came from and. If i opened the exercise from the exercise list, going back should send me to the exercise list again. If i opened the exercise from the in progress view, i should be sent back to that.
+
 ## Done
+
+[x] All max-volume figures now respect the max-volume-window preference. The exercise progress page's "Max volume session" callout computed the best single-session volume over ALL history while the live `<VolumeTargetSlot>` "Max" was windowed — so the same exercise showed two different max numbers. The callout now applies the same `computeWindowStart(weeks)` session-level `started_at` filter the live strip uses (header gains a "· last Nw" hint when a window is set). The e1RM summary + both trend charts deliberately stay all-history (a chart truncated to the window would defeat its purpose). Typecheck/lint/384 unit clean; exercise-progress-ia + max-volume-window e2e pass.
 
 [x] Exercise progress "Sessions" rows now show each set (weight × reps) with its per-set volume, not just "N × total volume". New pure presenter `presentSetVolumeLines(sets, unit)` in `exercise-session-row-format.ts` (the deferred per-set line the file already anticipated) + shared `<SetVolumeBreakdown>` component. Per-set volumes sum to the row total by construction — same scope as `sumPastVolume` (warmups excluded, `w>0 && r>0`). 8 new unit tests; no e2e assertion change needed (the aggregate `^\d+ × [\d,]+ (kg|lbs)$` regex still uniquely matches the total line — per-set labels like "100 × 8" have no unit suffix).
 
 [x] Volume per set on exercise max volume (both surfaces). `computeVolumeTarget` now also returns `previousMaxSets` — the sets of the best single-session volume. The live `<VolumeTargetSlot>` renders that session's per-set breakdown beneath the "Max …" line (chasing + surpassed states); the exercise progress page gains a "Max volume session" callout (date + total + per-set breakdown). Both reuse `<SetVolumeBreakdown>` + `presentSetVolumeLines`. 2 new kernel unit tests assert the winning session's set array is returned by reference.
 
 [x] Set checkbox loading state. While a check/uncheck mutation is in flight the checkbox swaps to an `ActivityIndicator` and disables re-taps (per-set `pendingCheckIds` set tracked on the workout screen, threaded `<ExerciseBlock>` → `<SetInput>` via `pendingCheckSetIds`/`checkPending`). Built on top of the optimistic flip from the prior change — the row still greens instantly, the spinner is a "saving" affordance, and the disable closes the rapid re-toggle race the rest-timer observer was guarding against. Existing auto-fill + rest-timer e2e pass (the re-check test's 5s/1.5s waits exceed the brief pending window).
-
-
 
 [x] Create-routine lands on the builder, not the routines list. `app/(app)/routines/new.tsx` now `router.replace`s into `/routines/{newId}` on save (instead of `router.back()`), so the user can add exercises immediately after picking the name + notes — no round-trip via the workout list + Edit pencil. `replace` (not `push`) so the browser/native back button skips the now-empty create form. Minimal 1-line behaviour change; existing routes/screens untouched.
 

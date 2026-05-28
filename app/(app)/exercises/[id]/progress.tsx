@@ -17,25 +17,26 @@ import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import { useIsAdmin } from "~/hooks/use-admin";
 import { useAllExercise } from "~/hooks/use-exercises";
-import { useWeightUnit } from "~/hooks/use-preferences";
+import { useMaxVolumeWindowWeeks, useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
+import { parseISO } from "~/utils/dates";
 import { presentSetVolumeLines } from "~/utils/exercise-session-row-format";
 import { formatDisplayDate, formatShortDate } from "~/utils/format-display-date";
 import { epley1RM } from "~/utils/formulas";
 import { formatVolume, formatWeight, kgToLbs } from "~/utils/units";
+import { computeWindowStart } from "~/utils/window-utils";
 
 /**
- * Per-exercise progress chart.
+ * Per-exercise progress screen.
  *
- * Intentional deferral (MIN-1 in `docs/runs/2026-05-23_0211_configurable-max-volume-window/design-v2.md`):
- * the `bestE1rm` and total-volume reductions below operate on the e1RM kernel
- * (`max(weight * (1 + reps/30))`), NOT the volume kernel that the
- * `max_volume_window_weeks` preference governs. Threading the same window
- * preference here would conflate two distinct PR concepts (best estimated
- * 1RM vs best single-session volume). If a separate "e1RM window" companion
- * preference is ever introduced, that's where this screen would wire up.
+ * The e1RM summary line and BOTH charts (estimated-1RM, total-volume trend)
+ * are a deliberate "see all history" view — they show every session over
+ * time and are not governed by the `max_volume_window_weeks` preference.
  *
- * Until then this surface deliberately remains a "see all history" view.
+ * The "Max volume session" callout, however, DOES respect that window: it's
+ * the best single-session volume and must agree with the live
+ * `<VolumeTargetSlot>` "Max" (same windowed baseline) — otherwise the same
+ * exercise shows two different max-volume numbers across surfaces.
  */
 export default function ExerciseProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -48,6 +49,13 @@ export default function ExerciseProgressScreen() {
   const progressQ = useExerciseProgress(id);
   const unit = useWeightUnit();
   const isAdmin = useIsAdmin().data === true;
+  // Max-volume window preference — same source the live <VolumeTargetSlot>
+  // reads, so the progress-page "Max volume session" callout agrees with it.
+  const maxVolumeWindowWeeks = useMaxVolumeWindowWeeks();
+  const windowStartMs = useMemo(
+    () => computeWindowStart(maxVolumeWindowWeeks, new Date()),
+    [maxVolumeWindowWeeks],
+  );
   const { width: screenWidth } = useWindowDimensions();
   const chartWidth = Math.min(screenWidth - 48, 500);
 
@@ -121,7 +129,14 @@ export default function ExerciseProgressScreen() {
         if (sessionVolume > 0) {
           const displayVol = unit === "kg" ? sessionVolume : kgToLbs(sessionVolume);
           vol.push({ label, value: displayVol });
-          if (sessionVolume > maxVolKg) {
+          // The Max-volume callout respects the max-volume-window preference
+          // so it matches the live <VolumeTargetSlot> "Max"; the trend chart
+          // above stays all-history. Session-level filter on started_at,
+          // identical to computeVolumeTarget's windowing.
+          const inWindow =
+            windowStartMs === undefined ||
+            parseISO(s.started_at).getTime() >= windowStartMs;
+          if (inWindow && sessionVolume > maxVolKg) {
             maxVolKg = sessionVolume;
             maxVolSession = s;
           }
@@ -136,7 +151,7 @@ export default function ExerciseProgressScreen() {
         maxVolumeSession: maxVolSession,
         maxVolumeKg: maxVolKg,
       };
-    }, [progressQ.data, unit]);
+    }, [progressQ.data, unit, windowStartMs]);
 
   // The query returns ASC for chart plotting (left→right oldest→newest).
   // The "Sessions" list below wants newest first, so reverse a shallow copy.
@@ -207,6 +222,7 @@ export default function ExerciseProgressScreen() {
             <View className="mt-6 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
               <Text className="text-sm font-medium uppercase text-gray-500">
                 Max volume session
+                {maxVolumeWindowWeeks > 0 ? ` · last ${maxVolumeWindowWeeks}w` : ""}
               </Text>
               <View className="mb-2 mt-1 flex-row items-baseline justify-between">
                 <Text className="text-base font-semibold text-black dark:text-white">
