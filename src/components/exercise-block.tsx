@@ -111,6 +111,15 @@ export function ExerciseBlock({
 
   const muscles = exercise.muscles ?? [];
 
+  // `set_id -> set_number` lookup used by each <SetInput> to render the
+  // "↳ N" parent reference on dropset rows (resolves `row.parent_set_id` to
+  // the chained working set's display number).
+  const setNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sets) map.set(s.id, s.set_number);
+    return map;
+  }, [sets]);
+
   // Last working set in chronological order — drop sets stack onto it.
   const lastWorkingSet = useMemo(() => {
     for (let i = sets.length - 1; i >= 0; i--) {
@@ -262,6 +271,9 @@ export function ExerciseBlock({
           previousSet={previousByRowId.get(s.id) ?? null}
           showCheckable={showCheckable}
           checkPending={pendingCheckSetIds?.has(s.id) ?? false}
+          parentSetNumber={
+            s.parent_set_id ? setNumberById.get(s.parent_set_id) ?? null : null
+          }
           exerciseName={exercise.name}
           onToggleChecked={
             onToggleSetChecked

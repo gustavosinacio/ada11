@@ -35,6 +35,11 @@ type Props = {
    *  tint still flips instantly (optimistic), so this is a "saving" affordance
    *  on top of the instant flip, not a wait-for-server gate. */
   checkPending?: boolean;
+  /** For dropset rows only — the `set_number` of the parent working set
+   *  (`row.parent_set_id`'s row), used to render the inline "↳ N" parent
+   *  reference. Ignored when the set is not a dropset, or when null (no parent
+   *  resolvable). Computed by the surrounding block, which has all the sets. */
+  parentSetNumber?: number | null;
   /** Reps/weight commit on blur or submit. RPE/notes flow through onUpdateMeta. */
   onCommit: (patch: { reps: number | null; weight: string | null }) => void;
   /** Called when the per-row menu commits an RPE or notes change. */
@@ -85,6 +90,7 @@ export function SetInput({
   showCheckable = false,
   onToggleChecked,
   checkPending = false,
+  parentSetNumber = null,
   onCommit,
   onUpdateMeta,
   exerciseName,
@@ -134,13 +140,35 @@ export function SetInput({
   const isChecked = row.completed_at != null;
   const hasMetaData = row.rpe != null || (row.notes?.trim().length ?? 0) > 0;
 
+  // Per-type row styling: a left accent strip + subtle background tint so the
+  // set type is identifiable at a glance, without overpowering the
+  // checked-state green. Dropset rows additionally get a left indent + an
+  // inline "↳ {parentSetNumber}" parent reference so the chain to the working
+  // set they hang off is visible. The left accent is always a 2px strip (the
+  // working case uses a transparent border so all rows share an identical
+  // outer width — no micro-shift between types).
+  const isWarmup = row.set_type === "warmup";
+  const isDropset = row.set_type === "dropset";
+  const accentClass = isWarmup
+    ? "border-l-2 border-l-yellow-400 dark:border-l-yellow-500"
+    : isDropset
+      ? "border-l-2 border-l-purple-400 dark:border-l-purple-500"
+      : "border-l-2 border-l-transparent";
+  const checkedBg = "bg-green-50 dark:bg-green-950/30";
+  const typeBg = isWarmup
+    ? "bg-yellow-50/60 dark:bg-yellow-950/20"
+    : isDropset
+      ? "bg-purple-50/60 dark:bg-purple-950/20"
+      : "";
+  // Checked precedence: the green "saved" signal wins over the type tint.
+  const bgClass = showCheckable && isChecked ? checkedBg : typeBg;
+  const innerPadding = isDropset ? "pl-8 pr-4" : "px-4";
+
   return (
     <View
-      className={`border-b border-gray-100 dark:border-gray-900 ${
-        showCheckable && isChecked ? "bg-green-50 dark:bg-green-950/30" : ""
-      }`}
+      className={`border-b border-gray-100 dark:border-gray-900 ${accentClass} ${bgClass}`}
     >
-      <View className="flex-row items-center gap-2 px-4 py-2">
+      <View className={`flex-row items-center gap-2 ${innerPadding} py-2`}>
         {showCheckable ? (
           <Pressable
             onPress={() => {
@@ -169,6 +197,14 @@ export function SetInput({
         >
           <Text className="text-xs font-semibold">{badge.label}</Text>
         </View>
+        {isDropset && parentSetNumber != null ? (
+          <Text
+            className="text-xs font-medium text-purple-600 dark:text-purple-400"
+            accessibilityLabel={`Drop set chained to set ${parentSetNumber}`}
+          >
+            ↳{parentSetNumber}
+          </Text>
+        ) : null}
         <Text className="w-6 text-sm text-gray-500">{row.set_number}</Text>
 
         <View className="flex-1">

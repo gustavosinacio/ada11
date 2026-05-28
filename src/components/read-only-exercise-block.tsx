@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { ExerciseNoteSlot } from "~/components/exercise-note-slot";
@@ -41,6 +42,14 @@ export function ReadOnlyExerciseBlock({
   onPressName,
 }: Props) {
   const p = presentReadOnlyExerciseBlock(exercise, sets.length);
+
+  // `set_id -> set_number` lookup for the "↳ N" parent reference on dropset
+  // rows (same pattern as `<ExerciseBlock>`).
+  const setNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sets) map.set(s.id, s.set_number);
+    return map;
+  }, [sets]);
 
   const nameNode = (
     <Text className="text-lg font-semibold text-black dark:text-white">
@@ -100,7 +109,18 @@ export function ReadOnlyExerciseBlock({
           {p.emptyStateText}
         </Text>
       ) : (
-        sets.map((s) => <ReadOnlySetRow key={s.id} row={s} unit={unit} />)
+        sets.map((s) => (
+          <ReadOnlySetRow
+            key={s.id}
+            row={s}
+            unit={unit}
+            parentSetNumber={
+              s.parent_set_id
+                ? setNumberById.get(s.parent_set_id) ?? null
+                : null
+            }
+          />
+        ))
       )}
     </View>
   );
