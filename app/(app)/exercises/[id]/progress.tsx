@@ -1,5 +1,5 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Pencil } from "lucide-react-native";
+import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { ChevronLeft, Pencil } from "lucide-react-native";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -39,7 +39,17 @@ import { computeWindowStart } from "~/utils/window-utils";
  * exercise shows two different max-volume numbers across surfaces.
  */
 export default function ExerciseProgressScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `backHref`: when this screen is opened from a DIFFERENT tab (e.g. the live
+  // workout), the caller passes the path to return to. The progress route
+  // lives in the `exercises` tab, so the default header back pops that tab's
+  // stack → the exercises list, regardless of where the user came from. With
+  // a `backHref` we render a custom back button that navigates to the origin
+  // instead. Openers within the exercises tab (the list) pass nothing and keep
+  // the default back, which already lands on the list.
+  const { id, backHref } = useLocalSearchParams<{
+    id: string;
+    backHref?: string;
+  }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
   // Resolve the exercise even when it's soft-deleted so the screen header and
@@ -77,6 +87,21 @@ export default function ExerciseProgressScreen() {
       options={{
         title: exercise.data?.name ?? "Progress",
         headerShown: true,
+        headerLeft: backHref
+          ? () => (
+              <Pressable
+                onPress={() => router.navigate(backHref as Href)}
+                accessibilityLabel="Go back"
+                accessibilityRole="button"
+                className="px-3 py-1"
+              >
+                <ChevronLeft
+                  color={colorScheme === "dark" ? "#fff" : "#000"}
+                  size={26}
+                />
+              </Pressable>
+            )
+          : undefined,
         headerRight: canEdit
           ? () => (
               <Pressable

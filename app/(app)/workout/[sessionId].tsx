@@ -445,7 +445,14 @@ function LiveWorkoutScreenInner() {
               isFirst={idx === 0}
               isLast={idx === orderedExercises.length - 1}
               onPressName={() =>
-                router.push(`/(app)/exercises/${ex.id}/progress`)
+                // Pass the live session as the return target so the progress
+                // screen's back button comes back HERE, not to the exercises
+                // list (the progress route lives in the exercises tab).
+                router.push(
+                  `/(app)/exercises/${ex.id}/progress?backHref=${encodeURIComponent(
+                    `/(app)/workout/${sessionId}`,
+                  )}`,
+                )
               }
               onMoveUp={() => moveExercise(ex.id, "up")}
               onMoveDown={() => moveExercise(ex.id, "down")}

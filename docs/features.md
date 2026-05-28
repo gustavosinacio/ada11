@@ -1,8 +1,8 @@
 # Features
 
-[ ] When opening an exercise from clicking it's name on the workout in session i go to the progress screen. When i click the go back arrow on the top, i am sent to the exercises list. I should be sent back to where i came from and. If i opened the exercise from the exercise list, going back should send me to the exercise list again. If i opened the exercise from the in progress view, i should be sent back to that.
-
 ## Done
+
+[x] Back from an exercise's progress screen now returns to where you came from, not always the exercises list. The progress route lives in the `exercises` tab, so opening it from the live workout (tapping an exercise name) and hitting the header back popped that tab's stack → the exercises list. The workout now passes a `backHref` param and the progress screen renders a custom `headerLeft` that `router.navigate`s to that origin when present; openers within the exercises tab (the list) pass nothing and keep the default back (which already lands on the list). New e2e `exercise-progress-back-nav.spec.ts` (session → progress → back → session); exercise-progress-ia + rest-timer regression pass. Known follow-up: other cross-tab entries (Progress-tab PR rows, verdict screen) still back to the exercises list — they can opt in by passing `backHref` too.
 
 [x] All max-volume figures now respect the max-volume-window preference. The exercise progress page's "Max volume session" callout computed the best single-session volume over ALL history while the live `<VolumeTargetSlot>` "Max" was windowed — so the same exercise showed two different max numbers. The callout now applies the same `computeWindowStart(weeks)` session-level `started_at` filter the live strip uses (header gains a "· last Nw" hint when a window is set). The e1RM summary + both trend charts deliberately stay all-history (a chart truncated to the window would defeat its purpose). Typecheck/lint/384 unit clean; exercise-progress-ia + max-volume-window e2e pass.
 
