@@ -22,11 +22,16 @@ export type WeeklyVolumeRow = {
   set_type: SetType;
   exercise_id: string;
   session_id: string;
+  // `equipment` typed `string` (not `Equipment`) — legacy user-owned rows may
+  // hold arbitrary strings (`db/types.ts:108-118`); the `=== "bodyweight"`
+  // test inside `effectiveWeightKg` is the canonical gate.
+  exercises: { equipment: string };
   sessions: { started_at: string; ended_at: string };
 };
 
 const SELECT =
-  "completed_at, weight, reps, set_type, exercise_id, session_id, sessions!inner(started_at, ended_at)";
+  "completed_at, weight, reps, set_type, exercise_id, session_id, " +
+  "exercises!inner(equipment), sessions!inner(started_at, ended_at)";
 
 const PAGE = 1000;
 

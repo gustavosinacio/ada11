@@ -66,6 +66,10 @@ type Props = {
    *  header so the block subscribes to `useExerciseProgress(exercise.id)`
    *  and renders the per-exercise volume-target strip. Default: false. */
   showVolumeTarget?: boolean;
+  /** Live-session only. `started_at` of the live session, forwarded to
+   *  `<VolumeTargetSlot>` so it can resolve the live bodyweight for a
+   *  bodyweight exercise. */
+  liveSessionStartedAt?: string;
 };
 
 export function ExerciseBlock({
@@ -87,6 +91,7 @@ export function ExerciseBlock({
   onToggleSetChecked,
   pendingCheckSetIds,
   showVolumeTarget = false,
+  liveSessionStartedAt,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   // Local in-flight guard so a quick double-tap on the add-set button doesn't
@@ -241,6 +246,8 @@ export function ExerciseBlock({
         <VolumeTargetSlot
           exerciseId={exercise.id}
           currentSessionSets={sets}
+          equipment={exercise.equipment ?? undefined}
+          liveSessionStartedAt={liveSessionStartedAt}
         />
       ) : null}
 

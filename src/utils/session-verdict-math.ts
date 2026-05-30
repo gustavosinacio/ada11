@@ -17,8 +17,11 @@
  */
 import type { WeeklyVolumeRow } from "~/api/stats";
 import type { SetRow } from "~/db/types";
-import { computeLifetimeMaxPerExercise } from "~/utils/progress-page-math";
-import { sumLiveVolume } from "~/utils/volume-target";
+import {
+  computeLifetimeMaxPerExercise,
+  type WeeklyBodyweightInput,
+} from "~/utils/progress-page-math";
+import { sumLiveVolume, type SetBodyweightInput } from "~/utils/volume-target";
 
 /**
  * Per-exercise volume (kg) for the just-finished session. Groups `sets` by
@@ -32,6 +35,7 @@ import { sumLiveVolume } from "~/utils/volume-target";
  */
 export function computeCurrentSessionVolumeByExercise(
   sets: SetRow[],
+  bw?: SetBodyweightInput,
 ): Map<string, number> {
   const byEx = new Map<string, SetRow[]>();
   for (const s of sets) {
@@ -41,7 +45,7 @@ export function computeCurrentSessionVolumeByExercise(
   }
   const out = new Map<string, number>();
   for (const [exerciseId, group] of byEx) {
-    const total = sumLiveVolume(group);
+    const total = sumLiveVolume(group, bw);
     if (total > 0) out.set(exerciseId, total);
   }
   return out;
@@ -92,12 +96,21 @@ export function computePrsForSession(opts: {
    * the comparison logic is unchanged — only the dataset shrinks.
    */
   windowStartMs?: number;
+  /**
+   * Optional. Plumbed straight through to `computeLifetimeMaxPerExercise` so
+   * the prior-only lifetime max is bodyweight-aware (the multi-session WVR
+   * walk). The caller resolves `currentSessionVolumeByExercise` with the same
+   * bodyweight, so a bodyweight PR is detected consistently. When omitted, the
+   * pre-feature logged-weight baseline is used.
+   */
+  bodyweight?: WeeklyBodyweightInput;
 }): SessionPr[] {
   const {
     rows,
     currentSessionId,
     currentSessionVolumeByExercise,
     windowStartMs,
+    bodyweight,
   } = opts;
 
   // Step 1: drop current-session rows so the lifetime max represents prior
@@ -108,6 +121,7 @@ export function computePrsForSession(opts: {
   const priorMaxByExercise = computeLifetimeMaxPerExercise(
     priorRows,
     windowStartMs,
+    bodyweight,
   );
 
   // Step 3: emit PR for each exercise with current > priorMax && priorMax > 0.

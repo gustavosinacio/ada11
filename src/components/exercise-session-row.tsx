@@ -3,7 +3,9 @@ import { Pressable, Text, View } from "react-native";
 
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import type { SessionSets } from "~/api/progress";
-import type { WeightUnit } from "~/db/types";
+import type { MeasurementEntryRow, WeightUnit } from "~/db/types";
+import { bodyweightKgAsOf } from "~/utils/bodyweight";
+import { parseISO } from "~/utils/dates";
 import {
   presentExerciseSessionRow,
   presentSetVolumeLines,
@@ -13,6 +15,13 @@ import { formatDisplayDate } from "~/utils/format-display-date";
 type Props = {
   session: SessionSets;
   unit: WeightUnit;
+  /** Equipment token of this exercise — makes the row's volume bodyweight-aware
+   *  when `"bodyweight"`. */
+  equipment?: string;
+  /** Measurements timeline; the row resolves this session's bodyweight from
+   *  `session.started_at` (MIN-NEW-2: per-row, since the "Sessions" list is
+   *  multi-session). */
+  measurements?: MeasurementEntryRow[];
   onPress: () => void;
 };
 
@@ -33,12 +42,32 @@ type Props = {
  * A11y label includes the time-of-day so same-day sessions stay
  * disambiguated for screen readers and automation (design-v2 MAJ-1).
  */
-export function ExerciseSessionRow({ session, unit, onPress }: Props) {
+export function ExerciseSessionRow({
+  session,
+  unit,
+  equipment,
+  measurements,
+  onPress,
+}: Props) {
+  // Resolve THIS session's bodyweight from its own started_at — the same value
+  // is passed to both presenters so the per-set lines sum to the row total
+  // (Invariant C).
+  const bodyweightKg = bodyweightKgAsOf(
+    measurements,
+    parseISO(session.started_at).getTime(),
+  );
   const { volumeLabel } = presentExerciseSessionRow({
     sets: session.sets,
     unit,
+    equipment,
+    bodyweightKg,
   });
-  const setLines = presentSetVolumeLines({ sets: session.sets, unit });
+  const setLines = presentSetVolumeLines({
+    sets: session.sets,
+    unit,
+    equipment,
+    bodyweightKg,
+  });
   const visibleDate = formatDisplayDate(session.started_at, {
     includeWeekday: true,
   });

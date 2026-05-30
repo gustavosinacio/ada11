@@ -14,12 +14,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { WeeklyVolumeRow } from "~/api/stats";
-import type { SetRow, SetType } from "~/db/types";
+import type { MeasurementEntryRow, SetRow, SetType } from "~/db/types";
 import {
   computeCurrentSessionVolumeByExercise,
   computePrsForSession,
 } from "~/utils/session-verdict-math";
-import { sumLiveVolume } from "~/utils/volume-target";
+import { sumLiveVolume, type SetBodyweightInput } from "~/utils/volume-target";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -68,10 +68,37 @@ function mkRow(
     set_type: (overrides.set_type ?? "working") as SetType,
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id ?? "sess-prior",
+    // MIN-4: default barbell so existing assertions stay green.
+    exercises: overrides.exercises ?? { equipment: "barbell" },
     sessions: overrides.sessions ?? {
       started_at: sessionStarted,
       ended_at: sessionStarted,
     },
+  };
+}
+
+function mkMeasurement(
+  measuredAt: string,
+  weightKg: string | null,
+): MeasurementEntryRow {
+  return {
+    id: `m-${measuredAt}`,
+    user_id: "user-1",
+    measured_at: measuredAt,
+    weight_kg: weightKg,
+    body_fat_pct: null,
+    neck_cm: null,
+    chest_cm: null,
+    biceps_cm: null,
+    forearm_cm: null,
+    waist_cm: null,
+    hips_cm: null,
+    thigh_cm: null,
+    calf_cm: null,
+    notes: null,
+    created_at: measuredAt,
+    updated_at: measuredAt,
+    deleted_at: null,
   };
 }
 
@@ -590,3 +617,130 @@ describe("computeCurrentSessionVolumeByExercise uses sumLiveVolume kernel", () =
     expect(map.get("ex-2")).toBe(360);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bodyweight PR detection — Phase 0 (Invariant B: create + erase)
+// ---------------------------------------------------------------------------
+
+describe("computePrsForSession — bodyweight (Invariant B)", () => {
+  const equipmentByExerciseId = new Map<string, string>([
+    ["pullup", "bodyweight"],
+  ]);
+
+  it("CREATE: a bodyweight session that beats the prior bodyweight max produces a PR", () => {
+    // Prior session: bodyweight 80, 8 reps → 640.
+    const priorRows: WeeklyVolumeRow[] = [
+      mkRow({
+        weight: "0",
+        reps: 8,
+        exercise_id: "pullup",
+        session_id: "s-prior",
+        completed_at: "2026-05-04T10:00:00Z",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:00:00Z",
+        },
+      }),
+    ];
+    // Current session: bodyweight 80, 12 reps → 960 > 640 → PR.
+    const currentSets = [
+      mkSet({
+        exercise_id: "pullup",
+        session_id: "s-current",
+        weight: "0",
+        reps: 12,
+      }),
+    ];
+    const measurements: MeasurementEntryRow[] = [
+      mkMeasurement("2026-05-01T00:00:00Z", "80"),
+    ];
+    const liveBw: SetBodyweightInput = {
+      equipmentByExerciseId,
+      bodyweightKg: 80,
+    };
+    const currentByExercise = computeCurrentSessionVolumeByExercise(
+      currentSets,
+      liveBw,
+    );
+    expect(currentByExercise.get("pullup")).toBe(960);
+
+    const prs = computePrsForSession({
+      rows: [...priorRows, ...toWvr(currentSets, "s-current")],
+      currentSessionId: "s-current",
+      currentSessionVolumeByExercise: currentByExercise,
+      bodyweight: { measurements },
+    });
+    const pr = prs.find((p) => p.exerciseId === "pullup");
+    expect(pr).toBeDefined();
+    expect(pr!.priorMaxKg).toBe(640);
+    expect(pr!.currentKg).toBe(960);
+  });
+
+  it("ERASE: a current session below the (now bodyweight-counted) prior max is NOT a PR", () => {
+    // Prior: bodyweight 80, 15 reps → 1200 (now counted via bodyweight).
+    const priorRows: WeeklyVolumeRow[] = [
+      mkRow({
+        weight: "0",
+        reps: 15,
+        exercise_id: "pullup",
+        session_id: "s-prior",
+        completed_at: "2026-05-04T10:00:00Z",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:00:00Z",
+        },
+      }),
+    ];
+    // Current: bodyweight 80, 8 reps → 640 < 1200 → NOT a PR.
+    const currentSets = [
+      mkSet({
+        exercise_id: "pullup",
+        session_id: "s-current",
+        weight: "0",
+        reps: 8,
+      }),
+    ];
+    const measurements: MeasurementEntryRow[] = [
+      mkMeasurement("2026-05-01T00:00:00Z", "80"),
+    ];
+    const liveBw: SetBodyweightInput = {
+      equipmentByExerciseId,
+      bodyweightKg: 80,
+    };
+    const currentByExercise = computeCurrentSessionVolumeByExercise(
+      currentSets,
+      liveBw,
+    );
+    expect(currentByExercise.get("pullup")).toBe(640);
+
+    const prs = computePrsForSession({
+      rows: [...priorRows, ...toWvr(currentSets, "s-current")],
+      currentSessionId: "s-current",
+      currentSessionVolumeByExercise: currentByExercise,
+      bodyweight: { measurements },
+    });
+    expect(prs.find((p) => p.exerciseId === "pullup")).toBeUndefined();
+  });
+});
+
+/** Map current-session `SetRow`s into `WeeklyVolumeRow`s for the lifetime read
+ *  (they get filtered out by `currentSessionId`, but `computePrsForSession`
+ *  expects them present in the refetched lifetime data). */
+function toWvr(sets: SetRow[], sessionId: string): WeeklyVolumeRow[] {
+  return sets.map((s) =>
+    mkRow({
+      weight: s.weight,
+      reps: s.reps,
+      exercise_id: s.exercise_id,
+      session_id: sessionId,
+      completed_at: "2026-05-20T10:00:00Z",
+      exercises: { equipment: "bodyweight" },
+      sessions: {
+        started_at: "2026-05-20T09:00:00Z",
+        ended_at: "2026-05-20T10:00:00Z",
+      },
+    }),
+  );
+}

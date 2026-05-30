@@ -1,4 +1,5 @@
 import type { WeeklyVolumeRow } from "~/api/stats";
+import { bodyweightKgAsOf, effectiveWeightKg } from "~/utils/bodyweight";
 import {
   isoWeekStart,
   isoWeeksBetween,
@@ -6,6 +7,7 @@ import {
   weekKeyOf,
   type IsoWeek,
 } from "~/utils/dates";
+import type { WeeklyBodyweightInput } from "~/utils/progress-page-math";
 
 /**
  * Pure-math helpers for `<WeeklyVolumeStrip>`. Lives outside the component
@@ -47,6 +49,7 @@ export type StripModel = {
 export function computeStripModel(
   data: WeeklyVolumeRow[],
   now: Date = new Date(),
+  bodyweight?: WeeklyBodyweightInput,
 ): StripModel | null {
   if (data.length === 0) return null;
 
@@ -66,12 +69,28 @@ export function computeStripModel(
   const totals = new Map<string, number>();
   for (const w of weeks) totals.set(w.key, 0);
 
+  // Bodyweight resolver — memoised per session_id (F-2). When `bodyweight` is
+  // omitted, `bwCache`-less path: effectiveWeightKg(eq, weight, null) reduces
+  // to the pre-feature addedLoad for non-bodyweight rows (byte-for-byte).
+  const bwCache = new Map<string, number | null>();
+  const resolveBw = (sessionId: string, startedAt: string): number | null => {
+    if (!bodyweight) return null;
+    if (bwCache.has(sessionId)) return bwCache.get(sessionId)!;
+    const v = bodyweightKgAsOf(
+      bodyweight.measurements,
+      parseISO(startedAt).getTime(),
+    );
+    bwCache.set(sessionId, v);
+    return v;
+  };
+
   for (const row of data) {
     const key = weekKeyOf(parseISO(row.completed_at));
     if (!totals.has(key)) continue; // older than firstSessionMonday — shouldn't happen
-    const w = row.weight ? parseFloat(row.weight) : 0;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
     const r = row.reps ?? 0;
-    if (Number.isFinite(w) && w > 0 && r > 0) {
+    if (w > 0 && r > 0) {
       totals.set(key, (totals.get(key) ?? 0) + w * r);
     }
   }

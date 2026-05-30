@@ -11,6 +11,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { isoWeekContaining, isoWeekStart } from "~/utils/dates";
@@ -80,6 +81,7 @@ export function WeeklyVolumeStrip({
 }: Props = {}): React.JSX.Element | null {
   const router = useRouter();
   const { data, isLoading, isError } = useLifetimeWeeklyVolume();
+  const { data: measurements } = useMeasurements();
   const unit = useWeightUnit();
 
   const scrollRef = useRef<ScrollView | null>(null);
@@ -98,8 +100,12 @@ export function WeeklyVolumeStrip({
   // toggle re-renders without invalidating the memo.
   const model: StripModel | null = useMemo(() => {
     if (!data || data.length === 0) return null;
-    return computeStripModel(data);
-  }, [data]);
+    return computeStripModel(
+      data,
+      new Date(),
+      measurements ? { measurements } : undefined,
+    );
+  }, [data, measurements]);
 
   const bucketsLength = model?.buckets.length ?? 0;
 

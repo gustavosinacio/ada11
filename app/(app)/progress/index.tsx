@@ -3,8 +3,8 @@ import { RefreshControl, ScrollView } from "react-native";
 
 import { ExercisesThisWeekList } from "~/components/exercises-this-week-list";
 import { ProgressHero } from "~/components/progress-hero";
-import { SessionVolumeChartSection } from "~/components/session-volume-chart-section";
 import { StreakCard } from "~/components/streak-card";
+import { WeeklyMuscleVolumeSection } from "~/components/weekly-muscle-volume-section";
 import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
 import {
   useMaxVolumeWindowWeeks,
@@ -67,7 +67,7 @@ export default function ProgressScreen(): React.JSX.Element {
         bestWeekKg={bestWeek?.totalKg}
         bestWeekLabel={bestWeekLabel}
       />
-      <SessionVolumeChartSection />
+      <WeeklyMuscleVolumeSection />
       <ExercisesThisWeekList />
       <StreakCard />
     </ScrollView>

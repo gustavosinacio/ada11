@@ -1,9 +1,42 @@
 import type { WeeklyVolumeRow } from "~/api/stats";
-import type { ExerciseRow, MuscleGroup } from "~/db/types";
+import type { ExerciseRow, MeasurementEntryRow, MuscleGroup } from "~/db/types";
 import { MUSCLE_GROUPS } from "~/db/types";
+import { bodyweightKgAsOf, effectiveWeightKg } from "~/utils/bodyweight";
 import { isoWeekStart, parseISO, weekKeyOf } from "~/utils/dates";
 import { formatShortDate } from "~/utils/format-display-date";
-import { sumLiveVolume } from "~/utils/volume-target";
+
+/**
+ * Bodyweight input for the `WeeklyVolumeRow[]` kernels (multi-session).
+ * Equipment arrives on `row.exercises.equipment` (widened SELECT), so this
+ * carries ONLY the measurements timeline — each kernel resolves the
+ * per-session bodyweight via `makeSessionBwResolver`, memoised per
+ * `session_id` (Decision #2, F-2). When omitted, the kernels reproduce the
+ * pre-feature numbers byte-for-byte.
+ */
+export type WeeklyBodyweightInput = {
+  measurements: MeasurementEntryRow[];
+};
+
+/**
+ * Builds a per-`session_id`-memoised bodyweight resolver from a
+ * `WeeklyBodyweightInput`. Each `WeeklyVolumeRow` carries `sessions.started_at`
+ * (F-2), so the resolver keys off `session_id` + `started_at`. Returns a
+ * function; when `bw` is undefined the function always returns `null` so the
+ * caller's `effectiveWeightKg(..., null)` for a non-bodyweight row equals the
+ * pre-feature parse (and a bodyweight row falls back to addedLoad).
+ */
+function makeSessionBwResolver(
+  bw: WeeklyBodyweightInput | undefined,
+): (sessionId: string, startedAt: string) => number | null {
+  if (!bw) return () => null;
+  const cache = new Map<string, number | null>();
+  return (sessionId, startedAt) => {
+    if (cache.has(sessionId)) return cache.get(sessionId)!;
+    const v = bodyweightKgAsOf(bw.measurements, parseISO(startedAt).getTime());
+    cache.set(sessionId, v);
+    return v;
+  };
+}
 
 /**
  * Pure math helpers for the Progress page. All inputs are plain data; no I/O,
@@ -41,7 +74,9 @@ import { sumLiveVolume } from "~/utils/volume-target";
 export function bucketLifetimeWeeklyVolumes(
   rows: WeeklyVolumeRow[],
   windowStartMs?: number,
+  bodyweight?: WeeklyBodyweightInput,
 ): Map<string, number> {
+  const resolveBw = makeSessionBwResolver(bodyweight);
   const totals = new Map<string, number>();
   for (const row of rows) {
     if (windowStartMs !== undefined) {
@@ -49,9 +84,10 @@ export function bucketLifetimeWeeklyVolumes(
       if (startedMs < windowStartMs) continue;
     }
     const key = weekKeyOf(parseISO(row.completed_at));
-    const w = row.weight ? parseFloat(row.weight) : 0;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
     const r = row.reps ?? 0;
-    if (Number.isFinite(w) && w > 0 && r > 0) {
+    if (w > 0 && r > 0) {
       totals.set(key, (totals.get(key) ?? 0) + w * r);
     }
   }
@@ -143,14 +179,17 @@ function weekKeyToMondayLabel(key: string): string {
 export function computeCurrentWeekVolume(
   rows: WeeklyVolumeRow[],
   now: Date,
+  bodyweight?: WeeklyBodyweightInput,
 ): number {
+  const resolveBw = makeSessionBwResolver(bodyweight);
   const targetKey = weekKeyOf(now);
   let total = 0;
   for (const row of rows) {
     if (weekKeyOf(parseISO(row.completed_at)) !== targetKey) continue;
-    const w = row.weight ? parseFloat(row.weight) : 0;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
     const r = row.reps ?? 0;
-    if (Number.isFinite(w) && w > 0 && r > 0) {
+    if (w > 0 && r > 0) {
       total += w * r;
     }
   }
@@ -183,14 +222,17 @@ export function computeCurrentWeekVolume(
 export function computeLifetimeMaxPerExercise(
   rows: WeeklyVolumeRow[],
   windowStartMs?: number,
+  bodyweight?: WeeklyBodyweightInput,
 ): Map<string, number> {
+  const resolveBw = makeSessionBwResolver(bodyweight);
   // Step 1: group → {volume, startedAt} per (exerciseId, sessionId).
   type SessionAgg = { volume: number; startedAt: string };
   const sessionVols = new Map<string, Map<string, SessionAgg>>(); // exId → (sessId → agg)
   for (const row of rows) {
-    const w = row.weight ? parseFloat(row.weight) : 0;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
     const r = row.reps ?? 0;
-    if (!(Number.isFinite(w) && w > 0 && r > 0)) continue;
+    if (!(w > 0 && r > 0)) continue;
     const inner =
       sessionVols.get(row.exercise_id) ?? new Map<string, SessionAgg>();
     const existing = inner.get(row.session_id);
@@ -226,15 +268,22 @@ export function computeLifetimeMaxPerExercise(
 // ---------------------------------------------------------------------------
 
 /**
- * Groups `rows` by `session_id` and reduces each group via `sumLiveVolume`.
+ * Groups `rows` by `session_id` and reduces each group's volume.
  *
  * Returned map values are kg totals for non-warmup sets in finished sessions.
  * `WeeklyVolumeRow` server filters guarantee `completed_at != null`,
  * `sessions.ended_at != null`, `set_type != "warmup"`, and `deleted_at IS
- * NULL`, so `sumLiveVolume`'s warmup-skip + `completed_at` guards are no-ops
- * here. Using the kernel anyway (rather than inlining `w * r`) keeps every
- * aggregate volume readout rooted in a single function — see the
- * cross-surface consistency rule documented in `volume-target.ts:53-67`.
+ * NULL`, so the per-row reduce needs no warmup/completed guard here.
+ *
+ * Bodyweight-aware (MIN-NEW-1): this is a `WeeklyVolumeRow[]` pipeline, so it
+ * does its OWN per-row `effectiveWeightKg(row.exercises.equipment, ...)`
+ * reduce (reading equipment off the widened row), rather than delegating to
+ * `sumLiveVolume`'s `equipmentByExerciseId`-map path — the WVR pipeline has no
+ * such map. Bodyweight is resolved per `session_id`, memoised. When
+ * `bodyweight` is omitted the reduce reproduces the pre-feature `w*r` totals
+ * byte-for-byte (`effectiveWeightKg(eq, weight, null)` === addedLoad for
+ * non-bodyweight; a bodyweight row with no measurements also falls back to
+ * addedLoad).
  *
  * Result is a Map (not a Record): O(1) `.get(sessionId)` per row render, no
  * JSON-key coercion. Callers `useMemo` on `data` reference identity.
@@ -243,23 +292,26 @@ export function computeLifetimeMaxPerExercise(
  * `sessions.ended_at IS NOT NULL`), so the map has no entry for an
  * `ended_at IS NULL` session — `map.get(id)` returns `undefined`, and the
  * `<SessionSummaryRow>` presenter hides the slot.
- *
- * `sumLiveVolume` accepts the `Pick<SetRow, "completed_at" | "set_type" |
- * "weight" | "reps">` shape that `WeeklyVolumeRow` structurally satisfies,
- * so no cast is needed at the call site.
  */
 export function groupSessionVolumes(
   rows: WeeklyVolumeRow[],
+  bodyweight?: WeeklyBodyweightInput,
 ): Map<string, number> {
-  const bySession = new Map<string, WeeklyVolumeRow[]>();
-  for (const row of rows) {
-    const list = bySession.get(row.session_id) ?? [];
-    list.push(row);
-    bySession.set(row.session_id, list);
-  }
+  const resolveBw = makeSessionBwResolver(bodyweight);
   const out = new Map<string, number>();
-  for (const [sessionId, sets] of bySession) {
-    out.set(sessionId, sumLiveVolume(sets));
+  for (const row of rows) {
+    // Eagerly seed the session entry so a session whose every set is excluded
+    // (e.g. all-warmup) still appears in the map with a 0 total — preserves
+    // the pre-feature `sumLiveVolume`-per-group behaviour the tests lock.
+    if (!out.has(row.session_id)) out.set(row.session_id, 0);
+    if (row.completed_at == null) continue;
+    if (row.set_type === "warmup") continue;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
+    const r = row.reps ?? 0;
+    if (w > 0 && r > 0) {
+      out.set(row.session_id, (out.get(row.session_id) ?? 0) + w * r);
+    }
   }
   return out;
 }
@@ -316,8 +368,20 @@ export function computePrsThisWeek(opts: {
    * `undefined`, behaviour is identical to the pre-feature lifetime path.
    */
   windowStartMs?: number;
+  /** Optional. When provided, volume math becomes bodyweight-aware (the WVR
+   *  pipeline: equipment from `row.exercises.equipment`, bodyweight resolved
+   *  per session_id from `measurements`). When omitted, behaviour is identical
+   *  to the pre-feature path. */
+  bodyweight?: WeeklyBodyweightInput;
 }): PrThisWeek[] {
-  const { rows, currentWeekStartIso, currentWeekEndIso, windowStartMs } = opts;
+  const {
+    rows,
+    currentWeekStartIso,
+    currentWeekEndIso,
+    windowStartMs,
+    bodyweight,
+  } = opts;
+  const resolveBw = makeSessionBwResolver(bodyweight);
   const weekStart = parseISO(currentWeekStartIso);
   const weekEnd = parseISO(currentWeekEndIso);
 
@@ -325,9 +389,10 @@ export function computePrsThisWeek(opts: {
   type SessionAgg = { volume: number; startedAt: string };
   const grouped = new Map<string, Map<string, SessionAgg>>();
   for (const row of rows) {
-    const w = row.weight ? parseFloat(row.weight) : 0;
+    const bw = resolveBw(row.session_id, row.sessions.started_at);
+    const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
     const r = row.reps ?? 0;
-    if (!(Number.isFinite(w) && w > 0 && r > 0)) continue;
+    if (!(w > 0 && r > 0)) continue;
     const inner =
       grouped.get(row.exercise_id) ?? new Map<string, SessionAgg>();
     const existing = inner.get(row.session_id);
@@ -412,6 +477,8 @@ export function computePrExerciseIdsThisWeek(opts: {
   currentWeekEndIso: string;
   /** See `computePrsThisWeek` for semantics. */
   windowStartMs?: number;
+  /** See `computePrsThisWeek` for semantics. */
+  bodyweight?: WeeklyBodyweightInput;
 }): Set<string> {
   return new Set(computePrsThisWeek(opts).map((p) => p.exerciseId));
 }
@@ -531,56 +598,4 @@ export function computeStreaks(
   }
 
   return { current, best };
-}
-
-// ---------------------------------------------------------------------------
-// presentSessionVolumeChart
-// ---------------------------------------------------------------------------
-
-/**
- * Builds a per-session volume time-series for `<ProgressChart>`. Returns one
- * `DataPoint` per finished session (sessions with `ended_at != null`),
- * ordered by `started_at` ascending (oldest left, newest right).
- *
- * Volume kernel = `groupSessionVolumes` (same as the History rows + verdict
- * screen) — cross-surface consistency by construction.
- *
- * Cost: O(N) on `rows.length` (one pass for grouping + one pass for ordering).
- * The user flagged "this might be a costly calculation" on the original spec
- * — the kernel is in-memory aggregation over an already-paginated dataset
- * (`useLifetimeWeeklyVolume()` caches the full per-set roll-up at TanStack
- * staleTime 60s). Postgres-side window-function aggregation was an
- * alternative but unnecessary at current data volumes.
- *
- * `label` is the short date of the session's `started_at` (year-aware via
- * `formatShortDate`).
- */
-export function presentSessionVolumeChart(
-  rows: WeeklyVolumeRow[],
-): { label: string; value: number; sessionId: string; startedAt: string }[] {
-  const byId = new Map<string, { startedAt: string; volumeKg: number }>();
-  // Track started_at by session_id (rows of same session repeat it).
-  for (const row of rows) {
-    const startedAt = row.sessions.started_at;
-    if (!byId.has(row.session_id)) {
-      byId.set(row.session_id, { startedAt, volumeKg: 0 });
-    }
-  }
-  const volumes = groupSessionVolumes(rows);
-  for (const [id, vol] of volumes) {
-    const entry = byId.get(id);
-    if (entry) entry.volumeKg = vol;
-  }
-  const list = [...byId.entries()].map(([sessionId, { startedAt, volumeKg }]) => ({
-    sessionId,
-    startedAt,
-    volumeKg,
-  }));
-  list.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  return list.map(({ sessionId, startedAt, volumeKg }) => ({
-    sessionId,
-    startedAt,
-    label: formatShortDate(parseISO(startedAt)),
-    value: volumeKg,
-  }));
 }

@@ -9,9 +9,11 @@ import {
 
 import { SessionSummaryRow } from "~/components/session-summary-row";
 import type { SessionRow } from "~/db/types";
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
+import { bodyweightKgAsOf, effectiveWeightKg } from "~/utils/bodyweight";
 import { parseISO, weekKeyOf } from "~/utils/dates";
 import { formatDisplayDate } from "~/utils/format-display-date";
 import { groupSessionVolumes } from "~/utils/progress-page-math";
@@ -51,6 +53,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
 
   const sessionsQ = useSessions();
   const weeklyVolumeQ = useLifetimeWeeklyVolume();
+  const measurementsQ = useMeasurements();
 
   // Defensive parse: `parseISO` accepts arbitrary strings; we reject anything
   // that isn't a valid Date so a tampered URL renders an empty state instead
@@ -82,22 +85,40 @@ export default function ViewWeekScreen(): React.JSX.Element {
   const weekVolumeKg: number = useMemo(() => {
     if (!targetKey) return 0;
     const rows = weeklyVolumeQ.data ?? [];
+    const measurements = measurementsQ.data;
+    // Bodyweight-aware (MAJ-1, site #14): route `w` through `effectiveWeightKg`
+    // with per-session bodyweight resolved by the session's `started_at`,
+    // memoised per `session_id`. Keeps the headline in lock-step with the
+    // per-session rows below, the strip bar, and the per-muscle chart.
+    const bwCache = new Map<string, number | null>();
+    const resolveBw = (sessionId: string, startedAt: string): number | null => {
+      if (!measurements) return null;
+      if (bwCache.has(sessionId)) return bwCache.get(sessionId)!;
+      const v = bodyweightKgAsOf(measurements, parseISO(startedAt).getTime());
+      bwCache.set(sessionId, v);
+      return v;
+    };
     let vol = 0;
     for (const row of rows) {
       if (weekKeyOf(parseISO(row.completed_at)) !== targetKey) continue;
-      const w = row.weight ? parseFloat(row.weight) : 0;
+      const bw = resolveBw(row.session_id, row.sessions.started_at);
+      const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
       const r = row.reps ?? 0;
-      if (Number.isFinite(w) && w > 0 && r > 0) vol += w * r;
+      if (w > 0 && r > 0) vol += w * r;
     }
     return vol;
-  }, [weeklyVolumeQ.data, targetKey]);
+  }, [weeklyVolumeQ.data, measurementsQ.data, targetKey]);
 
   // Per-session volume map for the row totals. Reuses the same lifetime
   // cache the headline above reads — one O(n) reduce, memoized on `data`
-  // reference identity.
+  // reference identity. Bodyweight-aware so the row totals match the headline.
   const totalVolumeBySessionId = useMemo(
-    () => groupSessionVolumes(weeklyVolumeQ.data ?? []),
-    [weeklyVolumeQ.data],
+    () =>
+      groupSessionVolumes(
+        weeklyVolumeQ.data ?? [],
+        measurementsQ.data ? { measurements: measurementsQ.data } : undefined,
+      ),
+    [weeklyVolumeQ.data, measurementsQ.data],
   );
 
   const endedSessionsCount = weekSessions.filter(

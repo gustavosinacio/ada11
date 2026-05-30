@@ -20,6 +20,7 @@ import { Button } from "~/components/ui/button";
 import { confirmDelete } from "~/components/confirm-delete";
 import type { ExerciseRow, SetRow } from "~/db/types";
 import { useAllExercises } from "~/hooks/use-exercises";
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import {
   useSession,
@@ -34,6 +35,8 @@ import {
   useUpdateSet,
   useUpdateSetMeta,
 } from "~/hooks/use-sets";
+import { bodyweightKgAsOf } from "~/utils/bodyweight";
+import { parseISO } from "~/utils/dates";
 import { formatVolume } from "~/utils/units";
 import { sumLiveVolume } from "~/utils/volume-target";
 
@@ -48,6 +51,7 @@ export default function SessionDetailScreen() {
   // keeps its own `useExercises()` (filtered) — soft-deleted exercises stay
   // un-addable.
   const exercisesQ = useAllExercises();
+  const measurementsQ = useMeasurements();
   const unit = useWeightUnit();
 
   const logSet = useLogSet(id ?? "");
@@ -126,13 +130,26 @@ export default function SessionDetailScreen() {
     const rows = setsQ.data ?? [];
     // Canonical kernel — matches the live session header, verdict screen,
     // weekly-volume strip and the History list row. Predicate:
-    // `completed_at != null`, `set_type !== "warmup"`, `w > 0 && r > 0`.
+    // `completed_at != null`, `set_type !== "warmup"`, `effective > 0 && r > 0`.
     const totalSets = rows.filter(
       (s) => s.completed_at != null && s.set_type !== "warmup",
     ).length;
-    const totalVolumeKg = sumLiveVolume(rows);
+    // Bodyweight-aware (single session — F-1): equipment from useAllExercises,
+    // bodyweight from this session's started_at.
+    const equipmentByExerciseId = new Map<string, string>();
+    for (const e of exercisesQ.data ?? []) {
+      if (e.equipment != null) equipmentByExerciseId.set(e.id, e.equipment);
+    }
+    const startedAt = session.data?.started_at;
+    const bodyweightKg = startedAt
+      ? bodyweightKgAsOf(measurementsQ.data, parseISO(startedAt).getTime())
+      : null;
+    const totalVolumeKg = sumLiveVolume(rows, {
+      equipmentByExerciseId,
+      bodyweightKg,
+    });
     return { totalSets, totalVolumeKg };
-  }, [setsQ.data]);
+  }, [setsQ.data, exercisesQ.data, measurementsQ.data, session.data?.started_at]);
 
   const commitName = () => {
     if (!id) return;

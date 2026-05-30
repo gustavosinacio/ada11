@@ -3,11 +3,14 @@ import { Text, View } from "react-native";
 
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import type { SetRow } from "~/db/types";
+import { useMeasurements } from "~/hooks/use-measurements";
 import {
   useMaxVolumeWindowWeeks,
   useWeightUnit,
 } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
+import { bodyweightKgAsOf } from "~/utils/bodyweight";
+import { parseISO } from "~/utils/dates";
 import { presentSetVolumeLines } from "~/utils/exercise-session-row-format";
 import { formatVolume, formatWeight } from "~/utils/units";
 import { computeVolumeTarget } from "~/utils/volume-target";
@@ -16,6 +19,12 @@ import { computeWindowStart } from "~/utils/window-utils";
 type Props = {
   exerciseId: string;
   currentSessionSets: SetRow[];
+  /** Equipment token of this exercise — when `"bodyweight"`, the Max/Now/To-PR
+   *  math becomes bodyweight-aware. */
+  equipment?: string;
+  /** `started_at` of the LIVE session — used to resolve the live bodyweight
+   *  for the running session's volume. */
+  liveSessionStartedAt?: string;
 };
 
 /**
@@ -35,8 +44,11 @@ type Props = {
 export function VolumeTargetSlot({
   exerciseId,
   currentSessionSets,
+  equipment,
+  liveSessionStartedAt,
 }: Props): React.JSX.Element | null {
   const progressQ = useExerciseProgress(exerciseId);
+  const measurementsQ = useMeasurements();
   const unit = useWeightUnit();
   const weeks = useMaxVolumeWindowWeeks();
   const windowStartMs = useMemo(
@@ -44,14 +56,48 @@ export function VolumeTargetSlot({
     [weeks],
   );
 
+  // Bodyweight input for `computeVolumeTarget` (single exercise → a one-entry
+  // equipment map; per-past-session bw resolved from each SessionSets.started_at;
+  // live bw from the live session's started_at). Omitted (undefined) when this
+  // is not a bodyweight exercise so the math stays byte-for-byte pre-feature.
+  const bodyweight = useMemo(() => {
+    if (equipment === undefined) return undefined;
+    const equipmentByExerciseId = new Map<string, string>([
+      [exerciseId, equipment],
+    ]);
+    const measurements = measurementsQ.data;
+    const pastBodyweightBySession = new Map<string, number | null>();
+    for (const s of progressQ.data ?? []) {
+      pastBodyweightBySession.set(
+        s.session_id,
+        bodyweightKgAsOf(measurements, parseISO(s.started_at).getTime()),
+      );
+    }
+    const liveBodyweightKg = liveSessionStartedAt
+      ? bodyweightKgAsOf(measurements, parseISO(liveSessionStartedAt).getTime())
+      : null;
+    return {
+      equipmentByExerciseId,
+      liveBodyweightKg,
+      pastBodyweightBySession,
+    };
+  }, [
+    equipment,
+    exerciseId,
+    measurementsQ.data,
+    progressQ.data,
+    liveSessionStartedAt,
+  ]);
+
   const state = useMemo(
     () =>
       computeVolumeTarget({
         pastSessions: progressQ.data,
         currentSessionSets,
         windowStartMs,
+        bodyweight,
       }),
-    [progressQ.data, currentSessionSets, windowStartMs],
+    [progressQ.data, currentSessionSets, windowStartMs, bodyweight],
   );
 
   // Hide while loading (no skeleton — keeps the block compact during
@@ -59,13 +105,29 @@ export function VolumeTargetSlot({
   if (progressQ.isLoading) return null;
   if (state.kind === "no-pr") return null;
 
+  // Bodyweight of the session that achieved `previousMaxKg`, resolved from any
+  // of its sets' `session_id` (all share one session). Passed alongside
+  // `equipment` to `presentSetVolumeLines` so the max-session per-set lines sum
+  // to `previousMaxKg` for a bodyweight exercise (Invariant C).
+  const maxSessionBwKg =
+    bodyweight && state.previousMaxSets[0]
+      ? bodyweight.pastBodyweightBySession.get(
+          state.previousMaxSets[0].session_id,
+        ) ?? null
+      : null;
+
   if (state.kind === "chasing") {
     const maxDisplay = formatVolume(state.previousMaxKg, unit);
     const nowDisplay = formatVolume(state.runningKg, unit);
     const gapDisplay = formatVolume(state.gapKg, unit);
     // Per-set breakdown of the session that achieved the Max, so the user can
     // see *how* the previous best was built (Feature: volume per set on max).
-    const maxLines = presentSetVolumeLines({ sets: state.previousMaxSets, unit });
+    const maxLines = presentSetVolumeLines({
+      sets: state.previousMaxSets,
+      unit,
+      equipment,
+      bodyweightKg: maxSessionBwKg,
+    });
     // MAJ-1 fix (option c): suppress the reps clause when nothing has been
     // checked yet (`runningKg === 0`). Without this, a draft `100 × 5` (still
     // unchecked) renders as "Now 0 kg · ≈ 10 reps @ 100 kg" — internally
@@ -138,6 +200,8 @@ export function VolumeTargetSlot({
   const surMaxLines = presentSetVolumeLines({
     sets: state.previousMaxSets,
     unit,
+    equipment,
+    bodyweightKg: maxSessionBwKg,
   });
   const copy = isMatch
     ? "Matched your previous best — one more rep is a PR"

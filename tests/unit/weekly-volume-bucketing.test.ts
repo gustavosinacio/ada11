@@ -11,12 +11,42 @@
 import { describe, expect, it } from "vitest";
 
 import type { WeeklyVolumeRow } from "~/api/stats";
+import type { MeasurementEntryRow } from "~/db/types";
 import { isoWeekStart } from "~/utils/dates";
 import { computeStripModel } from "~/utils/weekly-volume-strip-math";
 
-type RowInput = Omit<WeeklyVolumeRow, "set_type" | "exercise_id" | "session_id" | "sessions"> & {
+function mkMeasurement(
+  measuredAt: string,
+  weightKg: string | null,
+): MeasurementEntryRow {
+  return {
+    id: `m-${measuredAt}`,
+    user_id: "user-1",
+    measured_at: measuredAt,
+    weight_kg: weightKg,
+    body_fat_pct: null,
+    neck_cm: null,
+    chest_cm: null,
+    biceps_cm: null,
+    forearm_cm: null,
+    waist_cm: null,
+    hips_cm: null,
+    thigh_cm: null,
+    calf_cm: null,
+    notes: null,
+    created_at: measuredAt,
+    updated_at: measuredAt,
+    deleted_at: null,
+  };
+}
+
+type RowInput = Omit<
+  WeeklyVolumeRow,
+  "set_type" | "exercise_id" | "session_id" | "exercises" | "sessions"
+> & {
   exercise_id?: string;
   session_id?: string;
+  exercises?: { equipment: string };
   sessions?: { started_at: string; ended_at: string };
   set_type?: WeeklyVolumeRow["set_type"];
 };
@@ -29,6 +59,9 @@ function buildRow(input: RowInput): WeeklyVolumeRow {
     set_type: input.set_type ?? "working",
     exercise_id: input.exercise_id ?? "ex-1",
     session_id: input.session_id ?? "sess-1",
+    // MIN-4: default barbell so existing assertions stay green
+    // (`effectiveWeightKg("barbell", weight, null)` === addedLoad).
+    exercises: input.exercises ?? { equipment: "barbell" },
     sessions: input.sessions ?? {
       started_at: input.completed_at,
       ended_at: input.completed_at,
@@ -200,5 +233,66 @@ describe("computeStripModel", () => {
     expect(model!.buckets.length).toBeGreaterThanOrEqual(10);
     // The 10-weeks-ago row's volume IS counted (maxKg > 0).
     expect(model!.maxKg).toBe(500);
+  });
+});
+
+describe("computeStripModel — bodyweight kernel", () => {
+  it("a bodyweight set (weight=0) contributes (bodyweight + addedLoad) * reps", () => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 86400000);
+    const completedAt = oneWeekAgo.toISOString();
+    const rows: WeeklyVolumeRow[] = [
+      buildRow({
+        completed_at: completedAt,
+        weight: "0", // unweighted pull-up
+        reps: 10,
+        exercises: { equipment: "bodyweight" },
+        sessions: { started_at: completedAt, ended_at: completedAt },
+      }),
+    ];
+    // Bodyweight 80kg as of the session → effective 80 * 10 = 800.
+    const model = computeStripModel(rows, now, {
+      measurements: [mkMeasurement(completedAt, "80")],
+    });
+    expect(model).not.toBeNull();
+    expect(model!.maxKg).toBe(800);
+  });
+
+  it("a weighted pull-up (weight=20) adds load on top of bodyweight", () => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 86400000);
+    const completedAt = oneWeekAgo.toISOString();
+    const rows: WeeklyVolumeRow[] = [
+      buildRow({
+        completed_at: completedAt,
+        weight: "20",
+        reps: 5,
+        exercises: { equipment: "bodyweight" },
+        sessions: { started_at: completedAt, ended_at: completedAt },
+      }),
+    ];
+    // (80 + 20) * 5 = 500.
+    const model = computeStripModel(rows, now, {
+      measurements: [mkMeasurement(completedAt, "80")],
+    });
+    expect(model!.maxKg).toBe(500);
+  });
+
+  it("without measurements a bodyweight set falls back to addedLoad only", () => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 86400000);
+    const completedAt = oneWeekAgo.toISOString();
+    const rows: WeeklyVolumeRow[] = [
+      buildRow({
+        completed_at: completedAt,
+        weight: "0",
+        reps: 10,
+        exercises: { equipment: "bodyweight" },
+      }),
+    ];
+    // No measurements → bw null → effective = 0 → contributes 0 = today's
+    // behaviour for an unweighted bodyweight set.
+    const model = computeStripModel(rows, now, { measurements: [] });
+    expect(model!.maxKg).toBe(0);
   });
 });

@@ -4,6 +4,7 @@ import { ActivityIndicator, FlatList, Text, View } from "react-native";
 
 import { SessionSummaryRow } from "~/components/session-summary-row";
 import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useSessions } from "~/hooks/use-sessions";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
@@ -17,11 +18,20 @@ export default function HistoryList() {
     refetch: refetchWeekly,
     isRefetching: isRefetchingWeekly,
   } = useLifetimeWeeklyVolume();
+  // Bodyweight-aware per-session totals (MAJ-3-NEW): the History-list row
+  // totals must match the week drill-down / verdict / strip / chart for any
+  // bodyweight exercise — the twin of the week-drill-down `groupSessionVolumes`
+  // wiring. Equipment arrives on the widened `WeeklyVolumeRow.exercises.equipment`.
+  const { data: measurements } = useMeasurements();
   const unit = useWeightUnit();
 
   const totalVolumeBySessionId = useMemo(
-    () => groupSessionVolumes(weeklyVolumeData ?? []),
-    [weeklyVolumeData],
+    () =>
+      groupSessionVolumes(
+        weeklyVolumeData ?? [],
+        measurements ? { measurements } : undefined,
+      ),
+    [weeklyVolumeData, measurements],
   );
 
   const onRefresh = useCallback(async () => {

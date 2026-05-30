@@ -759,3 +759,159 @@ describe("computeVolumeTarget — windowed-mode", () => {
     expect(state.previousMaxKg).toBe(600);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bodyweight kernel — Phase 0 (Invariant B + MIN-1 all-three-spots)
+// ---------------------------------------------------------------------------
+
+describe("computeVolumeTarget — bodyweight", () => {
+  const equipmentByExerciseId = new Map<string, string>([
+    ["pullup", "bodyweight"],
+  ]);
+
+  it("a bodyweight past session contributes (bodyweight + addedLoad) * reps", () => {
+    const past = [
+      mkSession(
+        "s-prior",
+        [
+          mkSet({
+            set_number: 1,
+            exercise_id: "pullup",
+            weight: "0",
+            reps: 10,
+          }),
+        ],
+        "2026-05-18T10:00:00Z",
+      ),
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [],
+      bodyweight: {
+        equipmentByExerciseId,
+        liveBodyweightKg: 80,
+        pastBodyweightBySession: new Map([["s-prior", 80]]),
+      },
+    });
+    // 80 * 10 = 800.
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    expect(state.previousMaxKg).toBe(800);
+  });
+
+  it("MIN-1: a 0-weight bodyweight live set still drives currentWeightKg + repsToBeat (effective bodyweight, not 0)", () => {
+    const past = [
+      mkSession(
+        "s-prior",
+        [
+          mkSet({
+            set_number: 1,
+            exercise_id: "pullup",
+            weight: "0",
+            reps: 12,
+          }),
+        ],
+        "2026-05-18T10:00:00Z",
+      ),
+    ];
+    // Live: ONE checked bodyweight set, weight=0. The selection gate must
+    // accept it (effective 80 > 0), the displayed currentWeightKg must be 80
+    // (not 0), and repsToBeat = gap / 80.
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          exercise_id: "pullup",
+          weight: "0",
+          reps: 4,
+          completed_at: "2026-05-20T10:05:00Z",
+        }),
+      ],
+      bodyweight: {
+        equipmentByExerciseId,
+        liveBodyweightKg: 80,
+        pastBodyweightBySession: new Map([["s-prior", 80]]),
+      },
+    });
+    expect(state.kind).toBe("chasing");
+    if (state.kind !== "chasing") return;
+    // previousMax = 80*12 = 960; running = 80*4 = 320; gap = 640.
+    expect(state.previousMaxKg).toBe(960);
+    expect(state.runningKg).toBe(320);
+    expect(state.gapKg).toBe(640);
+    expect(state.currentWeightKg).toBe(80);
+    expect(state.repsToBeat).toBeCloseTo(640 / 80, 5); // 8 reps
+  });
+
+  it("a weighted pull-up (weight=20) surpasses the unweighted prior best", () => {
+    const past = [
+      mkSession(
+        "s-prior",
+        [
+          mkSet({
+            set_number: 1,
+            exercise_id: "pullup",
+            weight: "0",
+            reps: 5,
+          }),
+        ],
+        "2026-05-18T10:00:00Z",
+      ),
+    ];
+    const state = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets: [
+        mkSet({
+          set_number: 1,
+          exercise_id: "pullup",
+          weight: "20",
+          reps: 5,
+          completed_at: "2026-05-20T10:05:00Z",
+        }),
+      ],
+      bodyweight: {
+        equipmentByExerciseId,
+        liveBodyweightKg: 80,
+        pastBodyweightBySession: new Map([["s-prior", 80]]),
+      },
+    });
+    // prior 80*5 = 400; running (80+20)*5 = 500 > 400 → surpassed.
+    expect(state.kind).toBe("surpassed");
+    if (state.kind !== "surpassed") return;
+    expect(state.previousMaxKg).toBe(400);
+    expect(state.runningKg).toBe(500);
+    expect(state.overflowKg).toBe(100);
+  });
+
+  it("Invariant A: omitting bodyweight reproduces the pre-feature numbers byte-for-byte", () => {
+    const past = [
+      mkSession("s-prior", [
+        mkSet({ set_number: 1, weight: "100", reps: 5 }),
+      ]),
+    ];
+    const currentSessionSets = [
+      mkSet({
+        set_number: 1,
+        weight: "100",
+        reps: 3,
+        completed_at: "2026-05-21T10:05:00Z",
+      }),
+    ];
+    const withoutBw = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets,
+    });
+    // A non-bodyweight exercise + bodyweight input → identical numbers.
+    const withBw = computeVolumeTarget({
+      pastSessions: past,
+      currentSessionSets,
+      bodyweight: {
+        equipmentByExerciseId: new Map([["ex-1", "barbell"]]),
+        liveBodyweightKg: 80,
+        pastBodyweightBySession: new Map([["s-prior", 80]]),
+      },
+    });
+    expect(withBw).toEqual(withoutBw);
+  });
+});

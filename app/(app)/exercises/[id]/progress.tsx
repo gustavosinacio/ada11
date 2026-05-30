@@ -17,8 +17,10 @@ import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import { useIsAdmin } from "~/hooks/use-admin";
 import { useAllExercise } from "~/hooks/use-exercises";
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useMaxVolumeWindowWeeks, useWeightUnit } from "~/hooks/use-preferences";
 import { useExerciseProgress } from "~/hooks/use-progress";
+import { bodyweightKgAsOf, effectiveWeightKg } from "~/utils/bodyweight";
 import { parseISO } from "~/utils/dates";
 import { presentSetVolumeLines } from "~/utils/exercise-session-row-format";
 import { formatDisplayDate, formatShortDate } from "~/utils/format-display-date";
@@ -57,6 +59,7 @@ export default function ExerciseProgressScreen() {
   // which already work for deleted ids.
   const exercise = useAllExercise(id);
   const progressQ = useExerciseProgress(id);
+  const measurementsQ = useMeasurements();
   const unit = useWeightUnit();
   const isAdmin = useIsAdmin().data === true;
   // Max-volume window preference — same source the live <VolumeTargetSlot>
@@ -124,6 +127,8 @@ export default function ExerciseProgressScreen() {
   const { e1rmData, volumeData, bestE1rm, totalSessions, maxVolumeSession, maxVolumeKg } =
     useMemo(() => {
       const sessions = progressQ.data ?? [];
+      const measurements = measurementsQ.data;
+      const equipment = exercise.data?.equipment;
       const e1rm: DataPoint[] = [];
       const vol: DataPoint[] = [];
       let best = 0;
@@ -132,17 +137,32 @@ export default function ExerciseProgressScreen() {
 
       for (const s of sessions) {
         const label = formatShortDate(s.started_at);
+        // Resolve bodyweight once per session (outside the set loop).
+        const bw = bodyweightKgAsOf(
+          measurements,
+          parseISO(s.started_at).getTime(),
+        );
         let sessionBestE1rm = 0;
         let sessionVolume = 0;
 
         for (const set of s.sets) {
           if (set.set_type === "warmup") continue;
-          const w = set.weight ? parseFloat(set.weight) : 0;
           const r = set.reps ?? 0;
+
+          // e1RM — logged weight ONLY, guard UNCHANGED. e1RM stays a
+          // logged-weight strength metric (out of scope for bodyweight): a
+          // 0-weight bodyweight set produces NO e1RM point (MAJ-2 / Invariant D).
+          const w = set.weight ? parseFloat(set.weight) : 0;
           if (w > 0 && r > 0) {
             const est = epley1RM(w, r);
             if (est > sessionBestE1rm) sessionBestE1rm = est;
-            sessionVolume += w * r;
+          }
+
+          // Volume — effective (bodyweight-aware) weight, separate guard. A
+          // 0-weight bodyweight set with bw>0 still contributes bw*reps.
+          const effW = effectiveWeightKg(equipment, set.weight, bw);
+          if (effW > 0 && r > 0) {
+            sessionVolume += effW * r;
           }
         }
 
@@ -176,7 +196,7 @@ export default function ExerciseProgressScreen() {
         maxVolumeSession: maxVolSession,
         maxVolumeKg: maxVolKg,
       };
-    }, [progressQ.data, unit, windowStartMs]);
+    }, [progressQ.data, measurementsQ.data, exercise.data?.equipment, unit, windowStartMs]);
 
   // The query returns ASC for chart plotting (left→right oldest→newest).
   // The "Sessions" list below wants newest first, so reverse a shallow copy.
@@ -263,6 +283,14 @@ export default function ExerciseProgressScreen() {
                 lines={presentSetVolumeLines({
                   sets: maxVolumeSession.sets,
                   unit,
+                  // Identical equipment + per-session bodyweight to the volume
+                  // reduce above, so the per-set lines sum to `maxVolumeKg`
+                  // for a bodyweight exercise (Invariant C).
+                  equipment: exercise.data?.equipment ?? undefined,
+                  bodyweightKg: bodyweightKgAsOf(
+                    measurementsQ.data,
+                    parseISO(maxVolumeSession.started_at).getTime(),
+                  ),
                 })}
               />
             </View>
@@ -279,6 +307,8 @@ export default function ExerciseProgressScreen() {
                   key={s.session_id}
                   session={s}
                   unit={unit}
+                  equipment={exercise.data?.equipment ?? undefined}
+                  measurements={measurementsQ.data}
                   onPress={() => router.push(`/(app)/history/${s.session_id}`)}
                 />
               ))}

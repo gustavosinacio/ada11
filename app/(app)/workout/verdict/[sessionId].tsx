@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { PrListRow } from "~/components/pr-list-row";
 import { Button } from "~/components/ui/button";
 import { useAllExercises } from "~/hooks/use-exercises";
+import { useMeasurements } from "~/hooks/use-measurements";
 import {
   useMaxVolumeWindowWeeks,
   useWeightUnit,
@@ -12,6 +13,8 @@ import {
 import { useSession } from "~/hooks/use-sessions";
 import { useSetsForSession } from "~/hooks/use-sets";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
+import { bodyweightKgAsOf } from "~/utils/bodyweight";
+import { parseISO } from "~/utils/dates";
 import { formatDuration } from "~/utils/format-session-times";
 import {
   computeCurrentSessionVolumeByExercise,
@@ -43,6 +46,7 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
   const session = useSession(sessionId);
   const setsQ = useSetsForSession(sessionId);
   const exercisesQ = useAllExercises();
+  const measurementsQ = useMeasurements();
   const lifetimeQ = useLifetimeWeeklyVolume();
   const weeks = useMaxVolumeWindowWeeks();
   const windowStartMs = useMemo(
@@ -50,14 +54,41 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
     [weeks],
   );
 
+  // exercise_id → equipment for the bodyweight-aware single-session kernels.
+  const equipmentByExerciseId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of exercisesQ.data ?? []) {
+      if (e.equipment != null) map.set(e.id, e.equipment);
+    }
+    return map;
+  }, [exercisesQ.data]);
+
+  // Bodyweight as-of this session (single session — F-1). `null` until session
+  // resolves; the kernels treat `null` bodyweight as 0 addend (degrades to the
+  // logged-weight number for non-bodyweight exercises).
+  const sessionBodyweightKg = useMemo(() => {
+    const startedAt = session.data?.started_at;
+    if (!startedAt) return null;
+    return bodyweightKgAsOf(measurementsQ.data, parseISO(startedAt).getTime());
+  }, [session.data?.started_at, measurementsQ.data]);
+
+  const setBodyweightInput = useMemo(
+    () => ({ equipmentByExerciseId, bodyweightKg: sessionBodyweightKg }),
+    [equipmentByExerciseId, sessionBodyweightKg],
+  );
+
   const totalVolumeKg = useMemo(
-    () => sumLiveVolume(setsQ.data ?? []),
-    [setsQ.data],
+    () => sumLiveVolume(setsQ.data ?? [], setBodyweightInput),
+    [setsQ.data, setBodyweightInput],
   );
 
   const currentByExercise = useMemo(
-    () => computeCurrentSessionVolumeByExercise(setsQ.data ?? []),
-    [setsQ.data],
+    () =>
+      computeCurrentSessionVolumeByExercise(
+        setsQ.data ?? [],
+        setBodyweightInput,
+      ),
+    [setsQ.data, setBodyweightInput],
   );
 
   // PR list. Short-circuits to `[]` until both lifetime + exercises caches are
@@ -71,6 +102,12 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
       currentSessionId: sessionId,
       currentSessionVolumeByExercise: currentByExercise,
       windowStartMs,
+      // The lifetime-max walk is multi-session (WVR pipeline) — pass the
+      // measurements timeline so the prior-only baseline is bodyweight-aware
+      // and matches `currentByExercise` (resolved with the same bodyweight).
+      bodyweight: measurementsQ.data
+        ? { measurements: measurementsQ.data }
+        : undefined,
     }).map((pr) => ({
       ...pr,
       exerciseName: exMap.get(pr.exerciseId)?.name ?? "Unknown exercise",
@@ -81,6 +118,7 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
     exercisesQ.data,
     currentByExercise,
     windowStartMs,
+    measurementsQ.data,
   ]);
 
   // Headline is ready as soon as session + sets + exercises are present.

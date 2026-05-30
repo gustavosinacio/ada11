@@ -39,6 +39,9 @@ import {
   useUpdateSet,
   useUpdateSetMeta,
 } from "~/hooks/use-sets";
+import { useMeasurements } from "~/hooks/use-measurements";
+import { bodyweightKgAsOf } from "~/utils/bodyweight";
+import { parseISO } from "~/utils/dates";
 import { computeAutoFillPayload } from "~/utils/auto-fill-set";
 import { sumLiveVolume } from "~/utils/volume-target";
 
@@ -69,6 +72,7 @@ function LiveWorkoutScreenInner() {
   // resolves to a row in exMap. Picker (ExercisePicker below) keeps the
   // filtered `useExercises()` so the deleted row can't be re-added.
   const exercisesQ = useAllExercises();
+  const measurementsQ = useMeasurements();
   const setsQ = useSetsForSession(sessionId);
   const logSet = useLogSet(sessionId ?? "");
   const updateSet = useUpdateSet(sessionId ?? "");
@@ -88,10 +92,27 @@ function LiveWorkoutScreenInner() {
   // `sumLiveVolume` enforces F10 "checked = committed": warmups out,
   // dropsets in, unchecked drafts out — so the live header total agrees
   // with the post-Finish verdict by construction.
-  const totalVolumeKg = useMemo(
-    () => sumLiveVolume(setsQ.data ?? []),
-    [setsQ.data],
-  );
+  // exercise_id → equipment, for the bodyweight-aware live-volume kernel.
+  const equipmentByExerciseId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of exercisesQ.data ?? []) {
+      if (e.equipment != null) map.set(e.id, e.equipment);
+    }
+    return map;
+  }, [exercisesQ.data]);
+
+  const totalVolumeKg = useMemo(() => {
+    const startedAt = session.data?.started_at;
+    if (!startedAt) return sumLiveVolume(setsQ.data ?? []);
+    const bodyweightKg = bodyweightKgAsOf(
+      measurementsQ.data,
+      parseISO(startedAt).getTime(),
+    );
+    return sumLiveVolume(setsQ.data ?? [], {
+      equipmentByExerciseId,
+      bodyweightKg,
+    });
+  }, [setsQ.data, session.data?.started_at, measurementsQ.data, equipmentByExerciseId]);
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
   const restTimer = useRestTimer();
@@ -505,6 +526,7 @@ function LiveWorkoutScreenInner() {
               removeDisabled={logSet.isPending}
               showCheckable
               showVolumeTarget
+              liveSessionStartedAt={session.data.started_at}
               pendingCheckSetIds={pendingCheckIds}
               onToggleSetChecked={async (
                 id,

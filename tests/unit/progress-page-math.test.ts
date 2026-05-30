@@ -19,7 +19,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WeeklyVolumeRow } from "~/api/stats";
-import type { ExerciseRow, MuscleGroup, SetType } from "~/db/types";
+import type {
+  ExerciseRow,
+  MeasurementEntryRow,
+  MuscleGroup,
+  SetType,
+} from "~/db/types";
 import { MUSCLE_GROUPS } from "~/db/types";
 import {
   bucketLifetimeWeeklyVolumes,
@@ -69,10 +74,37 @@ function mkRow(overrides: Partial<WeeklyVolumeRow> & {
     set_type: (overrides.set_type ?? "working") as SetType,
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id ?? "sess-1",
+    // MIN-4: default barbell so existing assertions stay green.
+    exercises: overrides.exercises ?? { equipment: "barbell" },
     sessions: overrides.sessions ?? {
       started_at: sessionStart,
       ended_at: sessionStart,
     },
+  };
+}
+
+function mkMeasurement(
+  measuredAt: string,
+  weightKg: string | null,
+): MeasurementEntryRow {
+  return {
+    id: `m-${measuredAt}`,
+    user_id: "user-1",
+    measured_at: measuredAt,
+    weight_kg: weightKg,
+    body_fat_pct: null,
+    neck_cm: null,
+    chest_cm: null,
+    biceps_cm: null,
+    forearm_cm: null,
+    waist_cm: null,
+    hips_cm: null,
+    thigh_cm: null,
+    calf_cm: null,
+    notes: null,
+    created_at: measuredAt,
+    updated_at: measuredAt,
+    deleted_at: null,
   };
 }
 
@@ -1608,5 +1640,179 @@ describe("computeCurrentWeekVolume", () => {
       }),
     ];
     expect(computeCurrentWeekVolume(rows, NOW)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bodyweight kernel — Phase 0 (Invariant B: bodyweight shifts)
+// ---------------------------------------------------------------------------
+
+describe("bucketLifetimeWeeklyVolumes — bodyweight", () => {
+  it("a bodyweight set (weight=0) contributes bodyweight * reps", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z",
+        weight: "0",
+        reps: 10,
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:30:00Z",
+        },
+      }),
+    ];
+    const buckets = bucketLifetimeWeeklyVolumes(rows, undefined, {
+      measurements: [mkMeasurement("2026-05-01T00:00:00Z", "80")],
+    });
+    // 80 * 10 = 800 in the 2026-W19 bucket.
+    expect([...buckets.values()].reduce((a, b) => a + b, 0)).toBe(800);
+  });
+
+  it("non-bodyweight rows are byte-identical with vs without the bodyweight input (Invariant A)", () => {
+    const rows = [
+      mkRow({ completed_at: "2026-05-04T10:00:00Z", weight: "100", reps: 5 }),
+    ];
+    const withoutBw = bucketLifetimeWeeklyVolumes(rows);
+    const withBw = bucketLifetimeWeeklyVolumes(rows, undefined, {
+      measurements: [mkMeasurement("2026-05-01T00:00:00Z", "80")],
+    });
+    expect([...withBw.entries()]).toEqual([...withoutBw.entries()]);
+  });
+});
+
+describe("computeLifetimeMaxPerExercise — bodyweight (Invariant B)", () => {
+  it("bodyweight session max reflects (bodyweight + addedLoad) * reps", () => {
+    const rows = [
+      // Prior session, lighter bodyweight.
+      mkRow({
+        completed_at: "2026-04-06T10:00:00Z",
+        weight: "0",
+        reps: 8,
+        exercise_id: "pullup",
+        session_id: "s1",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-04-06T09:00:00Z",
+          ended_at: "2026-04-06T10:00:00Z",
+        },
+      }),
+      // Later session, heavier bodyweight + more reps.
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z",
+        weight: "0",
+        reps: 12,
+        exercise_id: "pullup",
+        session_id: "s2",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:00:00Z",
+        },
+      }),
+    ];
+    const maxes = computeLifetimeMaxPerExercise(rows, undefined, {
+      measurements: [
+        mkMeasurement("2026-04-01T00:00:00Z", "70"), // prior weigh-in
+        mkMeasurement("2026-05-01T00:00:00Z", "82"), // later weigh-in
+      ],
+    });
+    // s1: 70 * 8 = 560; s2: 82 * 12 = 984 → max 984.
+    expect(maxes.get("pullup")).toBe(984);
+  });
+});
+
+describe("computePrsThisWeek — bodyweight PR creation/erasure", () => {
+  // Anchor NOW = Tuesday 2026-05-19 local (ISO week 2026-W21, Mon 5/18).
+  const NOW = new Date(2026, 4, 19, 12, 0, 0);
+
+  it("create: a bodyweight session beats the prior bodyweight max (PR appears)", () => {
+    const rows = [
+      // Prior week — bodyweight 80, 8 reps → 640.
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z",
+        weight: "0",
+        reps: 8,
+        exercise_id: "pullup",
+        session_id: "s-prior",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:00:00Z",
+        },
+      }),
+      // Current week (2026-W21: Mon 5/18) — bodyweight 80, 12 reps → 960 > 640.
+      mkRow({
+        completed_at: "2026-05-20T10:00:00Z",
+        weight: "0",
+        reps: 12,
+        exercise_id: "pullup",
+        session_id: "s-week",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-20T09:00:00Z",
+          ended_at: "2026-05-20T10:00:00Z",
+        },
+      }),
+    ];
+    const prs = computePrsThisWeek({
+      rows,
+      currentWeekStartIso: isoWeekStart(NOW).toISOString(),
+      currentWeekEndIso: new Date(
+        isoWeekStart(NOW).getTime() + 6 * 86400000 + 86399000,
+      ).toISOString(),
+      bodyweight: {
+        measurements: [mkMeasurement("2026-05-01T00:00:00Z", "80")],
+      },
+    });
+    const pr = prs.find((p) => p.exerciseId === "pullup");
+    expect(pr).toBeDefined();
+    expect(pr!.priorMaxKg).toBe(640);
+    expect(pr!.currentMaxKg).toBe(960);
+  });
+
+  it("erase: a logged-weight PR vanishes once the prior bodyweight max is counted", () => {
+    // Without bodyweight: prior pull-ups log weight=0 → 0 volume → the current
+    // week's first pull-up would look like a brand-new PR baseline. WITH
+    // bodyweight, the prior sessions now carry real volume, so a smaller
+    // current-week session is NOT a PR.
+    const rows = [
+      // Prior — bodyweight 80, 15 reps → 1200 (the real prior max).
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z",
+        weight: "0",
+        reps: 15,
+        exercise_id: "pullup",
+        session_id: "s-prior",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-04T09:00:00Z",
+          ended_at: "2026-05-04T10:00:00Z",
+        },
+      }),
+      // Current week — bodyweight 80, 8 reps → 640 < 1200 → NOT a PR.
+      mkRow({
+        completed_at: "2026-05-20T10:00:00Z",
+        weight: "0",
+        reps: 8,
+        exercise_id: "pullup",
+        session_id: "s-week",
+        exercises: { equipment: "bodyweight" },
+        sessions: {
+          started_at: "2026-05-20T09:00:00Z",
+          ended_at: "2026-05-20T10:00:00Z",
+        },
+      }),
+    ];
+    const prs = computePrsThisWeek({
+      rows,
+      currentWeekStartIso: isoWeekStart(NOW).toISOString(),
+      currentWeekEndIso: new Date(
+        isoWeekStart(NOW).getTime() + 6 * 86400000 + 86399000,
+      ).toISOString(),
+      bodyweight: {
+        measurements: [mkMeasurement("2026-05-01T00:00:00Z", "80")],
+      },
+    });
+    expect(prs.find((p) => p.exerciseId === "pullup")).toBeUndefined();
   });
 });

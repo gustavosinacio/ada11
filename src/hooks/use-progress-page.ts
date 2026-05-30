@@ -3,11 +3,13 @@ import { endOfWeek } from "date-fns";
 import { useCallback, useMemo, useState } from "react";
 
 import { listFinishedSessionStartedAts } from "~/api/progress-page";
-import type { MuscleGroup } from "~/db/types";
+import type { MeasurementEntryRow, MuscleGroup } from "~/db/types";
 import { useAllExercises } from "~/hooks/use-exercises";
+import { useMeasurements } from "~/hooks/use-measurements";
 import { useMaxVolumeWindowWeeks } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { MUSCLE_GROUPS } from "~/db/types";
+import { bodyweightKgAsOf, effectiveWeightKg } from "~/utils/bodyweight";
 import { isoWeekStart, parseISO } from "~/utils/dates";
 import {
   bucketLifetimeWeeklyVolumes,
@@ -17,6 +19,7 @@ import {
   computeStreaks,
   findBestWeek,
   type BestWeek,
+  type WeeklyBodyweightInput,
 } from "~/utils/progress-page-math";
 import { computeWindowStart } from "~/utils/window-utils";
 
@@ -27,6 +30,22 @@ import { computeWindowStart } from "~/utils/window-utils";
  */
 
 const WEEK_OPTS = { weekStartsOn: 1 as const };
+
+/**
+ * Wraps the raw `useMeasurements` data into a stable `WeeklyBodyweightInput`
+ * reference for the WVR kernels (MIN-3: WVR hooks take ONLY `{ measurements }`;
+ * equipment arrives on the widened row). Memoised on `measurements` identity so
+ * downstream `useMemo`s don't re-run every render. Returns `undefined` while
+ * measurements are still loading → kernels keep the pre-feature numbers.
+ */
+function useWeeklyBodyweightInput(
+  measurements: MeasurementEntryRow[] | undefined,
+): WeeklyBodyweightInput | undefined {
+  return useMemo(
+    () => (measurements ? { measurements } : undefined),
+    [measurements],
+  );
+}
 
 // ---------------------------------------------------------------------------
 // useLifetimeBestWeek
@@ -48,6 +67,7 @@ export function useLifetimeBestWeek(): {
   isError: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
+  const measurementsQ = useMeasurements();
   const weeks = useMaxVolumeWindowWeeks();
   // `new Date()` lives INSIDE the factory so it does not appear in the dep
   // list — the memo only re-runs when `weeks` or `q.data` changes. The
@@ -57,10 +77,13 @@ export function useLifetimeBestWeek(): {
     () => computeWindowStart(weeks, new Date()),
     [weeks],
   );
+  const bodyweight = useWeeklyBodyweightInput(measurementsQ.data);
   const data = useMemo<BestWeek | null>(() => {
     if (!q.data) return null;
-    return findBestWeek(bucketLifetimeWeeklyVolumes(q.data, windowStartMs));
-  }, [q.data, windowStartMs]);
+    return findBestWeek(
+      bucketLifetimeWeeklyVolumes(q.data, windowStartMs, bodyweight),
+    );
+  }, [q.data, windowStartMs, bodyweight]);
   return { data, isLoading: q.isLoading, isError: q.isError };
 }
 
@@ -74,10 +97,12 @@ export function useCurrentWeekVolume(): {
   isError: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
+  const measurementsQ = useMeasurements();
+  const bodyweight = useWeeklyBodyweightInput(measurementsQ.data);
   const data = useMemo<number>(() => {
     if (!q.data) return 0;
-    return computeCurrentWeekVolume(q.data, new Date());
-  }, [q.data]);
+    return computeCurrentWeekVolume(q.data, new Date(), bodyweight);
+  }, [q.data, bodyweight]);
   return { data, isLoading: q.isLoading, isError: q.isError };
 }
 
@@ -107,6 +132,8 @@ export function usePrsThisWeek(): {
   isLoading: boolean;
 } {
   const q = useLifetimeWeeklyVolume();
+  const measurementsQ = useMeasurements();
+  const bodyweight = useWeeklyBodyweightInput(measurementsQ.data);
   const weeks = useMaxVolumeWindowWeeks();
   const windowStartMs = useMemo(
     () => computeWindowStart(weeks, new Date()),
@@ -127,6 +154,7 @@ export function usePrsThisWeek(): {
       currentWeekStartIso: start,
       currentWeekEndIso: end,
       windowStartMs,
+      bodyweight,
     });
     const ids = new Set<string>();
     const map = new Map<string, PrSummary>();
@@ -139,7 +167,7 @@ export function usePrsThisWeek(): {
       });
     }
     return { count: ids.size, prIds: ids, prsByExerciseId: map };
-  }, [q.data, windowStartMs]);
+  }, [q.data, windowStartMs, bodyweight]);
   return { count, prIds, prsByExerciseId, isLoading: q.isLoading };
 }
 
@@ -224,6 +252,8 @@ export function useExercisesThisWeek(): {
 } {
   const lifetime = useLifetimeWeeklyVolume();
   const lib = useAllExercises();
+  const measurementsQ = useMeasurements();
+  const bodyweight = useWeeklyBodyweightInput(measurementsQ.data);
   const weeks = useMaxVolumeWindowWeeks();
   const windowStartMs = useMemo(
     () => computeWindowStart(weeks, new Date()),
@@ -244,13 +274,28 @@ export function useExercisesThisWeek(): {
     //    this week and is orthogonal to the window pref (the window only
     //    governs "Max"); we do NOT filter `nowKgByExercise` by
     //    `windowStartMs`.
+    // Bodyweight resolver memoised per session_id (F-2). When `bodyweight` is
+    // absent, `effectiveWeightKg(eq, weight, null)` reduces to the pre-feature
+    // addedLoad for non-bodyweight rows (byte-for-byte).
+    const nowBwCache = new Map<string, number | null>();
+    const resolveNowBw = (sessionId: string, startedAt: string): number | null => {
+      if (!bodyweight) return null;
+      if (nowBwCache.has(sessionId)) return nowBwCache.get(sessionId)!;
+      const v = bodyweightKgAsOf(
+        bodyweight.measurements,
+        parseISO(startedAt).getTime(),
+      );
+      nowBwCache.set(sessionId, v);
+      return v;
+    };
     const nowKgByExercise = new Map<string, number>();
     for (const r of lifetime.data) {
       const t = parseISO(r.completed_at);
       if (t < weekStart || t > weekEnd) continue;
-      const w = r.weight ? parseFloat(r.weight) : 0;
+      const bw = resolveNowBw(r.session_id, r.sessions.started_at);
+      const w = effectiveWeightKg(r.exercises.equipment, r.weight, bw);
       const reps = r.reps ?? 0;
-      if (Number.isFinite(w) && w > 0 && reps > 0) {
+      if (w > 0 && reps > 0) {
         nowKgByExercise.set(
           r.exercise_id,
           (nowKgByExercise.get(r.exercise_id) ?? 0) + w * reps,
@@ -263,6 +308,7 @@ export function useExercisesThisWeek(): {
     const maxKgByExercise = computeLifetimeMaxPerExercise(
       lifetime.data,
       windowStartMs,
+      bodyweight,
     );
 
     // 3. Join with library for name/muscles + enrich PR'd rows with
@@ -324,7 +370,7 @@ export function useExercisesThisWeek(): {
     });
 
     return rows;
-  }, [lifetime.data, lib.data, prsByExerciseId, windowStartMs]);
+  }, [lifetime.data, lib.data, prsByExerciseId, windowStartMs, bodyweight]);
 
   return {
     data,

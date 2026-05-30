@@ -219,3 +219,63 @@ describe("presentExerciseSessionRow — unit-awareness", () => {
     expect(out.volumeLabel).toMatch(/^\d+ × [\d,]+ (kg|lbs)$/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bodyweight kernel — Phase 0 (Invariant C: per-set lines sum to session total)
+// ---------------------------------------------------------------------------
+
+describe("bodyweight equipment — Invariant C (per-set sum)", () => {
+  it("a bodyweight session's row total equals the sum of its per-set lines", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, exercise_id: "pullup", weight: "0", reps: 10 }),
+      makeSet({ set_number: 2, exercise_id: "pullup", weight: "20", reps: 5 }),
+    ];
+    const equipment = "bodyweight";
+    const bodyweightKg = 80;
+    const row = presentExerciseSessionRow({
+      sets,
+      unit: "kg",
+      equipment,
+      bodyweightKg,
+    });
+    const lines = presentSetVolumeLines({
+      sets,
+      unit: "kg",
+      equipment,
+      bodyweightKg,
+    });
+    // 80*10 + 100*5 = 800 + 500 = 1300.
+    expect(row.volumeKg).toBe(1300);
+    const lineSum = lines.reduce((acc, l) => acc + l.volumeKg, 0);
+    expect(lineSum).toBe(row.volumeKg);
+  });
+
+  it("a 0-weight bodyweight set produces a positive per-set volume line (bw*reps)", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, exercise_id: "pullup", weight: "0", reps: 8 }),
+    ];
+    const lines = presentSetVolumeLines({
+      sets,
+      unit: "kg",
+      equipment: "bodyweight",
+      bodyweightKg: 75,
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.volumeKg).toBe(600); // 75 * 8
+    expect(lines[0]!.volumeLabel).not.toBe("");
+  });
+
+  it("Invariant A: omitting equipment reproduces the pre-feature per-set lines", () => {
+    const sets: SetRow[] = [
+      makeSet({ set_number: 1, weight: "100", reps: 5 }),
+    ];
+    const withoutEq = presentSetVolumeLines({ sets, unit: "kg" });
+    const withEq = presentSetVolumeLines({
+      sets,
+      unit: "kg",
+      equipment: "barbell",
+      bodyweightKg: 80,
+    });
+    expect(withEq).toEqual(withoutEq);
+  });
+});
