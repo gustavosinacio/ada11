@@ -275,7 +275,13 @@ test.describe("Progress page", () => {
       const exerciseName = (data?.name as string | undefined) ?? "";
       if (!exerciseName) throw new Error("Could not load seeded exercise name");
 
-      const row = page.getByText(exerciseName, { exact: true }).first();
+      // The exerciseName also appears earlier in DOM order in the e1RM legend
+      // chip ("Toggle <name>"); target the navigable list row by its
+      // role+accessible-name (matches test #8's locator at the row defined in
+      // src/components/exercises-this-week-list.tsx:120-121).
+      const row = page
+        .getByRole("button", { name: `${exerciseName}, view progress` })
+        .first();
       await expect(row).toBeVisible({ timeout: 15_000 });
       await row.click();
 

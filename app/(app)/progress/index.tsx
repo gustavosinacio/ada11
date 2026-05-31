@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { RefreshControl, ScrollView } from "react-native";
 
+import { E1rmStrengthSection } from "~/components/e1rm-strength-section";
 import { ExercisesThisWeekList } from "~/components/exercises-this-week-list";
 import { ProgressHero } from "~/components/progress-hero";
 import { StreakCard } from "~/components/streak-card";
@@ -19,13 +20,16 @@ import { formatVolume } from "~/utils/units";
 /**
  * Progress page — dedicated top-level surface for momentum visibility.
  *
- * Composes four independent blocks driven by a single lifetime kernel
- * (`useLifetimeWeeklyVolume`) plus the sessions-started_ats read for streaks:
+ * Composes independent trend + summary blocks driven by a single lifetime
+ * kernel (`useLifetimeWeeklyVolume`) plus the sessions-started_ats read for
+ * streaks:
  *
- *   1. <ProgressHero>            — PRs this week + weekly Max·Now·To PR
- *   2. <WeeklyVolumeStrip …>     — 8-bar chart with lifetime-best overlay
- *   3. <ExercisesThisWeekList>   — per-muscle list with row-level Max·Now·To PR
- *   4. <StreakCard>              — current + best consecutive trained weeks
+ *   1. <ProgressHero>             — PRs this week + weekly Max·Now·To PR
+ *   2. <WeeklyVolumeStrip …>      — 8-bar chart with lifetime-best overlay
+ *   3. <WeeklyMuscleVolumeSection>— per-muscle weekly-volume trend lines
+ *   4. <E1rmStrengthSection>      — per-exercise estimated-1RM trend lines
+ *   5. <ExercisesThisWeekList>    — per-muscle list with row-level Max·Now·To PR
+ *   6. <StreakCard>               — current + best consecutive trained weeks
  *
  * Pull-to-refresh fans out to `["stats"]` + `["exercises"]`. All blocks
  * react to the shared invalidation cascade so finishing a session live-
@@ -68,6 +72,7 @@ export default function ProgressScreen(): React.JSX.Element {
         bestWeekLabel={bestWeekLabel}
       />
       <WeeklyMuscleVolumeSection />
+      <E1rmStrengthSection />
       <ExercisesThisWeekList />
       <StreakCard />
     </ScrollView>
