@@ -51,8 +51,20 @@ export type E1rmStrengthModel = {
   series: E1rmSeries[];
 };
 
-/** Default cap on plotted lines (matches progress-hero.tsx TOP_N). */
+/** Default cap on AUTO-selected lines (the top-N OVERALL most-performed). Matches progress-hero.tsx TOP_N. */
 export const E1RM_TOP_N = 5;
+
+/**
+ * Readable ceiling on TOTAL plotted lines (top-N-overall ∪ favorites). Matched
+ * by E1RM_PALETTE length (≥ this) so colorForRank never wraps within the
+ * ceiling. Exceeded only when (topN + favorites-outside-topN) > this. When
+ * exceeded, the LOWEST-RANKED NON-FAVORITES drop first (favorites are
+ * guaranteed visible).
+ */
+export const E1RM_MAX_LINES = 12;
+
+/** Absent-default for `favoriteExerciseIds` — no per-call allocation. */
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 type EligibleAgg = {
   id: string;
@@ -69,9 +81,16 @@ export function presentTopExerciseE1rm(args: {
   rows: WeeklyVolumeRow[];
   exercises: ExerciseRow[];
   topN?: number; // default E1RM_TOP_N
+  favoriteExerciseIds?: ReadonlySet<string>; // NEW. Absent/empty → Invariant F (byte-for-byte today).
   now?: Date; // injectable for deterministic tests; default new Date()
 }): E1rmStrengthModel {
-  const { rows, exercises, topN = E1RM_TOP_N, now = new Date() } = args;
+  const {
+    rows,
+    exercises,
+    topN = E1RM_TOP_N,
+    favoriteExerciseIds,
+    now = new Date(),
+  } = args;
   if (rows.length === 0) return { weeks: [], series: [] };
 
   // Earliest completed_at → first-trained Monday (the left axis edge).
@@ -135,17 +154,62 @@ export function presentTopExerciseE1rm(args: {
   //   2. most-recent activity DESC
   //   3. name ASC (localeCompare)
   //   4. id ASC (final total-order guarantee)
-  const ranked = Array.from(byExercise.values())
-    .sort((a, b) => {
-      if (b.sessions.size !== a.sessions.size)
-        return b.sessions.size - a.sessions.size;
-      if (b.lastActiveMs !== a.lastActiveMs)
-        return b.lastActiveMs - a.lastActiveMs;
-      const byName = a.name.localeCompare(b.name);
-      if (byName !== 0) return byName;
-      return a.id.localeCompare(b.id);
-    })
-    .slice(0, topN);
+  const sorted = Array.from(byExercise.values()).sort((a, b) => {
+    if (b.sessions.size !== a.sessions.size)
+      return b.sessions.size - a.sessions.size;
+    if (b.lastActiveMs !== a.lastActiveMs)
+      return b.lastActiveMs - a.lastActiveMs;
+    const byName = a.name.localeCompare(b.name);
+    if (byName !== 0) return byName;
+    return a.id.localeCompare(b.id);
+  });
+
+  // Plotted-set selection = top-N OVERALL ∪ favorites (dedup-by-construction).
+  const favSet = favoriteExerciseIds ?? EMPTY_SET;
+
+  // 1. Auto-selection = the top-N OVERALL — EXACTLY today's selection (the
+  //    natural top-N of ALL eligible exercises). `sorted.slice(0, topN)` is
+  //    byte-for-byte the pre-change behavior.
+  const autoTopOverall = sorted.slice(0, topN);
+  const autoIds = new Set(autoTopOverall.map((a) => a.id));
+
+  // 2. Extra favorites = eligible favorites NOT already in the top-N, in
+  //    comparator order. extraFavorites EXCLUDES autoIds, so the concat below
+  //    is dedup-by-construction: this is NOT "dedup of an overlap" — it is
+  //    "the overlap was never built." A favorite already in the top-N is a
+  //    true no-op (it's already shown via autoTopOverall, series count
+  //    unchanged). A favorite OUTSIDE the top-N is added exactly once. We do
+  //    NOT slice from a non-favorite pool — see the "What is NOT" clause in
+  //    design-v2.md.
+  const extraFavorites = sorted.filter(
+    (a) => favSet.has(a.id) && !autoIds.has(a.id),
+  );
+
+  // 3. Union. Order: top-N-overall FIRST (comparator order — keeps existing
+  //    lines in their exact current rank/color positions), then the extra
+  //    favorites (comparator order). No duplicate possible.
+  let selected = [...autoTopOverall, ...extraFavorites];
+
+  // 4. Cap at the readable ceiling. selected.length = topN + extraFavorites
+  //    .length (when there are favorites outside the top-N), so it exceeds
+  //    E1RM_MAX_LINES only when topN + extraFavorites.length > E1RM_MAX_LINES.
+  //    Drop the LOWEST-RANKED NON-FAVORITES first so favorites stay visible.
+  if (selected.length > E1RM_MAX_LINES) {
+    const keptAuto = autoTopOverall.slice(
+      0,
+      Math.max(0, E1RM_MAX_LINES - extraFavorites.length),
+    );
+    selected = [...keptAuto, ...extraFavorites];
+    // Degenerate: if extraFavorites alone exceed the ceiling (keptAuto is now
+    // []), the favorites themselves are trimmed from the tail (lowest-
+    // comparator favorites drop). They persist in the DB and reappear when the
+    // user unfavorites others.
+    if (extraFavorites.length > E1RM_MAX_LINES) {
+      selected = extraFavorites.slice(0, E1RM_MAX_LINES);
+    }
+  }
+
+  const ranked = selected; // feeds the existing `ranked.map` (rank = index) unchanged.
 
   // Build each series via LOCF over the shared week axis.
   const series: E1rmSeries[] = ranked.map((agg, rank) => {

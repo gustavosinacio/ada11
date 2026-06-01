@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronLeft, Pencil } from "lucide-react-native";
+import { ChevronLeft, Pencil, Star } from "lucide-react-native";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +16,10 @@ import { ExerciseSessionRow } from "~/components/exercise-session-row";
 import { ProgressChart, type DataPoint } from "~/components/progress-chart";
 import { SetVolumeBreakdown } from "~/components/set-volume-breakdown";
 import { useIsAdmin } from "~/hooks/use-admin";
+import {
+  useMyFavoriteExerciseIds,
+  useToggleFavorite,
+} from "~/hooks/use-exercise-favorites";
 import { useAllExercise } from "~/hooks/use-exercises";
 import { useMeasurements } from "~/hooks/use-measurements";
 import { useMaxVolumeWindowWeeks, useWeightUnit } from "~/hooks/use-preferences";
@@ -62,6 +66,12 @@ export default function ExerciseProgressScreen() {
   const measurementsQ = useMeasurements();
   const unit = useWeightUnit();
   const isAdmin = useIsAdmin().data === true;
+  // Favorite toggle — a user-private action, independent of edit rights, so
+  // canonical exercises ARE favoritable. The star lives in the header-right
+  // slot OUTSIDE the `canEdit` gate (below).
+  const { data: favoriteIds } = useMyFavoriteExerciseIds();
+  const toggleFavorite = useToggleFavorite();
+  const isFavorite = !!id && (favoriteIds ?? []).includes(id);
   // Max-volume window preference — same source the live <VolumeTargetSlot>
   // reads, so the progress-page "Max volume session" callout agrees with it.
   const maxVolumeWindowWeeks = useMaxVolumeWindowWeeks();
@@ -105,8 +115,40 @@ export default function ExerciseProgressScreen() {
               </Pressable>
             )
           : undefined,
-        headerRight: canEdit
-          ? () => (
+        // Always present: the favorite star is a user-private action that is
+        // independent of edit rights, so canonical exercises (no Pencil) are
+        // still favoritable. The Pencil stays gated on `canEdit` INSIDE this
+        // function.
+        headerRight: () => (
+          <View className="flex-row items-center">
+            <Pressable
+              onPress={() =>
+                toggleFavorite.mutate({
+                  exerciseId: id,
+                  favorited: !isFavorite,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={
+                isFavorite
+                  ? `Unfavorite ${exercise.data?.name ?? "exercise"}`
+                  : `Favorite ${exercise.data?.name ?? "exercise"}`
+              }
+              className="px-2 py-1"
+            >
+              <Star
+                color={
+                  isFavorite
+                    ? "#f59e0b"
+                    : colorScheme === "dark"
+                      ? "#fff"
+                      : "#000"
+                }
+                fill={isFavorite ? "#f59e0b" : "transparent"}
+                size={20}
+              />
+            </Pressable>
+            {canEdit ? (
               <Pressable
                 onPress={() => router.push(`/(app)/exercises/${id}`)}
                 accessibilityLabel="Edit exercise"
@@ -118,8 +160,9 @@ export default function ExerciseProgressScreen() {
                   size={20}
                 />
               </Pressable>
-            )
-          : undefined,
+            ) : null}
+          </View>
+        ),
       }}
     />
   );

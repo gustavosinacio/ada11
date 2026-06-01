@@ -9,6 +9,7 @@ import {
   routines,
   sessions,
   sets,
+  userExerciseFavorites,
   userPreferences,
 } from "./schema";
 
@@ -36,6 +37,13 @@ export type NewMeasurementEntry = InferInsertModel<typeof measurementEntries>;
 
 export type ExerciseNote = InferSelectModel<typeof exerciseNotes>;
 export type NewExerciseNote = InferInsertModel<typeof exerciseNotes>;
+
+export type UserExerciseFavorite = InferSelectModel<
+  typeof userExerciseFavorites
+>;
+export type NewUserExerciseFavorite = InferInsertModel<
+  typeof userExerciseFavorites
+>;
 
 export type SetType = "warmup" | "working" | "dropset";
 export type WeightUnit = "kg" | "lbs";
@@ -259,4 +267,10 @@ export type ExerciseNoteRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+};
+
+export type UserExerciseFavoriteRow = {
+  user_id: string;
+  exercise_id: string;
+  created_at: string;
 };

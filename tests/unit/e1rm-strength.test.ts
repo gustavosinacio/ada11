@@ -459,3 +459,373 @@ describe("presentTopExerciseE1rm", () => {
     expect(order(shuffled)).toEqual(["ex-x", "ex-y", "ex-z"]);
   });
 });
+
+/**
+ * Favorites union — the top-N-OVERALL ∪ favorites selection (design-v2 §A).
+ *
+ * The auto-selection is the top-N OVERALL (byte-for-byte today's
+ * `sorted.slice(0, topN)`). Favorites are unioned with it and deduped by
+ * construction: a favorite already in the top-N is a no-op; a favorite outside
+ * adds exactly one line. Total capped at E1RM_MAX_LINES, dropping the lowest
+ * NON-favorites first (favorites guaranteed visible).
+ *
+ * Seed helper: N distinct WEIGHTED exercises whose distinct-session COUNT is
+ * strictly decreasing by id index, so the comparator (sessions DESC, then
+ * recency, then name, then id) puts them in a known order `[ex-00, ex-01, …]`.
+ * Each exercise's sessions all sit in the same ISO week as NOW so the axis is
+ * a single week — keeps the values trivial and the ranking driven purely by
+ * distinct-session count.
+ */
+function seedWeightedByDecreasingSessions(count: number): {
+  rows: WeeklyVolumeRow[];
+  exercises: ExerciseRow[];
+  ids: string[];
+} {
+  const rows: WeeklyVolumeRow[] = [];
+  const exercises: ExerciseRow[] = [];
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const id = `ex-${String(i).padStart(2, "0")}`;
+    ids.push(id);
+    // Strictly decreasing distinct-session count: the highest-index exercise
+    // still has ≥1 session. count - i sessions for index i.
+    const sessions = count - i;
+    for (let s = 0; s < sessions; s++) {
+      rows.push(
+        mkRow({
+          // All within ISO week 2026-W21 (Mon 5/18) — single-week axis.
+          completed_at: `2026-05-18T${String(6 + s).padStart(2, "0")}:00:00Z`,
+          weight: "100",
+          reps: 5,
+          exercise_id: id,
+          session_id: `${id}-s${s}`,
+        }),
+      );
+    }
+    exercises.push(mkExercise({ id, name: `Ex ${id}` }));
+  }
+  return { rows, exercises, ids };
+}
+
+describe("presentTopExerciseE1rm — favorites union (top-N OVERALL ∪ favorites)", () => {
+  // 1. Favorite OUTSIDE the top-N is ADDED (count grows by exactly 1).
+  it("adds a favorite that sits OUTSIDE the top-N (+1 line, appended last)", () => {
+    // 6 eligible, sorted [ex-00..ex-05]; topN=5 → top-5 = ex-00..ex-04.
+    // ex-05 is outside. Favorite it.
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(6);
+    const target = ids[5]!; // outside top-5
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set([target]),
+      now: NOW,
+    });
+
+    expect(model.series).toHaveLength(6); // topN + 1
+    const seriesIds = model.series.map((s) => s.id);
+    // The original top-5 are all present with ranks 0..4 unchanged.
+    expect(seriesIds.slice(0, 5)).toEqual(ids.slice(0, 5));
+    // The favorite is appended LAST (rank 5).
+    expect(seriesIds[5]).toBe(target);
+    expect(model.series[5]!.rank).toBe(5);
+  });
+
+  // 2. Favorite already INSIDE the top-N → SAME count, id once, byte-identical.
+  it("is a NO-OP when the favorite is already in the top-N (count unchanged, byte-identical)", () => {
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(6);
+    const insideTopN = ids[2]!; // ex-02 — a top-3, inside top-5.
+    const withFav = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set([insideTopN]),
+      now: NOW,
+    });
+    const noFav = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      now: NOW,
+    });
+
+    // Count UNCHANGED — no promotion of a hidden non-favorite.
+    expect(withFav.series).toHaveLength(5);
+    // The favorite id appears exactly once.
+    expect(withFav.series.filter((s) => s.id === insideTopN)).toHaveLength(1);
+    // Byte-identical to the no-favorites output (the MAJ-1 fix).
+    expect(withFav.series).toEqual(noFav.series);
+  });
+
+  // 3. Bodyweight-only favorite excluded (Invariant D survives the union).
+  it("excludes a favorited bodyweight-only exercise (Invariant D)", () => {
+    const rows = [
+      // Favorited bodyweight-only (all weight=0) — can't plot.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "0",
+        reps: 12,
+        exercise_id: "bwfav",
+        equipment: "bodyweight",
+        session_id: "bw1",
+      }),
+      // A weighted exercise so the section isn't empty.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "b1",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bwfav", name: "BW Fav", equipment: "bodyweight" }),
+      mkExercise({ id: "bench", name: "Bench Press" }),
+    ];
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      favoriteExerciseIds: new Set(["bwfav"]),
+      now: NOW,
+    });
+
+    // The favorited bodyweight-only exercise never entered byExercise → absent.
+    expect(model.series.map((s) => s.id)).toEqual(["bench"]);
+    expect(model.series.some((s) => s.id === "bwfav")).toBe(false);
+  });
+
+  // 4. No-set favorite excluded (favorite id with NO rows at all).
+  it("excludes a favorited exercise that has no rows at all", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "b1",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", name: "Bench Press" }),
+      mkExercise({ id: "ghostfav", name: "Ghost Fav" }),
+    ];
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      favoriteExerciseIds: new Set(["ghostfav"]),
+      now: NOW,
+    });
+
+    expect(model.series.map((s) => s.id)).toEqual(["bench"]);
+  });
+
+  // 5. Cap drops the lowest NON-favorite, not a favorite (over the ceiling).
+  it("drops the lowest-ranked NON-favorite auto pick when over the ceiling, keeps all favorites", () => {
+    // 13 eligible [ex-00..ex-12]; topN=5 → top-5 = ex-00..ex-04.
+    // Favorite the 8 lowest outside-top-5 (ex-05..ex-12) PLUS ex-04 (in top-5).
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(13);
+    const outsideFavs = ids.slice(5); // ex-05..ex-12 (8 items, all outside)
+    const insideFav = ids[4]!; // ex-04 — inside top-5, must be a no-op
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set([...outsideFavs, insideFav]),
+      now: NOW,
+    });
+
+    expect(model.series).toHaveLength(12); // E1RM_MAX_LINES
+    const seriesIds = model.series.map((s) => s.id);
+    // All 8 outside favorites are present.
+    for (const f of outsideFavs) expect(seriesIds).toContain(f);
+    // ex-04 (the lowest-ranked NON-favorite auto pick) is DROPPED.
+    expect(seriesIds).not.toContain(ids[4]);
+    // ex-00..ex-03 (the kept auto picks) are present.
+    for (const a of ids.slice(0, 4)) expect(seriesIds).toContain(a);
+  });
+
+  // 6. Dense ranks over the combined list.
+  it("produces dense 0-based ranks over the combined list (no gaps / dup index)", () => {
+    // 6-series case (1 outside favorite).
+    {
+      const { rows, exercises, ids } = seedWeightedByDecreasingSessions(6);
+      const model = presentTopExerciseE1rm({
+        rows,
+        exercises,
+        topN: 5,
+        favoriteExerciseIds: new Set([ids[5]!]),
+        now: NOW,
+      });
+      expect(model.series.map((s) => s.rank)).toEqual([0, 1, 2, 3, 4, 5]);
+    }
+    // 12-series case (over the ceiling, trimmed to 12).
+    {
+      const { rows, exercises, ids } = seedWeightedByDecreasingSessions(13);
+      const model = presentTopExerciseE1rm({
+        rows,
+        exercises,
+        topN: 5,
+        favoriteExerciseIds: new Set(ids.slice(5)),
+        now: NOW,
+      });
+      expect(model.series.map((s) => s.rank)).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      ]);
+    }
+  });
+
+  // 7. Determinism — favorite-set insertion order does not affect series order.
+  it("is deterministic regardless of favorite-set insertion order", () => {
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(6);
+    const f1 = ids[5]!; // outside top-5
+    const f2 = ids[4]!; // inside top-5 (no-op)
+    const a = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set([f1, f2]),
+      now: NOW,
+    });
+    const b = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set([f2, f1]),
+      now: NOW,
+    });
+    expect(a.series.map((s) => s.id)).toEqual(b.series.map((s) => s.id));
+  });
+
+  // 8. Empty / absent favorites = current output (Invariant F — byte-for-byte).
+  it("Invariant F: no-arg, empty-Set, and pre-change top-N output are all deep-equal", () => {
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(8);
+    const noArg = presentTopExerciseE1rm({ rows, exercises, topN: 5, now: NOW });
+    const emptySet = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set(),
+      now: NOW,
+    });
+
+    // No-arg and empty-Set produce DEEP-EQUAL output.
+    expect(noArg).toEqual(emptySet);
+    // And that output equals the pre-change top-N selection: exactly the
+    // top-5 by the comparator (ex-00..ex-04), ranks 0..4, no extras.
+    expect(noArg.series.map((s) => s.id)).toEqual(ids.slice(0, 5));
+    expect(noArg.series.map((s) => s.rank)).toEqual([0, 1, 2, 3, 4]);
+    expect(noArg.series).toHaveLength(5);
+  });
+
+  // 9. Exactly AT the ceiling → no trim.
+  it("plots exactly E1RM_MAX_LINES with no trim when at the ceiling", () => {
+    // 12 eligible [ex-00..ex-11]; topN=5. Favorite the 7 lowest outside-top-5
+    // (ex-05..ex-11). selected.length = 5 + 7 = 12 = ceiling → no trim.
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(12);
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set(ids.slice(5)),
+      now: NOW,
+    });
+
+    expect(model.series).toHaveLength(12);
+    // ALL of ex-00..ex-11 present (nothing dropped).
+    const seriesIds = model.series.map((s) => s.id);
+    for (const id of ids) expect(seriesIds).toContain(id);
+    expect(model.series.map((s) => s.rank)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    ]);
+  });
+
+  // 10. One OVER the ceiling → trims exactly one (lowest) non-favorite.
+  it("trims exactly one (lowest) non-favorite when one over the ceiling", () => {
+    // 13 eligible; topN=5. Favorite the 8 lowest outside-top-5 (ex-05..ex-12).
+    // selected.length = 5 + 8 = 13 > 12 → keptAuto = slice(0, 12-8) = [00..03];
+    // ex-04 (the single lowest auto pick) dropped.
+    const { rows, exercises, ids } = seedWeightedByDecreasingSessions(13);
+    const outsideFavs = ids.slice(5); // ex-05..ex-12
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set(outsideFavs),
+      now: NOW,
+    });
+
+    expect(model.series).toHaveLength(12);
+    const seriesIds = model.series.map((s) => s.id);
+    // ex-04 dropped; ex-00..ex-03 kept; all 8 favorites kept.
+    expect(seriesIds).not.toContain(ids[4]);
+    for (const a of ids.slice(0, 4)) expect(seriesIds).toContain(a);
+    for (const f of outsideFavs) expect(seriesIds).toContain(f);
+  });
+
+  // 11. Degenerate: favorites > ceiling → favorites themselves trimmed.
+  it("trims the lowest favorites when favorites alone exceed the ceiling (zero auto survive)", () => {
+    // 5 high-session non-favorites (ex-00..ex-04) + 13 low-session favorites.
+    // Build so the 5 auto picks are the highest-session, and 13 favorites are
+    // all strictly lower-session (hence all outside top-5).
+    const rows: WeeklyVolumeRow[] = [];
+    const exercises: ExerciseRow[] = [];
+    const autoIds: string[] = [];
+    const favIds: string[] = [];
+    // 5 non-favorites with high session counts (100, 99, …, 96).
+    for (let i = 0; i < 5; i++) {
+      const id = `auto-${String(i).padStart(2, "0")}`;
+      autoIds.push(id);
+      const sessions = 100 - i;
+      for (let s = 0; s < sessions; s++) {
+        rows.push(
+          mkRow({
+            completed_at: `2026-05-18T${String(1 + (s % 20)).padStart(2, "0")}:00:00Z`,
+            weight: "100",
+            reps: 5,
+            exercise_id: id,
+            session_id: `${id}-s${s}`,
+          }),
+        );
+      }
+      exercises.push(mkExercise({ id, name: `Auto ${id}` }));
+    }
+    // 13 favorites with strictly-lower decreasing session counts (13..1) so
+    // they have a deterministic comparator order; all below the auto picks.
+    for (let i = 0; i < 13; i++) {
+      const id = `fav-${String(i).padStart(2, "0")}`;
+      favIds.push(id);
+      const sessions = 13 - i;
+      for (let s = 0; s < sessions; s++) {
+        rows.push(
+          mkRow({
+            completed_at: `2026-05-18T${String(1 + (s % 20)).padStart(2, "0")}:30:00Z`,
+            weight: "100",
+            reps: 5,
+            exercise_id: id,
+            session_id: `${id}-s${s}`,
+          }),
+        );
+      }
+      exercises.push(mkExercise({ id, name: `Fav ${id}` }));
+    }
+    const model = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      topN: 5,
+      favoriteExerciseIds: new Set(favIds),
+      now: NOW,
+    });
+
+    expect(model.series).toHaveLength(12);
+    const seriesIds = model.series.map((s) => s.id);
+    // ALL kept lines are favorites; zero auto picks survive.
+    for (const id of seriesIds) expect(id.startsWith("fav-")).toBe(true);
+    for (const a of autoIds) expect(seriesIds).not.toContain(a);
+    // The 13th-lowest-comparator favorite (fav-12, fewest sessions) is dropped.
+    expect(seriesIds).not.toContain("fav-12");
+    // The 12 highest-comparator favorites (fav-00..fav-11) are kept.
+    for (let i = 0; i < 12; i++) {
+      expect(seriesIds).toContain(`fav-${String(i).padStart(2, "0")}`);
+    }
+  });
+});

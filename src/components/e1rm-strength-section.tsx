@@ -5,6 +5,7 @@ import {
   MultiSeriesChart,
   type ChartSeries,
 } from "~/components/multi-series-chart";
+import { useMyFavoriteExerciseIds } from "~/hooks/use-exercise-favorites";
 import { useAllExercises } from "~/hooks/use-exercises";
 import { useWeightUnit } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
@@ -23,18 +24,24 @@ import { formatWeight } from "~/utils/units";
  * `max_volume_window_weeks` (mirrors the volume chart).
  */
 
-// Top-N palette indexed by rank (Decision #4). Reorders the muscle palette's
-// hexes for max adjacent-line contrast; drops the gray "Other" (no meaning
-// here). N=5 ≤ 8 so `% length` never wraps this run — defensive only.
+// Palette indexed by rank (Decision #4). The first 8 are the Phase-2a hexes
+// (unchanged → existing top-5 lines keep their colors). The 4 appended hues are
+// spaced away from amber (#f59e0b) and violet (#8b5cf6) for adjacent-rank
+// contrast. length (12) >= E1RM_MAX_LINES so `% length` never wraps within the
+// ceiling — no two plotted lines ever share a color.
 const E1RM_PALETTE = [
-  "#ef4444", // red-500
-  "#3b82f6", // blue-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#8b5cf6", // violet-500
-  "#ec4899", // pink-500
-  "#06b6d4", // cyan-500
-  "#84cc16", // lime-500
+  "#ef4444", // red-500     (rank 0) — unchanged
+  "#3b82f6", // blue-500    (rank 1) — unchanged
+  "#10b981", // emerald-500 (rank 2) — unchanged
+  "#f59e0b", // amber-500   (rank 3) — unchanged
+  "#8b5cf6", // violet-500  (rank 4) — unchanged
+  "#ec4899", // pink-500    (rank 5) — unchanged
+  "#06b6d4", // cyan-500    (rank 6) — unchanged
+  "#84cc16", // lime-500    (rank 7) — unchanged
+  "#15803d", // green-700   (rank 8) — deep green, distinct from emerald/lime
+  "#64748b", // slate-500   (rank 9) — neutral slate, no nearby hue
+  "#e11d48", // rose-600    (rank 10) — rose, distinct from red/pink
+  "#92400e", // amber-800   (rank 11) — brown, distinct from amber-500
 ] as const;
 
 const colorForRank = (i: number): string =>
@@ -43,12 +50,26 @@ const colorForRank = (i: number): string =>
 export function E1rmStrengthSection(): React.JSX.Element | null {
   const { data: rows, isLoading } = useLifetimeWeeklyVolume();
   const { data: exercises } = useAllExercises();
+  const { data: favoriteIds } = useMyFavoriteExerciseIds();
   const unit = useWeightUnit();
+
+  // Memoize the favorite set; gated by the react-query `data` identity
+  // (TanStack structural sharing keeps `favoriteIds` referentially stable
+  // until the cache changes). On toggle, setQueryData produces a NEW array →
+  // favoriteSet recomputes → model recomputes → chart re-renders.
+  const favoriteSet = useMemo(
+    () => new Set(favoriteIds ?? []),
+    [favoriteIds],
+  );
 
   const model = useMemo(() => {
     if (!rows || !exercises) return null;
-    return presentTopExerciseE1rm({ rows, exercises });
-  }, [rows, exercises]);
+    return presentTopExerciseE1rm({
+      rows,
+      exercises,
+      favoriteExerciseIds: favoriteSet,
+    });
+  }, [rows, exercises, favoriteSet]);
 
   // All exercise lines on by default. Keyed off exercise `id` (stable across
   // renames) so a newly appearing exercise starts visible.

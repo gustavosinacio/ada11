@@ -7,6 +7,7 @@ import {
   numeric,
   pgSchema,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -300,5 +301,26 @@ export const exerciseNotes = pgTable(
     // have no first-class support for partial predicates or column-level
     // CHECK — matches measurement_entries_user_day_idx precedent
     // (schema.ts:211-216).
+  }),
+);
+
+export const userExerciseFavorites = pgTable(
+  "user_exercise_favorites",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.exerciseId] }),
+    // RLS (3 policies) lives in supabase/migrations/0020_user_exercise_favorites.sql.
+    // SQL is source of truth. A favorite is presence/absence — no soft-delete,
+    // no mutable column, hence no UPDATE policy and no partial-unique.
   }),
 );

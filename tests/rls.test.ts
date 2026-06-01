@@ -397,8 +397,54 @@ async function main() {
       );
     }
 
+    // -------------------------------------------------------------------
+    // user_exercise_favorites — added in migration
+    // 0020_user_exercise_favorites.sql. 3-policy RLS (SELECT/INSERT/DELETE),
+    // all gated on auth.uid() = user_id. No UPDATE policy (no mutable column).
+    // Composite PK (user_id, exercise_id); a favorite on A's exercise (aEx).
+    // -------------------------------------------------------------------
+    const { data: aFav, error: fInsErr } = await clientA
+      .from("user_exercise_favorites")
+      .insert({ user_id: a.user.id, exercise_id: aEx.id })
+      .select()
+      .single();
+    if (fInsErr || !aFav) {
+      throw new Error(`A favorite insert failed: ${fInsErr?.message}`);
+    }
+
+    // B reads — must return zero rows (SELECT gated on auth.uid() = user_id).
+    const { data: bFavRead } = await clientB
+      .from("user_exercise_favorites")
+      .select("*")
+      .eq("user_id", a.user.id)
+      .eq("exercise_id", aEx.id);
+    if ((bFavRead ?? []).length > 0) {
+      throw new Error("FAIL: B can read A's favorite");
+    }
+
+    // B deletes — must affect zero rows (no UPDATE arm: no mutable column).
+    const { data: bFavDel } = await clientB
+      .from("user_exercise_favorites")
+      .delete()
+      .eq("user_id", a.user.id)
+      .eq("exercise_id", aEx.id)
+      .select();
+    if ((bFavDel ?? []).length > 0) {
+      throw new Error("FAIL: B deleted A's favorite");
+    }
+
+    // B insert spoof — INSERT policy `with check (auth.uid() = user_id)` rejects
+    // a row carrying user_id = A. Surfaced as an error or zero affected rows.
+    const { data: bFavSpoofData, error: bFavSpoofErr } = await clientB
+      .from("user_exercise_favorites")
+      .insert({ user_id: a.user.id, exercise_id: aEx.id })
+      .select();
+    if (!bFavSpoofErr && (bFavSpoofData ?? []).length > 0) {
+      throw new Error("FAIL: B spoofed a favorite insert on A's row");
+    }
+
     console.log(
-      "✅ RLS test passed — B cannot read/update/delete A's data; canonical rows visible to both users + immutable via RLS; routine_exercise_sets arm OK.",
+      "✅ RLS test passed — B cannot read/update/delete A's data; canonical rows visible to both users + immutable via RLS; routine_exercise_sets + user_exercise_favorites arms OK.",
     );
   } finally {
     await admin.auth.admin.deleteUser(a.user.id);
