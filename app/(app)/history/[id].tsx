@@ -25,6 +25,7 @@ import { useWeightUnit } from "~/hooks/use-preferences";
 import {
   useSession,
   useSoftDeleteSession,
+  useUpdateSessionExerciseOrder,
   useUpdateSessionName,
   useUpdateSessionTimes,
 } from "~/hooks/use-sessions";
@@ -37,6 +38,7 @@ import {
 } from "~/hooks/use-sets";
 import { bodyweightKgAsOf } from "~/utils/bodyweight";
 import { parseISO } from "~/utils/dates";
+import { orderExerciseIds } from "~/utils/session-exercise-order";
 import { formatVolume } from "~/utils/units";
 import { sumLiveVolume } from "~/utils/volume-target";
 
@@ -60,11 +62,18 @@ export default function SessionDetailScreen() {
   const deleteSet = useDeleteSet(id ?? "");
   const updateName = useUpdateSessionName();
   const updateTimes = useUpdateSessionTimes();
+  const updateExerciseOrder = useUpdateSessionExerciseOrder();
   const softDelete = useSoftDeleteSession();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   // Exercises added during this edit (no sets logged yet).
   const [addedExerciseIds, setAddedExerciseIds] = useState<string[]>([]);
+  // Local editable exercise order for edit-mode reorder. `null` = follow the
+  // persisted/derived order (see `derivedOrderIds`). Seeded lazily from the
+  // displayed order on the first chevron tap; persisted per-tap. Component
+  // state only — navigating away unmounts the screen; on re-mount the derived
+  // order reflects the just-persisted column so `null` re-seeds correctly.
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   // Screen-level read-only/edit toggle. Default = read-only (false). Flipped
   // by the header Pencil → "Done" Pressable. Local state only; navigating
@@ -86,18 +95,21 @@ export default function SessionDetailScreen() {
     }
   }, [session.data, router]);
 
-  // Ordered list of exercises that appear in this session, in first-occurrence
-  // order, plus user-added ones during this edit.
+  // Ordered list of exercises that appear in this session. First build the
+  // discovered list (set first-occurrence + user-added during this edit), then
+  // order it by the persisted `session_exercise_order` with a deterministic
+  // first-occurrence fallback (legacy NULL → unchanged order). This is the
+  // persisted-aware "derived order" the reorder chevrons seed from.
   const orderedExercises: ExerciseRow[] = useMemo(() => {
     const exMap = new Map((exercisesQ.data ?? []).map((e) => [e.id, e]));
-    const out: ExerciseRow[] = [];
+    const discovered: ExerciseRow[] = [];
     const seen = new Set<string>();
 
     for (const s of setsQ.data ?? []) {
       if (!seen.has(s.exercise_id)) {
         const ex = exMap.get(s.exercise_id);
         if (ex) {
-          out.push(ex);
+          discovered.push(ex);
           seen.add(ex.id);
         }
       }
@@ -107,14 +119,73 @@ export default function SessionDetailScreen() {
       if (!seen.has(exId)) {
         const ex = exMap.get(exId);
         if (ex) {
-          out.push(ex);
+          discovered.push(ex);
           seen.add(ex.id);
         }
       }
     }
 
-    return out;
-  }, [setsQ.data, exercisesQ.data, addedExerciseIds]);
+    const byId = new Map(discovered.map((e) => [e.id, e]));
+    const orderedIds = orderExerciseIds(
+      discovered.map((e) => e.id),
+      session.data?.session_exercise_order,
+    );
+    return orderedIds.map((id) => byId.get(id)).filter((e): e is ExerciseRow => !!e);
+  }, [
+    setsQ.data,
+    exercisesQ.data,
+    addedExerciseIds,
+    session.data?.session_exercise_order,
+  ]);
+
+  // The persisted-aware default order the chevrons seed from.
+  const derivedOrderIds = useMemo(
+    () => orderedExercises.map((e) => e.id),
+    [orderedExercises],
+  );
+
+  // What the list actually renders: the local in-edit order if the user has
+  // started reordering, else the derived/persisted order. Any id in localOrder
+  // that no longer exists (e.g. an added exercise dropped on a refetch) is
+  // filtered out; any newly-discovered id missing from localOrder is appended.
+  const effectiveOrderIds = useMemo(() => {
+    if (!localOrder) return derivedOrderIds;
+    const known = new Set(derivedOrderIds);
+    const kept = localOrder.filter((id) => known.has(id));
+    const keptSet = new Set(kept);
+    const appended = derivedOrderIds.filter((id) => !keptSet.has(id));
+    return [...kept, ...appended];
+  }, [localOrder, derivedOrderIds]);
+
+  const exerciseById = useMemo(
+    () => new Map(orderedExercises.map((e) => [e.id, e])),
+    [orderedExercises],
+  );
+
+  const renderedExercises = useMemo(
+    () =>
+      effectiveOrderIds
+        .map((id) => exerciseById.get(id))
+        .filter((e): e is ExerciseRow => !!e),
+    [effectiveOrderIds, exerciseById],
+  );
+
+  // Chevron tap: swap two ids in the editable order AND persist the full new
+  // array (optimistic, per-tap). Seeds from the displayed order on first move,
+  // which is how a legacy NULL session gets its column written for the first
+  // time (the recovery path).
+  const moveExercise = (exerciseId: string, direction: "up" | "down") => {
+    if (!id) return;
+    const base = localOrder ?? derivedOrderIds;
+    const idx = base.indexOf(exerciseId);
+    if (idx === -1) return;
+    const target = direction === "up" ? idx - 1 : idx + 1;
+    if (target < 0 || target >= base.length) return;
+    const next = [...base];
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
+    setLocalOrder(next);
+    updateExerciseOrder.mutate({ id, order: next });
+  };
 
   const setsByExercise = useMemo(() => {
     const map = new Map<string, SetRow[]>();
@@ -315,20 +386,24 @@ export default function SessionDetailScreen() {
           ) : null}
         </View>
 
-        {orderedExercises.length === 0 ? (
+        {renderedExercises.length === 0 ? (
           <View className="px-6 py-10">
             <Text className="text-center text-base text-gray-500">
               No sets logged in this session.
             </Text>
           </View>
         ) : (
-          orderedExercises.map((ex) =>
+          renderedExercises.map((ex, idx) =>
             isEditing ? (
               <ExerciseBlock
                 key={ex.id}
                 exercise={ex}
                 sets={setsByExercise.get(ex.id) ?? []}
                 unit={unit}
+                isFirst={idx === 0}
+                isLast={idx === renderedExercises.length - 1}
+                onMoveUp={() => moveExercise(ex.id, "up")}
+                onMoveDown={() => moveExercise(ex.id, "down")}
                 onPressName={() =>
                   router.push(`/(app)/exercises/${ex.id}/progress`)
                 }

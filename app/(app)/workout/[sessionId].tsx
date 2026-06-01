@@ -278,6 +278,19 @@ function LiveWorkoutScreenInner() {
     removedExerciseIds,
   ]);
 
+  // Keep the latest displayed order in a ref so the Finish snapshot reads the
+  // post-discard / post-check-all surviving list rather than a stale render
+  // closure. `bulkDiscardUnchecked` (invalidate, no awaited refetch) and
+  // `bulkCheckAll` (awaited refetch) both flip `setsQ.data` and re-derive
+  // `orderedExercises` between the bulk mutation resolving and
+  // `finishAfterMutation` running; the ref guarantees we snapshot the order
+  // the user is actually left with. (Removed-exercise ids are already excluded
+  // by `orderedExercises`; the read side ignores any stale id anyway.)
+  const orderedExerciseIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    orderedExerciseIdsRef.current = orderedExercises.map((e) => e.id);
+  }, [orderedExercises]);
+
   const moveExercise = (exerciseId: string, direction: "up" | "down") => {
     const currentOrder = orderedExercises.map((e) => e.id);
     const idx = currentOrder.indexOf(exerciseId);
@@ -336,7 +349,12 @@ function LiveWorkoutScreenInner() {
   const finishAfterMutation = async () => {
     if (!sessionId) return;
     try {
-      await finish.mutateAsync(sessionId);
+      // Snapshot the exercise display order the user actually saw, so History
+      // renders the same sequence (BLOCKER + MAJOR in the fix plan). Read from
+      // the ref so the order reflects the surviving list after any
+      // check-all / discard-unchecked bulk mutation that ran just before this.
+      const exerciseOrder = orderedExerciseIdsRef.current;
+      await finish.mutateAsync({ id: sessionId, exerciseOrder });
       router.replace(`/(app)/workout/verdict/${sessionId}`);
     } catch (err) {
       console.warn("Finish failed", err);

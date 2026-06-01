@@ -202,6 +202,12 @@ export type SessionRow = {
   ended_at: string | null;
   notes: string | null;
   source: string | null;
+  // Ordered exercise_id[] (the per-session exercise display order). Postgres
+  // `uuid[]` round-trips as a JS `string[]` via supabase-js/PostgREST — same
+  // as `exercises.muscles` (`text[]` → `string[]`). Nullable: legacy /
+  // in-progress sessions are NULL and the read side falls back to a
+  // deterministic first-occurrence order.
+  session_exercise_order: string[] | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

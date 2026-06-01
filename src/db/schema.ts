@@ -132,6 +132,12 @@ export const sessions = pgTable(
     endedAt: timestamp("ended_at", { withTimezone: true }),
     notes: text("notes"),
     source: text("source"),
+    // Ordered exercise_id[] capturing the per-session EXERCISE display order.
+    // Nullable: snapshotted from the live screen at Finish and editable in
+    // History edit mode; legacy/in-progress sessions stay NULL and the read
+    // side falls back to a deterministic first-occurrence order. SQL source of
+    // truth is supabase/migrations/0019_session_exercise_order.sql.
+    sessionExerciseOrder: uuid("session_exercise_order").array(),
     ...timestamps,
   },
   (t) => ({

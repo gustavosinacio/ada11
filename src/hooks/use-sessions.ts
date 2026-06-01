@@ -8,10 +8,12 @@ import {
   listSessions,
   softDeleteSession,
   startSession,
+  updateSessionExerciseOrder,
   updateSessionName,
   updateSessionNotes,
   updateSessionTimes,
 } from "~/api/sessions";
+import type { SessionRow } from "~/db/types";
 import { supabase } from "~/lib/supabase";
 
 const KEYS = {
@@ -99,13 +101,53 @@ export function useStartSessionFromRoutine() {
 export function useFinishSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => finishSession(id),
+    mutationFn: ({ id, exerciseOrder }: { id: string; exerciseOrder?: string[] }) =>
+      finishSession(id, exerciseOrder),
     onSuccess: (row) => {
       qc.setQueryData(KEYS.active, null);
       qc.invalidateQueries({ queryKey: KEYS.all });
+      // The returned row already carries the freshly-written
+      // session_exercise_order, so the detail cache is up to date.
       qc.setQueryData(KEYS.detail(row.id), row);
       qc.invalidateQueries({ queryKey: ["stats"] });
       qc.invalidateQueries({ queryKey: ["progress"] });
+    },
+  });
+}
+
+/**
+ * Optimistic per-tap reorder of a finished session's exercise order (History
+ * edit mode). Writes the FULL new order to the `["sessions", id]` detail cache
+ * synchronously so the chevron tap feels instant, then persists the array.
+ *
+ * Unlike useReorderRoutineExercises (which caches a LIST), the session detail
+ * cache holds a SINGLE SessionRow, so the optimistic write patches one field.
+ *
+ * Narrow invalidation (detail only): exercise order is not an input to the
+ * session list row, any volume/stat, or progress — invalidating those would
+ * refetch needlessly on every tap. Matches useUpdateSetMeta's narrow-invalidate
+ * rationale.
+ */
+export function useUpdateSessionExerciseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, order }: { id: string; order: string[] }) =>
+      updateSessionExerciseOrder(id, order),
+    onMutate: async ({ id, order }) => {
+      await qc.cancelQueries({ queryKey: KEYS.detail(id) });
+      const previous = qc.getQueryData<SessionRow>(KEYS.detail(id));
+      qc.setQueryData<SessionRow | undefined>(KEYS.detail(id), (old) =>
+        old ? { ...old, session_exercise_order: order } : old,
+      );
+      return { previous };
+    },
+    onError: (_err, { id }, ctx) => {
+      if (ctx?.previous !== undefined) {
+        qc.setQueryData(KEYS.detail(id), ctx.previous);
+      }
+    },
+    onSettled: (_data, _err, { id }) => {
+      qc.invalidateQueries({ queryKey: KEYS.detail(id) });
     },
   });
 }
