@@ -187,7 +187,10 @@ test.describe("Weekly volume strip — scroll + week selector", () => {
 
       // Current-week bar (rightmost) is in view by default.
       const currentMonday = mondayNWeeksAgoUtc(0);
-      const currentLabel = `${currentMonday.getUTCMonth() + 1}/${currentMonday.getUTCDate()}`;
+      // dd/mm, zero-padded — matches `formatShortDate` after the app-wide
+      // date-format swap (5a2382b). The bar a11y label is
+      // `View week of ${formatShortDate(b.start)}` = "25/05", not "5/25".
+      const currentLabel = `${String(currentMonday.getUTCDate()).padStart(2, "0")}/${String(currentMonday.getUTCMonth() + 1).padStart(2, "0")}`;
       const currentBar = page.getByRole("button", {
         name: `View week of ${currentLabel}`,
       });
@@ -377,7 +380,10 @@ test.describe("Weekly volume strip — scroll + week selector", () => {
 
       // Sanity: current-week bar is present in the DOM (no a11y regression).
       const currentMonday = mondayNWeeksAgoUtc(0);
-      const currentLabel = `${currentMonday.getUTCMonth() + 1}/${currentMonday.getUTCDate()}`;
+      // dd/mm, zero-padded — matches `formatShortDate` after the app-wide
+      // date-format swap (5a2382b). The bar a11y label is
+      // `View week of ${formatShortDate(b.start)}` = "25/05", not "5/25".
+      const currentLabel = `${String(currentMonday.getUTCDate()).padStart(2, "0")}/${String(currentMonday.getUTCMonth() + 1).padStart(2, "0")}`;
       await expect(
         page.getByRole("button", { name: `View week of ${currentLabel}` }),
       ).toBeVisible({ timeout: 5_000 });
