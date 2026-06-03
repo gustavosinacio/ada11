@@ -102,7 +102,7 @@ export default function ViewWeekScreen(): React.JSX.Element {
     for (const row of rows) {
       if (weekKeyOf(parseISO(row.completed_at)) !== targetKey) continue;
       const bw = resolveBw(row.session_id, row.sessions.started_at);
-      const w = effectiveWeightKg(row.exercises.equipment, row.weight, bw);
+      const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
       const r = row.reps ?? 0;
       if (w > 0 && r > 0) vol += w * r;
     }

@@ -293,7 +293,7 @@ export function useExercisesThisWeek(): {
       const t = parseISO(r.completed_at);
       if (t < weekStart || t > weekEnd) continue;
       const bw = resolveNowBw(r.session_id, r.sessions.started_at);
-      const w = effectiveWeightKg(r.exercises.equipment, r.weight, bw);
+      const w = effectiveWeightKg(r.exercises?.equipment, r.weight, bw);
       const reps = r.reps ?? 0;
       if (w > 0 && reps > 0) {
         nowKgByExercise.set(
