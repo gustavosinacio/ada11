@@ -172,6 +172,9 @@ export default function ExerciseProgressScreen() {
       const sessions = progressQ.data ?? [];
       const measurements = measurementsQ.data;
       const equipment = exercise.data?.equipment;
+      // Bodyweight leverage factor (numeric ⇒ STRING). Same source as
+      // `equipment`; parsed inside `effectiveWeightKg`. NULL ⇒ 1.0.
+      const factor = exercise.data?.bodyweight_factor;
       const e1rm: DataPoint[] = [];
       const vol: DataPoint[] = [];
       let best = 0;
@@ -202,8 +205,8 @@ export default function ExerciseProgressScreen() {
           }
 
           // Volume — effective (bodyweight-aware) weight, separate guard. A
-          // 0-weight bodyweight set with bw>0 still contributes bw*reps.
-          const effW = effectiveWeightKg(equipment, set.weight, bw);
+          // 0-weight bodyweight set with bw>0 still contributes bw*factor*reps.
+          const effW = effectiveWeightKg(equipment, set.weight, bw, factor);
           if (effW > 0 && r > 0) {
             sessionVolume += effW * r;
           }
@@ -239,7 +242,14 @@ export default function ExerciseProgressScreen() {
         maxVolumeSession: maxVolSession,
         maxVolumeKg: maxVolKg,
       };
-    }, [progressQ.data, measurementsQ.data, exercise.data?.equipment, unit, windowStartMs]);
+    }, [
+      progressQ.data,
+      measurementsQ.data,
+      exercise.data?.equipment,
+      exercise.data?.bodyweight_factor,
+      unit,
+      windowStartMs,
+    ]);
 
   // The query returns ASC for chart plotting (left→right oldest→newest).
   // The "Sessions" list below wants newest first, so reverse a shallow copy.
@@ -326,10 +336,11 @@ export default function ExerciseProgressScreen() {
                 lines={presentSetVolumeLines({
                   sets: maxVolumeSession.sets,
                   unit,
-                  // Identical equipment + per-session bodyweight to the volume
-                  // reduce above, so the per-set lines sum to `maxVolumeKg`
-                  // for a bodyweight exercise (Invariant C).
+                  // Identical equipment + factor + per-session bodyweight to
+                  // the volume reduce above, so the per-set lines sum to
+                  // `maxVolumeKg` for a bodyweight exercise (Invariant C).
                   equipment: exercise.data?.equipment ?? undefined,
+                  factor: exercise.data?.bodyweight_factor ?? undefined,
                   bodyweightKg: bodyweightKgAsOf(
                     measurementsQ.data,
                     parseISO(maxVolumeSession.started_at).getTime(),
@@ -351,6 +362,7 @@ export default function ExerciseProgressScreen() {
                   session={s}
                   unit={unit}
                   equipment={exercise.data?.equipment ?? undefined}
+                  factor={exercise.data?.bodyweight_factor ?? undefined}
                   measurements={measurementsQ.data}
                   onPress={() => router.push(`/(app)/history/${s.session_id}`)}
                 />

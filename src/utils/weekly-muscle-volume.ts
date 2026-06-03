@@ -118,7 +118,7 @@ export function presentWeeklyVolumeByMuscle(args: {
       primary && validMuscles.has(primary) ? (primary as MuscleGroup) : "Other";
 
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(ex.equipment, row.weight, bw);
+    const w = effectiveWeightKg(ex.equipment, row.weight, bw, ex.bodyweight_factor);
     const r = row.reps ?? 0;
     if (!(w > 0 && r > 0)) continue;
 

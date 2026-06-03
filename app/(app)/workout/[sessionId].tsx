@@ -92,13 +92,21 @@ function LiveWorkoutScreenInner() {
   // `sumLiveVolume` enforces F10 "checked = committed": warmups out,
   // dropsets in, unchecked drafts out — so the live header total agrees
   // with the post-Finish verdict by construction.
-  // exercise_id → equipment, for the bodyweight-aware live-volume kernel.
-  const equipmentByExerciseId = useMemo(() => {
-    const map = new Map<string, string>();
+  // exercise_id → equipment + leverage factor, for the bodyweight-aware
+  // live-volume kernel. Both maps derive from the same `useAllExercises` rows
+  // (`select("*")` carries `bodyweight_factor`), so they're returned from one
+  // memo and update in lockstep. The factor numeric arrives as a STRING;
+  // parseFloat it here (guard `!= null` so an absent key coalesces to 1.0).
+  const { equipmentByExerciseId, factorByExerciseId } = useMemo(() => {
+    const equipmentByExerciseId = new Map<string, string>();
+    const factorByExerciseId = new Map<string, number>();
     for (const e of exercisesQ.data ?? []) {
-      if (e.equipment != null) map.set(e.id, e.equipment);
+      if (e.equipment != null) equipmentByExerciseId.set(e.id, e.equipment);
+      if (e.bodyweight_factor != null) {
+        factorByExerciseId.set(e.id, parseFloat(e.bodyweight_factor));
+      }
     }
-    return map;
+    return { equipmentByExerciseId, factorByExerciseId };
   }, [exercisesQ.data]);
 
   const totalVolumeKg = useMemo(() => {
@@ -110,9 +118,16 @@ function LiveWorkoutScreenInner() {
     );
     return sumLiveVolume(setsQ.data ?? [], {
       equipmentByExerciseId,
+      factorByExerciseId,
       bodyweightKg,
     });
-  }, [setsQ.data, session.data?.started_at, measurementsQ.data, equipmentByExerciseId]);
+  }, [
+    setsQ.data,
+    session.data?.started_at,
+    measurementsQ.data,
+    equipmentByExerciseId,
+    factorByExerciseId,
+  ]);
 
   const routineExercisesQ = useRoutineExercises(session.data?.routine_id ?? undefined);
   const restTimer = useRestTimer();

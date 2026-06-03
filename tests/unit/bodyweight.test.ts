@@ -93,6 +93,86 @@ describe("effectiveWeightKg", () => {
   });
 });
 
+describe("effectiveWeightKg — leverage factor (MAJ-2 STRING-aware)", () => {
+  // `bodyweight_factor` is a `numeric` column → PostgREST returns it as a JSON
+  // STRING ("0.64"). Every factor case asserts with STRING inputs (with teeth)
+  // so a number-literal false-green can't hide the string-drop bug. The
+  // coalesce target is 1.0 (NEVER 0).
+
+  // 1. Push-up at "0.64" (STRING): 80 * 0.64 + 0 = 51.2.
+  it("push-up factor '0.64' (STRING) scales the bodyweight only", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, "0.64")).toBe(51.2);
+  });
+
+  // 2. Push-up with added load (STRING factor): 80*0.64 + 10 = 61.2.
+  //    addedLoad is NOT scaled (NOT (80+10)*0.64 = 57.6).
+  it("addedLoad is NEVER scaled by the factor (bw*f + addedLoad)", () => {
+    expect(effectiveWeightKg("bodyweight", "10", 80, "0.64")).toBe(61.2);
+  });
+
+  // 3. Dip at "1.0" (STRING) = today's number.
+  it("factor '1.0' (STRING) reproduces the pre-feature number", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, "1.0")).toBe(80);
+  });
+
+  // 4. Weighted dip (STRING factor): 80*1 + 30 = 110 (belt leveraged at 1.0).
+  it("weighted dip: belt load leveraged at 1.0 (unscaled)", () => {
+    expect(effectiveWeightKg("bodyweight", "30", 80, "1.0")).toBe(110);
+  });
+
+  // 5. Reclassified-three retroactive: an equipment='bodyweight' row with
+  //    factor "1.0" produces bodyweight volume where it produced 0 before.
+  it("reclassified bodyweight row with factor '1.0' contributes bodyweight (was 0)", () => {
+    // Pull Up: bw 80, factor "1.0", per-rep effective weight = 80.
+    expect(effectiveWeightKg("bodyweight", "0", 80, "1.0")).toBe(80);
+  });
+
+  // 6. NULL factor ⇒ 1.0.
+  it("NULL factor ⇒ 1.0 (no-op)", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, null)).toBe(80);
+  });
+
+  // 7. undefined / absent factor ⇒ 1.0 (Invariant L identity).
+  it("absent (undefined) factor ⇒ 1.0 (Invariant L)", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80)).toBe(80);
+    expect(effectiveWeightKg("bodyweight", "0", 80, undefined)).toBe(80);
+  });
+
+  // 8. Non-finite STRING factor ⇒ 1.0 (NEVER 0).
+  it("non-numeric STRING factor 'abc' ⇒ 1.0 (parseFloat NaN coalesce, NEVER 0)", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, "abc")).toBe(80);
+  });
+
+  it("non-finite NUMBER factor (NaN/±Infinity) ⇒ 1.0 (NEVER 0)", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, Number.NaN)).toBe(80);
+    expect(effectiveWeightKg("bodyweight", "0", 80, Number.POSITIVE_INFINITY)).toBe(80);
+    expect(effectiveWeightKg("bodyweight", "0", 80, Number.NEGATIVE_INFINITY)).toBe(80);
+  });
+
+  // 9. Stored finite "0" honored (deliberate value, distinct from NULL).
+  it("stored finite '0' is HONORED (80*0 + addedLoad), NOT coalesced", () => {
+    expect(effectiveWeightKg("bodyweight", "10", 80, "0")).toBe(10);
+    expect(effectiveWeightKg("bodyweight", "0", 80, "0")).toBe(0);
+  });
+
+  // 10. Non-bodyweight ignores the factor entirely.
+  it("non-bodyweight equipment never reads the factor", () => {
+    expect(effectiveWeightKg("barbell", "100", 80, "0.64")).toBe(100);
+    expect(effectiveWeightKg("machine", "0", 80, "0.64")).toBe(0);
+  });
+
+  // 11. Defensive number path: a number still works (strictly safer).
+  it("defensive number factor 0.64 still works (strictly safer)", () => {
+    expect(effectiveWeightKg("bodyweight", "0", 80, 0.64)).toBe(51.2);
+  });
+
+  // Legacy mixed-case "Bodyweight" never triggers the branch ⇒ never reads
+  // the factor.
+  it("legacy 'Bodyweight' token never reads the factor (addedLoad only)", () => {
+    expect(effectiveWeightKg("Bodyweight", "0", 80, "0.64")).toBe(0);
+  });
+});
+
 describe("bodyweightKgAsOf", () => {
   it("undefined / empty measurements → null", () => {
     expect(bodyweightKgAsOf(undefined, ms("2026-05-01T00:00:00Z"))).toBeNull();

@@ -52,15 +52,21 @@ export function presentExerciseSessionRow(input: {
   /** Equipment token of the exercise these sets belong to. When `"bodyweight"`
    *  AND `bodyweightKg` is provided, volume becomes bodyweight-aware. */
   equipment?: string;
+  /** Bodyweight leverage factor (same source as `equipment` —
+   *  `exercise.bodyweight_factor`, a `numeric` ⇒ STRING). NULL/absent ⇒ 1.0. */
+  factor?: number | string | null;
   /** Bodyweight as-of this session (resolved from the session's started_at).
    *  Identical to the value passed to `presentSetVolumeLines` so the per-set
    *  lines sum to this total (Regression Invariant C). */
   bodyweightKg?: number | null;
 }): ExerciseSessionRowPresentation {
-  const { sets, unit, equipment, bodyweightKg } = input;
+  const { sets, unit, equipment, factor, bodyweightKg } = input;
 
   const count = sets.filter((s) => s.set_type !== "warmup").length;
-  const volumeKg = sumPastVolume(sets, makeBwInput(sets, equipment, bodyweightKg));
+  const volumeKg = sumPastVolume(
+    sets,
+    makeBwInput(sets, equipment, factor, bodyweightKg),
+  );
   const volumeLabel =
     count > 0 && volumeKg > 0
       ? `${count} × ${formatVolume(volumeKg, unit)}`
@@ -79,12 +85,30 @@ export function presentExerciseSessionRow(input: {
 function makeBwInput(
   sets: SetRow[],
   equipment: string | undefined,
+  factor: number | string | null | undefined,
   bodyweightKg: number | null | undefined,
 ): SetBodyweightInput | undefined {
   if (equipment === undefined) return undefined;
   const equipmentByExerciseId = new Map<string, string>();
-  for (const s of sets) equipmentByExerciseId.set(s.exercise_id, equipment);
-  return { equipmentByExerciseId, bodyweightKg: bodyweightKg ?? null };
+  const factorByExerciseId = new Map<string, number>();
+  // The factor numeric arrives as a STRING (`"0.64"`); parseFloat once here.
+  // Guard `!= null` + `Number.isFinite` so the map never holds a NaN — an
+  // absent key coalesces to 1.0 at the seam anyway.
+  const f =
+    factor == null
+      ? undefined
+      : typeof factor === "string"
+        ? parseFloat(factor)
+        : factor;
+  for (const s of sets) {
+    equipmentByExerciseId.set(s.exercise_id, equipment);
+    if (f != null && Number.isFinite(f)) factorByExerciseId.set(s.exercise_id, f);
+  }
+  return {
+    equipmentByExerciseId,
+    factorByExerciseId,
+    bodyweightKg: bodyweightKg ?? null,
+  };
 }
 
 /** One non-warmup set, presented for a per-set "weight × reps — volume" line. */
@@ -118,10 +142,14 @@ export function presentSetVolumeLines(input: {
   /** Equipment token — same value passed to `presentExerciseSessionRow` so
    *  the lines sum to that row's total (Regression Invariant C). */
   equipment?: string;
+  /** Bodyweight leverage factor — same source/value as
+   *  `presentExerciseSessionRow` (`exercise.bodyweight_factor`, STRING).
+   *  NULL/absent ⇒ 1.0. */
+  factor?: number | string | null;
   /** Bodyweight as-of this session — same value as `presentExerciseSessionRow`. */
   bodyweightKg?: number | null;
 }): SetVolumeLine[] {
-  const { sets, unit, equipment, bodyweightKg } = input;
+  const { sets, unit, equipment, factor, bodyweightKg } = input;
   const lines: SetVolumeLine[] = [];
 
   for (const s of sets) {
@@ -129,7 +157,12 @@ export function presentSetVolumeLines(input: {
     const r = s.reps ?? 0;
     let volumeKg: number;
     if (equipment !== undefined) {
-      const eff = effectiveWeightKg(equipment, s.weight, bodyweightKg ?? null);
+      const eff = effectiveWeightKg(
+        equipment,
+        s.weight,
+        bodyweightKg ?? null,
+        factor ?? null,
+      );
       volumeKg = eff > 0 && r > 0 ? eff * r : 0;
     } else {
       const w = s.weight ? parseFloat(s.weight) : NaN;

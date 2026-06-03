@@ -789,6 +789,7 @@ describe("computeVolumeTarget — bodyweight", () => {
       currentSessionSets: [],
       bodyweight: {
         equipmentByExerciseId,
+        factorByExerciseId: new Map(),
         liveBodyweightKg: 80,
         pastBodyweightBySession: new Map([["s-prior", 80]]),
       },
@@ -830,6 +831,7 @@ describe("computeVolumeTarget — bodyweight", () => {
       ],
       bodyweight: {
         equipmentByExerciseId,
+        factorByExerciseId: new Map(),
         liveBodyweightKg: 80,
         pastBodyweightBySession: new Map([["s-prior", 80]]),
       },
@@ -872,6 +874,7 @@ describe("computeVolumeTarget — bodyweight", () => {
       ],
       bodyweight: {
         equipmentByExerciseId,
+        factorByExerciseId: new Map(),
         liveBodyweightKg: 80,
         pastBodyweightBySession: new Map([["s-prior", 80]]),
       },
@@ -908,6 +911,7 @@ describe("computeVolumeTarget — bodyweight", () => {
       currentSessionSets,
       bodyweight: {
         equipmentByExerciseId: new Map([["ex-1", "barbell"]]),
+        factorByExerciseId: new Map(),
         liveBodyweightKg: 80,
         pastBodyweightBySession: new Map([["s-prior", 80]]),
       },

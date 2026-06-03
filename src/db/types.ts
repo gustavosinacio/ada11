@@ -171,6 +171,12 @@ export type ExerciseRow = {
   name: string;
   muscles: string[];
   equipment: string | null;
+  // Per-exercise bodyweight leverage factor (push-up ≈ 0.64, pull-up/dip ≈
+  // 1.0). `numeric` ⇒ the Supabase JS client returns it as a STRING (matches
+  // every sibling numeric on these row types). Rides `select("*")` on every
+  // read path. NULL ⇒ the app coalesces to 1.0 (NEVER 0). See migration
+  // 0021_bodyweight_factor.sql.
+  bodyweight_factor: string | null;
   notes: string | null;
   source: string | null;
   created_at: string;

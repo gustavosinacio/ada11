@@ -247,6 +247,7 @@ export function ExerciseBlock({
           exerciseId={exercise.id}
           currentSessionSets={sets}
           equipment={exercise.equipment ?? undefined}
+          factor={exercise.bodyweight_factor ?? undefined}
           liveSessionStartedAt={liveSessionStartedAt}
         />
       ) : null}

@@ -69,7 +69,10 @@ function mkRow(
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id ?? "sess-prior",
     // MIN-4: default barbell so existing assertions stay green.
-    exercises: overrides.exercises ?? { equipment: "barbell" },
+    exercises: overrides.exercises ?? {
+      equipment: "barbell",
+      bodyweight_factor: null,
+    },
     sessions: overrides.sessions ?? {
       started_at: sessionStarted,
       ended_at: sessionStarted,
@@ -636,7 +639,7 @@ describe("computePrsForSession — bodyweight (Invariant B)", () => {
         exercise_id: "pullup",
         session_id: "s-prior",
         completed_at: "2026-05-04T10:00:00Z",
-        exercises: { equipment: "bodyweight" },
+        exercises: { equipment: "bodyweight", bodyweight_factor: null },
         sessions: {
           started_at: "2026-05-04T09:00:00Z",
           ended_at: "2026-05-04T10:00:00Z",
@@ -657,6 +660,7 @@ describe("computePrsForSession — bodyweight (Invariant B)", () => {
     ];
     const liveBw: SetBodyweightInput = {
       equipmentByExerciseId,
+      factorByExerciseId: new Map(),
       bodyweightKg: 80,
     };
     const currentByExercise = computeCurrentSessionVolumeByExercise(
@@ -686,7 +690,7 @@ describe("computePrsForSession — bodyweight (Invariant B)", () => {
         exercise_id: "pullup",
         session_id: "s-prior",
         completed_at: "2026-05-04T10:00:00Z",
-        exercises: { equipment: "bodyweight" },
+        exercises: { equipment: "bodyweight", bodyweight_factor: null },
         sessions: {
           started_at: "2026-05-04T09:00:00Z",
           ended_at: "2026-05-04T10:00:00Z",
@@ -707,6 +711,7 @@ describe("computePrsForSession — bodyweight (Invariant B)", () => {
     ];
     const liveBw: SetBodyweightInput = {
       equipmentByExerciseId,
+      factorByExerciseId: new Map(),
       bodyweightKg: 80,
     };
     const currentByExercise = computeCurrentSessionVolumeByExercise(
@@ -736,7 +741,7 @@ function toWvr(sets: SetRow[], sessionId: string): WeeklyVolumeRow[] {
       exercise_id: s.exercise_id,
       session_id: sessionId,
       completed_at: "2026-05-20T10:00:00Z",
-      exercises: { equipment: "bodyweight" },
+      exercises: { equipment: "bodyweight", bodyweight_factor: null },
       sessions: {
         started_at: "2026-05-20T09:00:00Z",
         ended_at: "2026-05-20T10:00:00Z",

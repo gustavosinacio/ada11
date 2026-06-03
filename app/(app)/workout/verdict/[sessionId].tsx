@@ -54,13 +54,20 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
     [weeks],
   );
 
-  // exercise_id → equipment for the bodyweight-aware single-session kernels.
-  const equipmentByExerciseId = useMemo(() => {
-    const map = new Map<string, string>();
+  // exercise_id → equipment + leverage factor for the bodyweight-aware
+  // single-session kernels. Both maps derive from the same `useAllExercises`
+  // rows (`select("*")` carries `bodyweight_factor`), so they're returned from
+  // one memo. The factor numeric arrives as a STRING; parseFloat it here.
+  const { equipmentByExerciseId, factorByExerciseId } = useMemo(() => {
+    const equipmentByExerciseId = new Map<string, string>();
+    const factorByExerciseId = new Map<string, number>();
     for (const e of exercisesQ.data ?? []) {
-      if (e.equipment != null) map.set(e.id, e.equipment);
+      if (e.equipment != null) equipmentByExerciseId.set(e.id, e.equipment);
+      if (e.bodyweight_factor != null) {
+        factorByExerciseId.set(e.id, parseFloat(e.bodyweight_factor));
+      }
     }
-    return map;
+    return { equipmentByExerciseId, factorByExerciseId };
   }, [exercisesQ.data]);
 
   // Bodyweight as-of this session (single session — F-1). `null` until session
@@ -73,8 +80,12 @@ export default function WorkoutVerdictScreen(): React.JSX.Element {
   }, [session.data?.started_at, measurementsQ.data]);
 
   const setBodyweightInput = useMemo(
-    () => ({ equipmentByExerciseId, bodyweightKg: sessionBodyweightKg }),
-    [equipmentByExerciseId, sessionBodyweightKg],
+    () => ({
+      equipmentByExerciseId,
+      factorByExerciseId,
+      bodyweightKg: sessionBodyweightKg,
+    }),
+    [equipmentByExerciseId, factorByExerciseId, sessionBodyweightKg],
   );
 
   const totalVolumeKg = useMemo(

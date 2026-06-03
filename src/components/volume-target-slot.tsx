@@ -22,6 +22,9 @@ type Props = {
   /** Equipment token of this exercise — when `"bodyweight"`, the Max/Now/To-PR
    *  math becomes bodyweight-aware. */
   equipment?: string;
+  /** Bodyweight leverage factor (`exercise.bodyweight_factor`, numeric ⇒
+   *  STRING). Same source as `equipment`; NULL/absent ⇒ 1.0. */
+  factor?: number | string;
   /** `started_at` of the LIVE session — used to resolve the live bodyweight
    *  for the running session's volume. */
   liveSessionStartedAt?: string;
@@ -45,6 +48,7 @@ export function VolumeTargetSlot({
   exerciseId,
   currentSessionSets,
   equipment,
+  factor,
   liveSessionStartedAt,
 }: Props): React.JSX.Element | null {
   const progressQ = useExerciseProgress(exerciseId);
@@ -65,6 +69,17 @@ export function VolumeTargetSlot({
     const equipmentByExerciseId = new Map<string, string>([
       [exerciseId, equipment],
     ]);
+    // Parallel one-entry factor map (parseFloat the STRING numeric here so the
+    // map only ever holds finite numbers; an absent key coalesces to 1.0 at
+    // the seam). Guard `!= null` + `Number.isFinite` so a NaN never enters.
+    const factorByExerciseId = new Map<string, number>();
+    const f =
+      factor == null
+        ? undefined
+        : typeof factor === "string"
+          ? parseFloat(factor)
+          : factor;
+    if (f != null && Number.isFinite(f)) factorByExerciseId.set(exerciseId, f);
     const measurements = measurementsQ.data;
     const pastBodyweightBySession = new Map<string, number | null>();
     for (const s of progressQ.data ?? []) {
@@ -78,11 +93,13 @@ export function VolumeTargetSlot({
       : null;
     return {
       equipmentByExerciseId,
+      factorByExerciseId,
       liveBodyweightKg,
       pastBodyweightBySession,
     };
   }, [
     equipment,
+    factor,
     exerciseId,
     measurementsQ.data,
     progressQ.data,
@@ -126,6 +143,7 @@ export function VolumeTargetSlot({
       sets: state.previousMaxSets,
       unit,
       equipment,
+      factor,
       bodyweightKg: maxSessionBwKg,
     });
     // MAJ-1 fix (option c): suppress the reps clause when nothing has been
@@ -201,6 +219,7 @@ export function VolumeTargetSlot({
     sets: state.previousMaxSets,
     unit,
     equipment,
+    factor,
     bodyweightKg: maxSessionBwKg,
   });
   const copy = isMatch

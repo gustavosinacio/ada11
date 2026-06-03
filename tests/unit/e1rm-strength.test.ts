@@ -38,7 +38,7 @@ function mkRow(overrides: {
     set_type: "working",
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id ?? "sess-1",
-    exercises: { equipment: overrides.equipment ?? "barbell" },
+    exercises: { equipment: overrides.equipment ?? "barbell", bodyweight_factor: null },
     sessions: { started_at: startedAt, ended_at: startedAt },
   };
 }
@@ -55,6 +55,7 @@ function mkExercise(overrides: {
     name: overrides.name ?? `Exercise ${overrides.id}`,
     muscles: overrides.muscles ?? [],
     equipment: overrides.equipment ?? null,
+    bodyweight_factor: null,
     notes: null,
     source: null,
     created_at: "2026-01-01T00:00:00Z",

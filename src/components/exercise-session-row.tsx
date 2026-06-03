@@ -18,6 +18,9 @@ type Props = {
   /** Equipment token of this exercise — makes the row's volume bodyweight-aware
    *  when `"bodyweight"`. */
   equipment?: string;
+  /** Bodyweight leverage factor (`exercise.bodyweight_factor`, numeric ⇒
+   *  STRING). Same source as `equipment`; NULL/absent ⇒ 1.0. */
+  factor?: number | string | null;
   /** Measurements timeline; the row resolves this session's bodyweight from
    *  `session.started_at` (MIN-NEW-2: per-row, since the "Sessions" list is
    *  multi-session). */
@@ -46,6 +49,7 @@ export function ExerciseSessionRow({
   session,
   unit,
   equipment,
+  factor,
   measurements,
   onPress,
 }: Props) {
@@ -60,12 +64,14 @@ export function ExerciseSessionRow({
     sets: session.sets,
     unit,
     equipment,
+    factor,
     bodyweightKg,
   });
   const setLines = presentSetVolumeLines({
     sets: session.sets,
     unit,
     equipment,
+    factor,
     bodyweightKg,
   });
   const visibleDate = formatDisplayDate(session.started_at, {

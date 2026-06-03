@@ -39,7 +39,10 @@ function mkRow(overrides: RowOverrides): WeeklyVolumeRow {
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id,
     // MIN-4: default barbell so existing assertions stay green.
-    exercises: overrides.exercises ?? { equipment: "barbell" },
+    exercises: overrides.exercises ?? {
+      equipment: "barbell",
+      bodyweight_factor: null,
+    },
     sessions: overrides.sessions ?? {
       started_at: "2026-05-23T09:00:00Z",
       ended_at: "2026-05-23T10:30:00Z",

@@ -25,13 +25,15 @@ export type WeeklyVolumeRow = {
   // `equipment` typed `string` (not `Equipment`) — legacy user-owned rows may
   // hold arbitrary strings (`db/types.ts:108-118`); the `=== "bodyweight"`
   // test inside `effectiveWeightKg` is the canonical gate.
-  exercises: { equipment: string };
+  // `bodyweight_factor` is a `numeric` ⇒ PostgREST returns it as a STRING
+  // (`"0.64"`); `effectiveWeightKg` parseFloats it. NULL ⇒ coalesce to 1.0.
+  exercises: { equipment: string; bodyweight_factor: string | null };
   sessions: { started_at: string; ended_at: string };
 };
 
 const SELECT =
   "completed_at, weight, reps, set_type, exercise_id, session_id, " +
-  "exercises!inner(equipment), sessions!inner(started_at, ended_at)";
+  "exercises!inner(equipment, bodyweight_factor), sessions!inner(started_at, ended_at)";
 
 const PAGE = 1000;
 

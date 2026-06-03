@@ -205,11 +205,16 @@ export default function SessionDetailScreen() {
     const totalSets = rows.filter(
       (s) => s.completed_at != null && s.set_type !== "warmup",
     ).length;
-    // Bodyweight-aware (single session — F-1): equipment from useAllExercises,
-    // bodyweight from this session's started_at.
+    // Bodyweight-aware (single session — F-1): equipment + leverage factor
+    // from useAllExercises, bodyweight from this session's started_at. The
+    // factor numeric arrives as a STRING; parseFloat it in the same loop.
     const equipmentByExerciseId = new Map<string, string>();
+    const factorByExerciseId = new Map<string, number>();
     for (const e of exercisesQ.data ?? []) {
       if (e.equipment != null) equipmentByExerciseId.set(e.id, e.equipment);
+      if (e.bodyweight_factor != null) {
+        factorByExerciseId.set(e.id, parseFloat(e.bodyweight_factor));
+      }
     }
     const startedAt = session.data?.started_at;
     const bodyweightKg = startedAt
@@ -217,6 +222,7 @@ export default function SessionDetailScreen() {
       : null;
     const totalVolumeKg = sumLiveVolume(rows, {
       equipmentByExerciseId,
+      factorByExerciseId,
       bodyweightKg,
     });
     return { totalSets, totalVolumeKg };

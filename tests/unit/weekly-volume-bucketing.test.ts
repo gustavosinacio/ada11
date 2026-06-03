@@ -46,7 +46,7 @@ type RowInput = Omit<
 > & {
   exercise_id?: string;
   session_id?: string;
-  exercises?: { equipment: string };
+  exercises?: { equipment: string; bodyweight_factor: string | null };
   sessions?: { started_at: string; ended_at: string };
   set_type?: WeeklyVolumeRow["set_type"];
 };
@@ -61,7 +61,10 @@ function buildRow(input: RowInput): WeeklyVolumeRow {
     session_id: input.session_id ?? "sess-1",
     // MIN-4: default barbell so existing assertions stay green
     // (`effectiveWeightKg("barbell", weight, null)` === addedLoad).
-    exercises: input.exercises ?? { equipment: "barbell" },
+    exercises: input.exercises ?? {
+      equipment: "barbell",
+      bodyweight_factor: null,
+    },
     sessions: input.sessions ?? {
       started_at: input.completed_at,
       ended_at: input.completed_at,
@@ -246,7 +249,7 @@ describe("computeStripModel — bodyweight kernel", () => {
         completed_at: completedAt,
         weight: "0", // unweighted pull-up
         reps: 10,
-        exercises: { equipment: "bodyweight" },
+        exercises: { equipment: "bodyweight", bodyweight_factor: null },
         sessions: { started_at: completedAt, ended_at: completedAt },
       }),
     ];
@@ -267,7 +270,7 @@ describe("computeStripModel — bodyweight kernel", () => {
         completed_at: completedAt,
         weight: "20",
         reps: 5,
-        exercises: { equipment: "bodyweight" },
+        exercises: { equipment: "bodyweight", bodyweight_factor: null },
         sessions: { started_at: completedAt, ended_at: completedAt },
       }),
     ];
@@ -287,7 +290,7 @@ describe("computeStripModel — bodyweight kernel", () => {
         completed_at: completedAt,
         weight: "0",
         reps: 10,
-        exercises: { equipment: "bodyweight" },
+        exercises: { equipment: "bodyweight", bodyweight_factor: null },
       }),
     ];
     // No measurements → bw null → effective = 0 → contributes 0 = today's

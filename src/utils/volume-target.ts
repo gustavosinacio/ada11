@@ -17,6 +17,15 @@ import { parseISO } from "~/utils/dates";
 export type SetBodyweightInput = {
   /** exercise_id → equipment token. From `useAllExercises`. */
   equipmentByExerciseId: Map<string, string>;
+  /**
+   * exercise_id → parsed bodyweight leverage factor (REQUIRED — MAP-symmetry
+   * with `equipmentByExerciseId`, so the compiler flags any builder that wires
+   * equipment but forgets the factor). A missing key ⇒ `effectiveWeightKg`
+   * coalesces to 1.0, so a partially-populated map (e.g. non-bodyweight
+   * exercises absent) is safe. Values are already `parseFloat`d at the build
+   * site (the `bodyweight_factor` numeric arrives as a STRING).
+   */
+  factorByExerciseId: Map<string, number>;
   /** Bodyweight as-of THIS session (single session per call — F-1). */
   bodyweightKg: number | null;
 };
@@ -83,6 +92,9 @@ export type ComputeVolumeTargetInput = {
    */
   bodyweight?: {
     equipmentByExerciseId: Map<string, string>;
+    /** exercise_id → parsed bodyweight leverage factor (REQUIRED — see
+     *  `SetBodyweightInput.factorByExerciseId`). */
+    factorByExerciseId: Map<string, number>;
     /** Bodyweight as-of the LIVE session (for `currentSessionSets`). */
     liveBodyweightKg: number | null;
     /** session_id → bodyweight-as-of for past sessions (resolved by the
@@ -116,6 +128,7 @@ export function sumPastVolume(sets: SetRow[], bw?: SetBodyweightInput): number {
         bw.equipmentByExerciseId.get(s.exercise_id),
         s.weight,
         bw.bodyweightKg,
+        bw.factorByExerciseId.get(s.exercise_id),
       );
       if (eff > 0 && r > 0) total += eff * r;
       continue;
@@ -158,6 +171,7 @@ export function sumLiveVolume(
         bw.equipmentByExerciseId.get(s.exercise_id),
         s.weight,
         bw.bodyweightKg,
+        bw.factorByExerciseId.get(s.exercise_id),
       );
       if (eff > 0 && r > 0) total += eff * r;
       continue;
@@ -207,6 +221,7 @@ export function computeVolumeTarget(
       const total = bodyweight
         ? sumPastVolume(session.sets, {
             equipmentByExerciseId: bodyweight.equipmentByExerciseId,
+            factorByExerciseId: bodyweight.factorByExerciseId,
             bodyweightKg:
               bodyweight.pastBodyweightBySession.get(session.session_id) ??
               null,
@@ -226,6 +241,7 @@ export function computeVolumeTarget(
   const runningKg = bodyweight
     ? sumLiveVolume(currentSessionSets, {
         equipmentByExerciseId: bodyweight.equipmentByExerciseId,
+        factorByExerciseId: bodyweight.factorByExerciseId,
         bodyweightKg: bodyweight.liveBodyweightKg,
       })
     : sumLiveVolume(currentSessionSets);
@@ -249,6 +265,7 @@ export function computeVolumeTarget(
         bodyweight.equipmentByExerciseId.get(s.exercise_id),
         s.weight,
         bodyweight.liveBodyweightKg,
+        bodyweight.factorByExerciseId.get(s.exercise_id),
       );
     }
     return s.weight ? parseFloat(s.weight) : NaN;

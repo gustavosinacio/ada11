@@ -85,7 +85,12 @@ export function bucketLifetimeWeeklyVolumes(
     }
     const key = weekKeyOf(parseISO(row.completed_at));
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (w > 0 && r > 0) {
       totals.set(key, (totals.get(key) ?? 0) + w * r);
@@ -187,7 +192,12 @@ export function computeCurrentWeekVolume(
   for (const row of rows) {
     if (weekKeyOf(parseISO(row.completed_at)) !== targetKey) continue;
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (w > 0 && r > 0) {
       total += w * r;
@@ -230,7 +240,12 @@ export function computeLifetimeMaxPerExercise(
   const sessionVols = new Map<string, Map<string, SessionAgg>>(); // exId → (sessId → agg)
   for (const row of rows) {
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (!(w > 0 && r > 0)) continue;
     const inner =
@@ -307,7 +322,12 @@ export function groupSessionVolumes(
     if (row.completed_at == null) continue;
     if (row.set_type === "warmup") continue;
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (w > 0 && r > 0) {
       out.set(row.session_id, (out.get(row.session_id) ?? 0) + w * r);
@@ -390,7 +410,12 @@ export function computePrsThisWeek(opts: {
   const grouped = new Map<string, Map<string, SessionAgg>>();
   for (const row of rows) {
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (!(w > 0 && r > 0)) continue;
     const inner =

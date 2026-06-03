@@ -88,7 +88,12 @@ export function computeStripModel(
     const key = weekKeyOf(parseISO(row.completed_at));
     if (!totals.has(key)) continue; // older than firstSessionMonday — shouldn't happen
     const bw = resolveBw(row.session_id, row.sessions.started_at);
-    const w = effectiveWeightKg(row.exercises?.equipment, row.weight, bw);
+    const w = effectiveWeightKg(
+      row.exercises?.equipment,
+      row.weight,
+      bw,
+      row.exercises?.bodyweight_factor,
+    );
     const r = row.reps ?? 0;
     if (w > 0 && r > 0) {
       totals.set(key, (totals.get(key) ?? 0) + w * r);

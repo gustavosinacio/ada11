@@ -14,7 +14,7 @@ import { parseISO } from "~/utils/dates";
  * Effective per-set load in kg. The single arithmetic seam for the
  * "same number everywhere" invariant.
  *
- *   - equipment === "bodyweight": effective = (bodyweightKg ?? 0) + addedLoad
+ *   - equipment === "bodyweight": effective = (bodyweightKg ?? 0) * factor + addedLoad
  *   - any other equipment (incl. legacy strings, null): effective = addedLoad
  *
  * addedLoad = weight == null ? 0 : parseFloat(weight)  (NaN-safe: a
@@ -22,11 +22,29 @@ import { parseISO } from "~/utils/dates";
  * bodyweight or null. The bodyweight addend ONLY fires on the exact canonical
  * token "bodyweight" (Decision #7) — a 0-weight machine set stays 0
  * (Decision #6). Returns a finite number >= 0; never NaN.
+ *
+ * `factor` (optional 4th arg) is the per-exercise bodyweight leverage factor:
+ * a push-up moves ≈0.64 BW, a pull-up/dip ≈1.0 BW. It scales ONLY the
+ * bodyweight component — `bw * factor + addedLoad`, NEVER `(bw + addedLoad) *
+ * factor` — so a weighted dip's belt/vest load is a true external load,
+ * leveraged at 1.0.
+ *
+ * The factor is a `numeric` column, so PostgREST returns it as a JSON STRING
+ * (`"0.64"`). The seam accepts `number | string | null` and `parseFloat`s a
+ * string internally. Coalesce rule: NULL / undefined / non-numeric string /
+ * NaN / ±Infinity ⇒ factor = 1.0 (NEVER 0 — a 0 here would zero out every
+ * bodyweight volume app-wide). A stored finite `"0"` is honored as a
+ * deliberate value (the catalog never writes 0; min is 0.50).
+ *
+ * Invariant L (no-change-when-absent): called with the 4th arg omitted, or
+ * with `factor` NULL/non-finite, coalesces to 1.0 and reproduces byte-for-byte
+ * the pre-feature `bw + addedLoad`.
  */
 export function effectiveWeightKg(
   equipment: string | null | undefined,
   weight: string | null,
   bodyweightKg: number | null,
+  factor?: number | string | null,
 ): number {
   const parsed = weight == null ? 0 : parseFloat(weight);
   const addedLoad = Number.isFinite(parsed) ? parsed : 0;
@@ -34,9 +52,17 @@ export function effectiveWeightKg(
     const bw = bodyweightKg != null && Number.isFinite(bodyweightKg)
       ? bodyweightKg
       : 0;
-    return bw + addedLoad;
+    // Coalesce-to-1.0-NEVER-0. numeric arrives as "0.64"; parseFloat it.
+    let f: number;
+    if (factor == null) {
+      f = 1;
+    } else {
+      const n = typeof factor === "string" ? parseFloat(factor) : factor;
+      f = Number.isFinite(n) ? n : 1; // NaN/Infinity/"abc" ⇒ 1.0, NEVER 0
+    }
+    return bw * f + addedLoad; // addedLoad NEVER scaled
   }
-  return addedLoad;
+  return addedLoad; // non-bodyweight never reads the factor
 }
 
 /**

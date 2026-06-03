@@ -58,6 +58,11 @@ export const exercises = pgTable(
     name: text("name").notNull(),
     muscles: text("muscles").array().notNull().default(sql`'{}'::text[]`),
     equipment: text("equipment"),
+    // Per-exercise bodyweight leverage factor (push-up ≈ 0.64, pull-up/dip ≈
+    // 1.0). Nullable, no default → existing/non-bodyweight rows stay NULL,
+    // which the app coalesces to 1.0. Backfilled on canonical bodyweight rows
+    // by supabase/migrations/0021_bodyweight_factor.sql.
+    bodyweightFactor: numeric("bodyweight_factor"),
     notes: text("notes"),
     source: text("source"),
     ...timestamps,
