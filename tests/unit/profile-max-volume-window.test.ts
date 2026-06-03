@@ -24,6 +24,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MAX_VOLUME_WINDOW_LABELS,
   MAX_VOLUME_WINDOW_OPTIONS,
   type MaxVolumeWindowWeeks,
 } from "~/db/types";
@@ -42,17 +43,11 @@ vi.mock("~/api/preferences", () => ({
 const KEY = ["preferences", "me"] as const;
 
 /**
- * Mirrors the Profile screen's label mapping (kept in sync with
- * `app/(app)/profile.tsx` `MAX_VOLUME_WINDOW_LABELS`).
+ * The label map is the SINGLE source of truth in `~/db/types`, shared by the
+ * Profile segmented control and the Progress-page window selector. We assert
+ * against the exported constant directly — no local copy to drift.
  */
-const LABEL_MAP: Record<MaxVolumeWindowWeeks, string> = {
-  0: "All",
-  10: "10w",
-  20: "20w",
-  30: "30w",
-  40: "40w",
-  50: "50w",
-};
+const LABEL_MAP = MAX_VOLUME_WINDOW_LABELS;
 
 function makeClient() {
   return new QueryClient({

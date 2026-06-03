@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import type { WeeklyVolumeRow } from "~/api/stats";
 import type { ExerciseRow, MeasurementEntryRow } from "~/db/types";
 import { presentWeeklyVolumeByMuscle } from "~/utils/weekly-muscle-volume";
+import { computeWindowStart } from "~/utils/window-utils";
 
 // Fixed "now" — Monday 2026-05-18 (ISO week 2026-W21).
 const NOW = new Date(2026, 4, 18, 12, 0, 0);
@@ -295,5 +296,183 @@ describe("presentWeeklyVolumeByMuscle", () => {
     });
     expect(model.weeks).toHaveLength(1);
     expect(model.series[0]!.values).toHaveLength(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Windowed cases (view-only chart window — `windowStartMs`).
+  // ---------------------------------------------------------------------------
+
+  it("W-0 (Invariant W): windowStartMs:undefined === the no-param call (byte-for-byte)", () => {
+    // A multi-week, multi-muscle fixture.
+    const rows = [
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z", // W10
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-w10",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-04-20T10:00:00Z", // W17
+        weight: "120",
+        reps: 5,
+        exercise_id: "squat",
+        session_id: "s-w17",
+        started_at: "2026-04-20T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "110",
+        reps: 6,
+        exercise_id: "bench",
+        session_id: "s-w21",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest"] }),
+      mkExercise({ id: "squat", muscles: ["Legs"] }),
+    ];
+    const withParam = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      windowStartMs: undefined,
+      now: NOW,
+    });
+    const withoutParam = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      now: NOW,
+    });
+    expect(withParam).toEqual(withoutParam);
+  });
+
+  it("W-1 (axis shrink): the axis left edge becomes the first IN-WINDOW Monday", () => {
+    // W10 (old) + W21 (recent). A 10-week window drops the W10 session, so the
+    // axis must start at the first in-window week, not the lifetime W10.
+    const rows = [
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z", // W10 — dropped
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-old",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21 — in-window
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-new",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", muscles: ["Chest"] })];
+
+    const full = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      now: NOW,
+    });
+    const windowed = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+
+    // Full history spans W10..W21; windowed starts at the first in-window
+    // Monday (W21) and is therefore much shorter, NOT pinned to lifetime W10.
+    expect(windowed.weeks.length).toBeLessThan(full.weeks.length);
+    expect(windowed.weeks[0]!.key).not.toBe(full.weeks[0]!.key);
+    // The single in-window session sits in the last (current) week.
+    expect(windowed.series[0]!.key).toBe("Chest");
+    expect(windowed.series[0]!.values.at(-1)).toBe(500);
+  });
+
+  it("W-2 (muscle drops out): a muscle with all sets pre-window is ABSENT", () => {
+    const rows = [
+      // Chest: ALL sets pre-window (W10) → must drop out.
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-old",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      // Legs: in-window (W21) → must remain.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "120",
+        reps: 5,
+        exercise_id: "squat",
+        session_id: "s-new",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest"] }),
+      mkExercise({ id: "squat", muscles: ["Legs"] }),
+    ];
+    const windowed = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+    const keys = windowed.series.map((s) => s.key);
+    expect(keys).not.toContain("Chest");
+    expect(keys).toContain("Legs");
+  });
+
+  it("W-3 (boundary inclusivity): started_at === threshold is IN, threshold-1ms is OUT", () => {
+    const threshold = computeWindowStart(10, NOW)!;
+    const atThreshold = new Date(threshold).toISOString();
+    const justBefore = new Date(threshold - 1).toISOString();
+
+    // Both sessions bucket in the SAME current week so the axis is identical;
+    // only inclusion differs by the started_at anchor.
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-at",
+        started_at: atThreshold, // exactly the threshold → INCLUDED
+      }),
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "squat",
+        session_id: "s-before",
+        started_at: justBefore, // 1ms before → EXCLUDED
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest"] }),
+      mkExercise({ id: "squat", muscles: ["Legs"] }),
+    ];
+    const windowed = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      windowStartMs: threshold,
+      now: NOW,
+    });
+    const keys = windowed.series.map((s) => s.key);
+    // Chest's session started exactly at the threshold → included.
+    expect(keys).toContain("Chest");
+    // Legs' session started 1ms before the threshold → excluded.
+    expect(keys).not.toContain("Legs");
   });
 });

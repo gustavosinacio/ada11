@@ -36,7 +36,10 @@ const MUSCLE_COLORS: Record<MuscleSeriesKey, string> = {
   Other: "#9ca3af", // gray-400 (only when an "Other" line exists)
 };
 
-export function WeeklyMuscleVolumeSection(): React.JSX.Element | null {
+export function WeeklyMuscleVolumeSection(props: {
+  /** View-only chart window (page-owned). undefined → full history. */
+  windowStartMs?: number;
+}): React.JSX.Element | null {
   const { data: rows, isLoading } = useLifetimeWeeklyVolume();
   const { data: exercises } = useAllExercises();
   const { data: measurements } = useMeasurements();
@@ -48,8 +51,9 @@ export function WeeklyMuscleVolumeSection(): React.JSX.Element | null {
       rows,
       exercises,
       measurements: measurements ?? [],
+      windowStartMs: props.windowStartMs,
     });
-  }, [rows, exercises, measurements]);
+  }, [rows, exercises, measurements, props.windowStartMs]);
 
   // All muscle lines on by default. Keyed off the present series so a newly
   // appearing muscle starts visible.

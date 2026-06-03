@@ -45,20 +45,34 @@ const SERIES_ORDER: readonly MuscleSeriesKey[] = [...MUSCLE_GROUPS, "Other"];
  * - Empty series (a muscle with all-zero weeks) is dropped from `series`.
  * - Returns weeks=[] / series=[] when rows is empty.
  *
- * Does NOT honor max_volume_window_weeks (Decision #3) — full history.
+ * Optional `windowStartMs` (view-only chart window): when provided, excludes
+ * rows whose `sessions.started_at` is strictly before the threshold instant —
+ * the SAME dual-anchor rule the "Max" numbers use (inclusion on `started_at`,
+ * bucketing still on `completed_at`; `bucketLifetimeWeeklyVolumes`,
+ * progress-page-math.ts:82-84). The guard sits at the head of BOTH row loops
+ * (earliest-edge + bucket) so the axis left edge also shrinks to the first
+ * in-window week. Absent/undefined → Invariant W: byte-for-byte today's
+ * full-history output (no guard fires). Does NOT honor max_volume_window_weeks
+ * by default (Decision #3) — full history unless the page threads a window.
  */
 export function presentWeeklyVolumeByMuscle(args: {
   rows: WeeklyVolumeRow[];
   exercises: ExerciseRow[];
   measurements: MeasurementEntryRow[];
+  windowStartMs?: number; // view-only chart window; undefined → Invariant W (full history).
   now?: Date; // injectable for deterministic tests (default new Date())
 }): WeeklyMuscleVolumeModel {
-  const { rows, exercises, measurements, now = new Date() } = args;
+  const { rows, exercises, measurements, windowStartMs, now = new Date() } =
+    args;
   if (rows.length === 0) return { weeks: [], series: [] };
 
   // Earliest completed_at → first-trained Monday (the left axis edge).
   let earliestMs = Infinity;
   for (const row of rows) {
+    if (windowStartMs !== undefined) {
+      const startedMs = parseISO(row.sessions.started_at).getTime();
+      if (startedMs < windowStartMs) continue;
+    }
     const t = parseISO(row.completed_at).getTime();
     if (Number.isFinite(t) && t < earliestMs) earliestMs = t;
   }
@@ -90,6 +104,10 @@ export function presentWeeklyVolumeByMuscle(args: {
   const byMuscle = new Map<MuscleSeriesKey, number[]>();
 
   for (const row of rows) {
+    if (windowStartMs !== undefined) {
+      const startedMs = parseISO(row.sessions.started_at).getTime();
+      if (startedMs < windowStartMs) continue;
+    }
     const idx = weekIndex.get(weekKeyOf(parseISO(row.completed_at)));
     if (idx === undefined) continue; // week outside the axis — shouldn't happen.
     const ex = libById.get(row.exercise_id);

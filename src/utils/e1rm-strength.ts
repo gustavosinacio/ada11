@@ -22,6 +22,16 @@ import { epley1RM } from "~/utils/formulas";
  * Untrained weeks are LAST-OBSERVATION-CARRIED-FORWARD (Decision #7a), NOT
  * zero-filled: a rest week is not strength=0, and `<MultiSeriesChart>` has no
  * gap support, so zero-fill would crash each line to the x-axis and back.
+ *
+ * Optional `windowStartMs` (view-only chart window): when provided, excludes
+ * rows whose `sessions.started_at` is strictly before the threshold instant —
+ * the SAME dual-anchor rule the "Max" numbers use (inclusion on `started_at`,
+ * bucketing still on `completed_at`; progress-page-math.ts:82-84). The guard
+ * sits at the head of BOTH row loops (earliest-edge + aggregate) so the axis
+ * left edge shrinks to the first in-window week AND an exercise whose sets are
+ * all pre-window never enters `byExercise` (so it cannot consume a top-N slot,
+ * and the LOCF lead-in recomputes over the windowed set). Absent/undefined →
+ * Invariant W: byte-for-byte today's full-history output (no guard fires).
  */
 
 /** One exercise's e1RM trend, index-aligned to the shared `weeks` axis. */
@@ -82,6 +92,7 @@ export function presentTopExerciseE1rm(args: {
   exercises: ExerciseRow[];
   topN?: number; // default E1RM_TOP_N
   favoriteExerciseIds?: ReadonlySet<string>; // NEW. Absent/empty → Invariant F (byte-for-byte today).
+  windowStartMs?: number; // view-only chart window; undefined → Invariant W (full history).
   now?: Date; // injectable for deterministic tests; default new Date()
 }): E1rmStrengthModel {
   const {
@@ -89,6 +100,7 @@ export function presentTopExerciseE1rm(args: {
     exercises,
     topN = E1RM_TOP_N,
     favoriteExerciseIds,
+    windowStartMs,
     now = new Date(),
   } = args;
   if (rows.length === 0) return { weeks: [], series: [] };
@@ -96,6 +108,10 @@ export function presentTopExerciseE1rm(args: {
   // Earliest completed_at → first-trained Monday (the left axis edge).
   let earliestMs = Infinity;
   for (const row of rows) {
+    if (windowStartMs !== undefined) {
+      const startedMs = parseISO(row.sessions.started_at).getTime();
+      if (startedMs < windowStartMs) continue;
+    }
     const t = parseISO(row.completed_at).getTime();
     if (Number.isFinite(t) && t < earliestMs) earliestMs = t;
   }
@@ -117,6 +133,10 @@ export function presentTopExerciseE1rm(args: {
   const byExercise = new Map<string, EligibleAgg>();
 
   for (const row of rows) {
+    if (windowStartMs !== undefined) {
+      const startedMs = parseISO(row.sessions.started_at).getTime();
+      if (startedMs < windowStartMs) continue;
+    }
     const idx = weekIndex.get(weekKeyOf(parseISO(row.completed_at)));
     if (idx === undefined) continue; // week outside the axis — shouldn't happen.
     const ex = libById.get(row.exercise_id);

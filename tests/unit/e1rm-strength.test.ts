@@ -16,6 +16,7 @@ import type { WeeklyVolumeRow } from "~/api/stats";
 import type { ExerciseRow } from "~/db/types";
 import { epley1RM } from "~/utils/formulas";
 import { presentTopExerciseE1rm } from "~/utils/e1rm-strength";
+import { computeWindowStart } from "~/utils/window-utils";
 
 // Fixed "now" — Monday 2026-05-18 (ISO week 2026-W21).
 const NOW = new Date(2026, 4, 18, 12, 0, 0);
@@ -457,6 +458,179 @@ describe("presentTopExerciseE1rm", () => {
     expect(order(forward)).toEqual(["ex-x", "ex-y", "ex-z"]);
     expect(order(reversed)).toEqual(["ex-x", "ex-y", "ex-z"]);
     expect(order(shuffled)).toEqual(["ex-x", "ex-y", "ex-z"]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Windowed cases (view-only chart window — `windowStartMs`).
+  // ---------------------------------------------------------------------------
+
+  // W-0 — Invariant W: windowStartMs:undefined === the no-param call.
+  it("W-0 (Invariant W): windowStartMs:undefined === the no-param call (byte-for-byte)", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z", // W10
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-w10",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "120",
+        reps: 3,
+        exercise_id: "bench",
+        session_id: "s-w21",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "140",
+        reps: 5,
+        exercise_id: "squat",
+        session_id: "s-sq",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", name: "Bench Press" }),
+      mkExercise({ id: "squat", name: "Squat" }),
+    ];
+    const withParam = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      windowStartMs: undefined,
+      now: NOW,
+    });
+    const withoutParam = presentTopExerciseE1rm({ rows, exercises, now: NOW });
+    expect(withParam).toEqual(withoutParam);
+  });
+
+  // W-1 — axis shrink: the left edge becomes the first IN-WINDOW Monday.
+  it("W-1 (axis shrink): the axis left edge becomes the first IN-WINDOW Monday", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z", // W10 — dropped under a 10-week window
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-old",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21 — in-window
+        weight: "110",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-new",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", name: "Bench Press" })];
+    const full = presentTopExerciseE1rm({ rows, exercises, now: NOW });
+    const windowed = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+
+    expect(windowed.weeks.length).toBeLessThan(full.weeks.length);
+    expect(windowed.weeks[0]!.key).not.toBe(full.weeks[0]!.key);
+  });
+
+  // W-4 — top-N recompute: an exercise whose sessions are ALL pre-window must
+  // NOT appear (cannot consume a top-N slot); rank order recomputes.
+  it("W-4 (top-N recompute): a pre-window-only exercise is EXCLUDED and ranks recompute", () => {
+    const rows: WeeklyVolumeRow[] = [];
+    // "old" — many sessions, but ALL pre-window (W10). Highest session count.
+    for (let s = 0; s < 5; s++) {
+      rows.push(
+        mkRow({
+          completed_at: `2026-03-0${2 + s}T10:00:00Z`, // W10/W11 — pre-window
+          weight: "100",
+          reps: 5,
+          exercise_id: "old",
+          session_id: `old-s${s}`,
+          started_at: `2026-03-0${2 + s}T09:00:00Z`,
+        }),
+      );
+    }
+    // "recent" — fewer sessions, all in-window (W21).
+    for (let s = 0; s < 2; s++) {
+      rows.push(
+        mkRow({
+          completed_at: `2026-05-18T1${s}:00:00Z`,
+          weight: "120",
+          reps: 5,
+          exercise_id: "recent",
+          session_id: `recent-s${s}`,
+          started_at: `2026-05-18T0${s}:00:00Z`,
+        }),
+      );
+    }
+    const exercises = [
+      mkExercise({ id: "old", name: "Old Lift" }),
+      mkExercise({ id: "recent", name: "Recent Lift" }),
+    ];
+
+    // Full history: "old" outranks "recent" (5 vs 2 sessions) → it leads.
+    const full = presentTopExerciseE1rm({ rows, exercises, now: NOW });
+    expect(full.series.map((s) => s.id)).toEqual(["old", "recent"]);
+
+    // Windowed (10w): "old" is entirely pre-window → excluded; only "recent"
+    // remains and it is now rank 0 (ranks recompute over the windowed set).
+    const windowed = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+    expect(windowed.series.map((s) => s.id)).toEqual(["recent"]);
+    expect(windowed.series[0]!.rank).toBe(0);
+  });
+
+  // W-5 — LOCF over the windowed set: the flat lead-in uses the first
+  // IN-WINDOW real value, not the dropped pre-window one.
+  it("W-5 (LOCF over windowed set): the flat lead-in uses the first IN-WINDOW value", () => {
+    const rows = [
+      // Pre-window (W10): a LOW e1RM (80×5). Dropped under a 10-week window.
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z",
+        weight: "80",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-old",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      // In-window (W21): a HIGHER e1RM (120×5).
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "120",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-new",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", name: "Bench Press" })];
+
+    const windowed = presentTopExerciseE1rm({
+      rows,
+      exercises,
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+
+    const values = windowed.series[0]!.values;
+    const inWindow = epley1RM(120, 5);
+    const dropped = epley1RM(80, 5);
+    // The flat lead-in (values[0]) uses the first IN-WINDOW real value, NOT the
+    // dropped pre-window 80×5.
+    expect(values[0]!).toBeCloseTo(inWindow);
+    expect(values[0]!).not.toBeCloseTo(dropped);
+    // The last (current) week also holds the in-window value.
+    expect(values.at(-1)!).toBeCloseTo(inWindow);
   });
 });
 

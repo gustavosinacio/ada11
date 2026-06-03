@@ -1,12 +1,15 @@
 import { Stack } from "expo-router";
+import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView } from "react-native";
 
 import { E1rmStrengthSection } from "~/components/e1rm-strength-section";
 import { ExercisesThisWeekList } from "~/components/exercises-this-week-list";
 import { ProgressHero } from "~/components/progress-hero";
+import { ProgressWindowSelector } from "~/components/progress-window-selector";
 import { StreakCard } from "~/components/streak-card";
 import { WeeklyMuscleVolumeSection } from "~/components/weekly-muscle-volume-section";
 import { WeeklyVolumeStrip } from "~/components/weekly-volume-strip";
+import { type MaxVolumeWindowWeeks } from "~/db/types";
 import {
   useMaxVolumeWindowWeeks,
   useWeightUnit,
@@ -16,6 +19,7 @@ import {
   useProgressPageRefresh,
 } from "~/hooks/use-progress-page";
 import { formatVolume } from "~/utils/units";
+import { computeWindowStart } from "~/utils/window-utils";
 
 /**
  * Progress page — dedicated top-level surface for momentum visibility.
@@ -40,6 +44,19 @@ export default function ProgressScreen(): React.JSX.Element {
   const weeks = useMaxVolumeWindowWeeks();
   const { data: bestWeek } = useLifetimeBestWeek();
   const { refreshing, onRefresh } = useProgressPageRefresh();
+
+  // View-only chart window — ephemeral local state, SEEDED once from the
+  // user's stored max-volume pref. NOT bound: we never re-sync to the pref on
+  // later changes (no useEffect), because the chart window is now user-owned
+  // (design-v1.md §"Seed-vs-bind"). `new Date()` lives INSIDE the memo factory
+  // (matches use-progress-page.ts:76-79) so the threshold only recomputes when
+  // `windowWeeks` changes; pref `0` → computeWindowStart → undefined → no
+  // filter → Invariant W (today's full-history charts).
+  const [windowWeeks, setWindowWeeks] = useState<MaxVolumeWindowWeeks>(weeks);
+  const windowStartMs = useMemo(
+    () => computeWindowStart(windowWeeks, new Date()),
+    [windowWeeks],
+  );
 
   const bestWeekLabel = bestWeek
     ? weeks === 0
@@ -71,8 +88,16 @@ export default function ProgressScreen(): React.JSX.Element {
         bestWeekKg={bestWeek?.totalKg}
         bestWeekLabel={bestWeekLabel}
       />
-      <WeeklyMuscleVolumeSection />
-      <E1rmStrengthSection />
+      {/*
+       * Page-level chart window. Mounted ABOVE both trend sections so it
+       * survives either chart's empty/null branch (an over-narrow window
+       * collapses the charts but keeps the selector tappable — the user can
+       * always widen back; design-v1.md Unknown 6 / R-3). One control governs
+       * BOTH charts in lockstep via the shared `windowStartMs` prop.
+       */}
+      <ProgressWindowSelector value={windowWeeks} onChange={setWindowWeeks} />
+      <WeeklyMuscleVolumeSection windowStartMs={windowStartMs} />
+      <E1rmStrengthSection windowStartMs={windowStartMs} />
       <ExercisesThisWeekList />
       <StreakCard />
     </ScrollView>

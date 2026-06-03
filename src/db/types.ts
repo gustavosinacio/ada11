@@ -75,6 +75,21 @@ export const MAX_VOLUME_WINDOW_OPTIONS: readonly MaxVolumeWindowWeeks[] = [
   0, 10, 20, 30, 40, 50,
 ] as const;
 
+/**
+ * Display labels for each window size. "All" stands in for `0` (lifetime).
+ * Single source of truth shared by the Profile segmented control
+ * (`app/(app)/profile.tsx`) and the Progress-page window selector
+ * (`src/components/progress-window-selector.tsx`).
+ */
+export const MAX_VOLUME_WINDOW_LABELS: Record<MaxVolumeWindowWeeks, string> = {
+  0: "All",
+  10: "10w",
+  20: "20w",
+  30: "30w",
+  40: "40w",
+  50: "50w",
+};
+
 // Row types matching PostgREST output (snake_case).
 // Drizzle's InferSelectModel returns camelCase, but the Supabase JS client
 // returns columns as-is — so screens and hooks consume these.

@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { Button } from "~/components/ui/button";
 import { useIsAdmin } from "~/hooks/use-admin";
 import {
+  MAX_VOLUME_WINDOW_LABELS,
   MAX_VOLUME_WINDOW_OPTIONS,
   type LengthUnit,
   type MaxVolumeWindowWeeks,
@@ -17,21 +18,6 @@ import {
   useSetMaxVolumeWindowWeeks,
   useSetWeightUnit,
 } from "~/hooks/use-preferences";
-
-/**
- * Label map for the max-volume-window segmented control. "All" stands in for
- * `0` (lifetime) so the four segments fit the 54pt-per-segment budget on a
- * 320pt screen (MAJ-2 in design-v2). The legend caption directly below the
- * row clarifies the abbreviation for first-time users.
- */
-const MAX_VOLUME_WINDOW_LABELS: Record<MaxVolumeWindowWeeks, string> = {
-  0: "All",
-  10: "10w",
-  20: "20w",
-  30: "30w",
-  40: "40w",
-  50: "50w",
-};
 
 export default function ProfileScreen() {
   const router = useRouter();

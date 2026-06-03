@@ -47,7 +47,10 @@ const E1RM_PALETTE = [
 const colorForRank = (i: number): string =>
   E1RM_PALETTE[i % E1RM_PALETTE.length]!;
 
-export function E1rmStrengthSection(): React.JSX.Element | null {
+export function E1rmStrengthSection(props: {
+  /** View-only chart window (page-owned). undefined → full history. */
+  windowStartMs?: number;
+}): React.JSX.Element | null {
   const { data: rows, isLoading } = useLifetimeWeeklyVolume();
   const { data: exercises } = useAllExercises();
   const { data: favoriteIds } = useMyFavoriteExerciseIds();
@@ -68,8 +71,9 @@ export function E1rmStrengthSection(): React.JSX.Element | null {
       rows,
       exercises,
       favoriteExerciseIds: favoriteSet,
+      windowStartMs: props.windowStartMs,
     });
-  }, [rows, exercises, favoriteSet]);
+  }, [rows, exercises, favoriteSet, props.windowStartMs]);
 
   // All exercise lines on by default. Keyed off exercise `id` (stable across
   // renames) so a newly appearing exercise starts visible.

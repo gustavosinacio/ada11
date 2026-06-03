@@ -1,0 +1,45 @@
+# Implementation — 2026-06-03_1124_progress-chart-window
+
+Based on: `design-v1.md` (approved) and `validation-v1.md` (GO — 0 blockers / 1 major / 4 minors). MAJ-1 (e2e shrink-assertion teeth) handled as a must-fix; MIN-1/MIN-2/MIN-4 addressed; MIN-3 (R-6 seed-flicker) is an accepted verdict, no action.
+
+## Files changed
+
+### Production (F1–F8)
+- `src/utils/weekly-muscle-volume.ts` (edited, F1) — added optional `windowStartMs?: number` to `args` (`:62`); added the 3-line dual-anchor inclusion guard at the head of BOTH row loops — earliest-edge (`:72-75`) and bucket (`:107-110`); refreshed the docstring (`:46-55`). Guard is byte-identical to `bucketLifetimeWeeklyVolumes` (`progress-page-math.ts:82-84`): inclusion on `sessions.started_at`, bucketing stays on `completed_at`.
+- `src/utils/e1rm-strength.ts` (edited, F2) — same: `windowStartMs?: number` in `args` (`:95`), destructured (`:103`); guard at the earliest-edge loop (`:111-114`) and the aggregate loop (`:136-139`); refreshed docstring (`:26-35`).
+- `src/db/types.ts` (edited, F3) — lifted + exported `MAX_VOLUME_WINDOW_LABELS` (`:83-90`) next to `MAX_VOLUME_WINDOW_OPTIONS`. Identical keys/values to the old private copy.
+- `app/(app)/profile.tsx` (edited, F4) — imports `MAX_VOLUME_WINDOW_LABELS` from `~/db/types` (`:8`); deleted the private const + its docstring. Pure refactor, no behavior change at `:182`.
+- `src/components/progress-window-selector.tsx` (new, F5) — stateless segmented control. Props `{ value: MaxVolumeWindowWeeks; onChange: (weeks) => void }`. Renders `MAX_VOLUME_WINDOW_OPTIONS` via the Profile idiom (`flex-1 rounded-md py-2`, active `bg-black dark:bg-white`), labels via `MAX_VOLUME_WINDOW_LABELS`, `accessibilityRole="button"` + `accessibilityState={{ selected }}`, taps short-circuit when already active. Owns no state, never writes the pref.
+- `app/(app)/progress/index.tsx` (edited, F6) — ephemeral `useState<MaxVolumeWindowWeeks>(weeks)` seeded from the existing `useMaxVolumeWindowWeeks()` (`:55`); single `useMemo(() => computeWindowStart(windowWeeks, new Date()), [windowWeeks])` (`:56-59`, `new Date()` inside the factory, matching `use-progress-page.ts:76-79`); `<ProgressWindowSelector>` rendered ABOVE both sections (`:98`); `windowStartMs` threaded into both (`:99-100`). Seed-only — NO `useEffect` re-bind.
+- `src/components/weekly-muscle-volume-section.tsx` (edited, F7) — accepts `windowStartMs?: number` prop; passes into the presenter; added to the model `useMemo` deps.
+- `src/components/e1rm-strength-section.tsx` (edited, F8) — same.
+
+### Tests (F9–F11)
+- `tests/unit/weekly-muscle-volume.test.ts` (edited, F9) — +4 cases: W-0 (Invariant W deepEqual), W-1 (axis shrink), W-2 (muscle drops out), W-3 (boundary inclusivity, `===threshold` IN / `threshold-1ms` OUT). Imported `computeWindowStart`.
+- `tests/unit/e1rm-strength.test.ts` (edited, F10) — +4 cases: W-0 (Invariant W deepEqual), W-1 (axis shrink), W-4 (top-N recompute — pre-window-only exercise excluded, ranks recompute), W-5 (LOCF flat lead-in uses first in-window value). Imported `computeWindowStart`.
+- `tests/e2e/progress-window-selector.spec.ts` (new, F11) — 3 tests (default seed + lockstep shrink; empty-window-then-recover; same-series shrink preserves a toggled-off line). See MAJ-1/MIN-4 below.
+- `tests/unit/profile-max-volume-window.test.ts` (edited, MIN-1/MIN-2) — replaced the local `LABEL_MAP` copy + stale "keep in sync with profile.tsx" comment with `const LABEL_MAP = MAX_VOLUME_WINDOW_LABELS` imported from `~/db/types`. Completes the F3 single-source goal; the 4 label-map assertions now run against the shared constant.
+
+## Deviations from design
+- **None on the production seam (F1–F8) — shipped byte-for-byte to the contract.**
+- **F11 e2e — MAJ-1 fix applied (this was the Validator's required must-fix, not a free deviation):** the design's step-3 "assert x-axis label COUNT drops" was replaced with the teeth-bearing old-only-legend-chip assertion the Validator specified. `Bench Press` is seeded ONLY ~52 weeks ago; at "All" its `Toggle Bench Press` chip is present (`toHaveCount(1)`), after selecting "10w" it is gone (`toHaveCount(0)`), and at "All" it returns (`toHaveCount(1)`). `Squat (Barbell)` (week 0) is the in-window control that stays. This proves the assertion changes with the window (not statically true).
+- **F11 settle-gate uses the `bg-black` NativeWind class, not `aria-selected`:** RN-Web 0.21 does NOT translate `accessibilityState={{ selected }}` to an `aria-selected` DOM attribute (verified against `set-row-menu.spec.ts:141-145` + `weekly-muscle-volume.spec.ts:281`). The active segment's visible source of truth is the `bg-black` class (matches the `opacity-40`/`bg-emerald-500` precedent the sibling specs assert on). Each shrink/restore awaits the target segment carrying `bg-black` AND a positive post-tap anchor (the in-window chip present) before any negative `toHaveCount(0)`, avoiding the cold false-green the e1rm-strength run flagged.
+
+## Soft callbacks made (during this implementation pass)
+- None. The design was decision-dense; the only runtime-confirmable residual (e2e seed names) was resolved against the authorized green-suite source-of-truth without escalation (see Notes).
+
+## Quality gates
+- [x] `npm run typecheck` passed — `tsc --noEmit`, 0 errors. Run after F1–F4, after F5–F8, after the unit tests + MIN-1, and after F11. (No `replace_all` used — every edit was surgical/uniquely-anchored.)
+- [x] `npm run lint` passed — 0 errors / 1 warning. The single warning is the pre-existing auto-generated `.expo/types/router.d.ts` (baseline-unchanged, present every prior run); none of the 11 changed files lint dirty.
+- [x] Relevant unit tests pass — `npx vitest run` → **485 / 485** (FAIL 0), +8 over the 477 baseline (muscle W-0..W-3 = +4, e1RM W-0/W-1/W-4/W-5 = +4). The two W-0 deepEqual cases lock Invariant W (no-param call byte-for-byte unchanged). The 3 MIN-1-touched label tests still pass against the shared constant.
+- [x] No new `any` — grep-clean (`: any`/`as any`/`<any>` = 0) across all 8 source files.
+- [x] No new `// @ts-ignore` / `@ts-expect-error` / `eslint-disable` — grep-clean.
+- [x] No stray `console.log` — grep-clean in source; the only e2e `console.log` are the 3 `[screenshot]` lines (matches `e1rm-strength.spec.ts:198`).
+
+## Notes for Reviewer / Tester
+- **Invariant W (load-bearing):** the only new code in both presenters is `if (windowStartMs !== undefined) { const startedMs = parseISO(row.sessions.started_at).getTime(); if (startedMs < windowStartMs) continue; }` at the head of each row loop. When `windowStartMs === undefined` every guard is skipped → identical to today. W-0 in each unit file asserts `deepEqual` between the param-as-undefined call and the no-param call. The default pref `0` → `computeWindowStart(0, …)` → `undefined` → no filter, so a never-opened-Profile user sees the pre-feature chart.
+- **Both-loops guard (R-2):** the guard is in BOTH loops of each presenter (earliest-edge AND bucket/aggregate), so the axis left edge shrinks to the first in-window week rather than leaving a dead pre-window lead-in. W-1 asserts `windowed.weeks[0].key !== full.weeks[0].key` and a shorter axis.
+- **e2e seed names — verified against the authorized runtime source-of-truth (the recurring pre-flight):** I attempted a direct service-role probe of the canonical catalog but the sandbox blocked the elevated production read. Per the established recovery path, I used ONLY names proven-green in the existing passing suite, which queries the exact catalog `pickCanonicalExercise` reads (`exercises WHERE user_id IS NULL AND deleted_at IS NULL`): `Bench Press` (`e1rm-strength.spec.ts:164`, `weekly-muscle-volume.spec.ts:166` → Chest, weighted) and `Squat (Barbell)` (`e1rm-strength.spec.ts:211` → Legs, weighted). Both are weighted barbell exercises so they plot on the e1RM chart (the chip names the test asserts on). `pickCanonicalExercise`'s throw-on-miss stays the fail-fast guard if either drifts. Tester: if either name ever throws at seed time, substitute another verified-green weighted name and re-run.
+- **MIN-4 (Tester, covered):** F11 test 3 toggles `Squat (Barbell)` OFF, then shrinks to "10w" — a window that does NOT drop the series (it has week-0 data) — and asserts the chip is still present AND still `opacity-40` (off). This proves `seriesKeysSig` stability: a same-series axis shrink does NOT re-seed visibility. R-4 (re-seed-to-all-on) only fires when the series SET actually changes (W-2/W-4 case), which is intended.
+- **MIN-3 (no action):** R-6 seed-flicker is an accepted verdict — `useState(weeks)` seeds whatever `useMaxVolumeWindowWeeks()` returns on first render (`0` if prefs not yet hydrated), consistent with the page's existing `bestWeekLabel` tolerance. No `useEffect` re-bind (the human locked ephemeral seed-only).
+- **Out-of-run noise:** the 5 pre-existing dirty cache-buster files (`query-client.ts`, `progress-page-math.ts`, `weekly-volume-strip-math.ts`, `use-progress-page.ts`, `history/week/[isoWeek].tsx`) were NOT touched; `progress-page-math.ts` was cite-only (the guard pattern was copied, not edited).
