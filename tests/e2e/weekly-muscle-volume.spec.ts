@@ -13,6 +13,8 @@
  *      primary-muscle line — i.e. the Phase-0 kernel feeds the chart (an
  *      unweighted chin-up contributes bodyweight × reps, so the muscle line
  *      exists where pre-feature it would have been 0).
+ *   5. kg↔sets toggle swaps the header + the chart's y-axis + the peak caption.
+ *   6. dropset rows are EXCLUDED from the hard-sets count (Invariant D).
  *
  * Flow mirrors `progress-page.spec.ts` (admin-seed via service role, sign in
  * via UI, navigate to /progress). Uses `pickCanonicalExercise` with explicit
@@ -94,6 +96,15 @@ async function seedFinishedSession(opts: {
   /** numeric(6,2) — stored as a string. `0` for an unweighted bodyweight set. */
   weight: number;
   reps: number;
+  /**
+   * Append ONE extra dropset row in the SAME session, linked to the first
+   * working set via `parent_set_id`. The `sets_parent_matches_type` CHECK
+   * constraint requires a dropset to carry a non-null `parent_set_id`
+   * (working/warmup rows must carry NULL — `0000_schema.sql:67-68`), so a
+   * dropset cannot be seeded as a standalone row. This is the schema-honoring
+   * way to seed "2 working + 1 dropset" for the Invariant-D divergence test.
+   */
+  addDropset?: { weight: number; reps: number };
 }): Promise<string> {
   const { userId, exerciseId, completedAt, workingSets, weight, reps } = opts;
   const startedAt = new Date(completedAt.getTime() - 60 * 60 * 1000);
@@ -116,13 +127,36 @@ async function seedFinishedSession(opts: {
     set_number: i + 1,
     reps,
     weight: weight.toString(),
-    set_type: "working",
+    set_type: "working" as const,
     completed_at: new Date(
       completedAt.getTime() - (workingSets - i) * 60 * 1000,
     ).toISOString(),
   }));
-  const { error: e2 } = await admin.from("sets").insert(setRows);
-  if (e2) throw new Error(`sets insert: ${e2.message}`);
+  // Insert working sets first so the dropset can reference a real parent id.
+  const { data: insertedWorking, error: e2 } = await admin
+    .from("sets")
+    .insert(setRows)
+    .select("id, set_number");
+  if (e2 || !insertedWorking) throw new Error(`sets insert: ${e2?.message}`);
+
+  if (opts.addDropset) {
+    // The dropset extends the FIRST working set (set_number 1). It carries the
+    // required non-null parent_set_id (Invariant D: it must NOT add a hard-set
+    // count, but it MUST be a real, schema-valid dropset row).
+    const parent = insertedWorking.find((s) => s.set_number === 1)!;
+    const { error: e3 } = await admin.from("sets").insert({
+      user_id: userId,
+      session_id: sessionId,
+      exercise_id: exerciseId,
+      set_number: workingSets + 1,
+      reps: opts.addDropset.reps,
+      weight: opts.addDropset.weight.toString(),
+      set_type: "dropset" as const,
+      parent_set_id: parent.id as string,
+      completed_at: new Date(completedAt.getTime() + 60 * 1000).toISOString(),
+    });
+    if (e3) throw new Error(`dropset insert: ${e3.message}`);
+  }
   return sessionId;
 }
 
@@ -341,6 +375,136 @@ test.describe("Weekly per-muscle volume chart", () => {
       ).toBeVisible({ timeout: 5_000 });
 
       const file = path.join(SCREENSHOT_DIR, "bodyweight-muscle-line.png");
+      await page.screenshot({ path: file, fullPage: false });
+      console.log(`[screenshot] ${file}`);
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("5. kg↔sets toggle swaps the header and the displayed metric value", async ({
+    page,
+  }) => {
+    const email = `e2e-muscle-vol-toggle-metric-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+    const { id: exerciseId } = await pickCanonicalExercise(admin, "Bench Press");
+
+    // 3 working Chest sets @ 100×5 → weekly tonnage 3×500 = 1500 kg (peak),
+    // sets peak 3. (The presenter accumulates w*r PER ROW into the week bucket,
+    // so 3 sets contribute 1500 kg, not 500.)
+    const thisWeek = mondayNWeeksAgoUtc(0);
+    thisWeek.setUTCDate(thisWeek.getUTCDate() + 1);
+    thisWeek.setUTCHours(18, 0, 0, 0);
+    await seedFinishedSession({
+      userId,
+      exerciseId,
+      completedAt: thisWeek,
+      workingSets: 3,
+      weight: 100,
+      reps: 5,
+    });
+
+    try {
+      await signInViaUi(page, email);
+      await gotoProgress(page);
+
+      // Default (kg) header.
+      await expect(
+        page.getByText("Weekly volume per muscle", { exact: true }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+      // The kg-mode weekly peak (3 × 100 × 5 = 1500) shows in the stable
+      // `weekly-muscle-peak` caption as "Peak 1,500 kg" (MIN-1: formatVolume
+      // adds the " kg" suffix + a thousands comma). This <Text> handle is
+      // queryable on web (the y-tick lives in <SvgText>, which is NOT a
+      // reliable text-query target — MAJ-1).
+      const peak = page.getByTestId("weekly-muscle-peak");
+      await expect(peak).toHaveText("Peak 1,500 kg", { timeout: 5_000 });
+
+      // Tap the "Hard sets" segment.
+      await page.getByLabel("Metric: hard sets").click();
+
+      // (a) Header swaps to the sets label — a regular <Text> node with the
+      // same precedent as the kg header (teeth: a specific string that changes).
+      // Await it FIRST so the subsequent value assertion can distinguish
+      // "swapped because correct" from "not yet loaded".
+      await expect(
+        page.getByText("Weekly hard sets per muscle", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10_000 });
+      // (b) The peak caption swaps to the unitless set count — 3 working sets →
+      // "Peak 3 sets". This is the binding teeth: the SAME stable handle flips
+      // from a kg string to a set count when the metric toggles. We assert the
+      // POSITIVE swap (caption is "Peak 3 sets" — the kg string is gone FROM
+      // THE CAPTION) rather than a page-wide absence of "1,500 kg": other
+      // Progress surfaces (the weekly-volume PR strip + the exercise
+      // volume-target card) legitimately render the same 1,500 kg weekly total
+      // and are NOT affected by this chart-local toggle, so a page-wide
+      // "1,500 kg" absence assertion would false-fail (proven via runtime probe
+      // — those surfaces are unrelated to the muscle chart).
+      await expect(peak).toHaveText("Peak 3 sets", { timeout: 5_000 });
+      await expect(peak).not.toContainText("kg");
+
+      const file = path.join(SCREENSHOT_DIR, "hard-sets-toggle.png");
+      await page.screenshot({ path: file, fullPage: false });
+      console.log(`[screenshot] ${file}`);
+    } finally {
+      await deleteUserSafe(userId);
+    }
+  });
+
+  test("6. dropset rows are EXCLUDED from the hard-sets count (Invariant D)", async ({
+    page,
+  }) => {
+    const email = `e2e-muscle-vol-dropset-${Date.now()}@test.com`;
+    const userId = await createConfirmedUser(email);
+    const { id: exerciseId } = await pickCanonicalExercise(admin, "Bench Press");
+
+    // Same ISO week, ONE session: 2 working sets + 1 dropset on the SAME muscle
+    // (Chest). The dropset carries a non-null parent_set_id (linked to working
+    // set 1) per the `sets_parent_matches_type` CHECK constraint. Naive
+    // row-count = 3; working-only count = 2.
+    const thisWeek = mondayNWeeksAgoUtc(0);
+    thisWeek.setUTCDate(thisWeek.getUTCDate() + 1);
+    thisWeek.setUTCHours(18, 0, 0, 0);
+    await seedFinishedSession({
+      userId,
+      exerciseId,
+      completedAt: thisWeek,
+      workingSets: 2,
+      weight: 100,
+      reps: 5,
+      addDropset: { weight: 80, reps: 8 },
+    });
+
+    try {
+      await signInViaUi(page, email);
+      await gotoProgress(page);
+
+      await expect(
+        page.getByText("Weekly volume per muscle", { exact: true }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // Toggle to hard sets, awaiting the header FIRST so the value assertion
+      // below means "correct because the dropset was excluded", not "not yet
+      // rendered".
+      await page.getByLabel("Metric: hard sets").click();
+      await expect(
+        page.getByText("Weekly hard sets per muscle", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10_000 });
+
+      // Teeth (MAJ-1 / Invariant D): the peak hard-sets count is the
+      // working-only value. 2 working + 1 dropset → "Peak 2 sets", NOT the
+      // naive row-count "Peak 3 sets". If the dropset regressed into the count,
+      // this caption would read "Peak 3 sets" and the assertion would FAIL —
+      // real teeth, on a stable non-SVG <Text> handle. The naive "Peak 3 sets"
+      // string is also asserted ABSENT for an explicit divergence signal (the
+      // peak caption is the ONLY place that text could appear).
+      const peak = page.getByTestId("weekly-muscle-peak");
+      await expect(peak).toHaveText("Peak 2 sets", { timeout: 5_000 });
+      await expect(
+        page.getByText("Peak 3 sets", { exact: true }),
+      ).toHaveCount(0);
+
+      const file = path.join(SCREENSHOT_DIR, "hard-sets-dropset-excluded.png");
       await page.screenshot({ path: file, fullPage: false });
       console.log(`[screenshot] ${file}`);
     } finally {

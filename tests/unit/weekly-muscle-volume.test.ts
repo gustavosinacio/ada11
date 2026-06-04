@@ -11,8 +11,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { WeeklyVolumeRow } from "~/api/stats";
-import type { ExerciseRow, MeasurementEntryRow } from "~/db/types";
-import { presentWeeklyVolumeByMuscle } from "~/utils/weekly-muscle-volume";
+import type { ExerciseRow, MeasurementEntryRow, SetType } from "~/db/types";
+import {
+  presentWeeklyHardSetsByMuscle,
+  presentWeeklyVolumeByMuscle,
+} from "~/utils/weekly-muscle-volume";
 import { computeWindowStart } from "~/utils/window-utils";
 
 // Fixed "now" — Monday 2026-05-18 (ISO week 2026-W21).
@@ -26,13 +29,14 @@ function mkRow(overrides: {
   session_id?: string;
   equipment?: string;
   started_at?: string;
+  set_type?: SetType;
 }): WeeklyVolumeRow {
   const startedAt = overrides.started_at ?? overrides.completed_at;
   return {
     completed_at: overrides.completed_at,
     weight: overrides.weight,
     reps: overrides.reps,
-    set_type: "working",
+    set_type: overrides.set_type ?? "working",
     exercise_id: overrides.exercise_id ?? "ex-1",
     session_id: overrides.session_id ?? "sess-1",
     exercises: { equipment: overrides.equipment ?? "barbell", bodyweight_factor: null },
@@ -475,5 +479,325 @@ describe("presentWeeklyVolumeByMuscle", () => {
     expect(keys).toContain("Chest");
     // Legs' session started 1ms before the threshold → excluded.
     expect(keys).not.toContain("Legs");
+  });
+
+  it("T-anchor (Invariant T): byte-for-byte frozen model on a multi-week, multi-muscle fixture", () => {
+    // Explicit absolute-numbers deepEqual so the scaffold refactor cannot
+    // silently drift tonnage output. Overlaps the W-0 param-equivalence case
+    // (MIN-4) but pins the literal values, not just no-param === undefined.
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z", // W19
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "100",
+        reps: 6,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "120",
+        reps: 5,
+        exercise_id: "squat",
+      }),
+      // A dropset row that tonnage INCLUDES (w>0 && r>0) — it adds to Chest.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "50",
+        reps: 10,
+        exercise_id: "bench",
+        set_type: "dropset",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest"] }),
+      mkExercise({ id: "squat", muscles: ["Legs"] }),
+    ];
+    const model = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      now: NOW,
+    });
+    // Pin the axis KEYS (deterministic 'YYYY-Www') — the label-format concern is
+    // owned/tested by `dates.ts`, not the tonnage math this anchor guards.
+    expect(model.weeks.map((w) => w.key)).toEqual([
+      "2026-W19",
+      "2026-W20",
+      "2026-W21",
+    ]);
+    // Byte-for-byte frozen tonnage series (the Invariant-T pin).
+    expect(model.series).toEqual([
+      // Chest W19=500 (100×5), W21=600 (100×6) + 500 (50×10 dropset) = 1100.
+      { key: "Chest", values: [500, 0, 1100] },
+      // Legs W21=600 (120×5).
+      { key: "Legs", values: [0, 0, 600] },
+    ]);
+  });
+});
+
+describe("presentWeeklyHardSetsByMuscle", () => {
+  it("S-1: counts working sets per (muscle, week) + zero-fills the axis", () => {
+    // 3 working Chest rows in W21, none in W20, one in W19 → axis W19→W21.
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-04T10:00:00Z", // W19
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z", // W21
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z", // W21
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T12:00:00Z", // W21
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", muscles: ["Chest"] })];
+    const model = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    expect(model.weeks).toHaveLength(3);
+    expect(model.series).toHaveLength(1);
+    expect(model.series[0]!.key).toBe("Chest");
+    // Counts (not kg): W19=1, W20=0 (zero-fill), W21=3.
+    expect(model.series[0]!.values).toEqual([1, 0, 3]);
+  });
+
+  it("S-2 (KEY DIVERGENCE): a bodyweight working set (weight=0, NO weigh-in) COUNTS as 1", () => {
+    // Tonnage would DROP this (effectiveWeightKg → 0 with no weigh-in); sets
+    // must count it. This is the executable proof the `w>0` guard was dropped
+    // (Invariant S / U1).
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "0",
+        reps: 10,
+        exercise_id: "pullup",
+        equipment: "bodyweight",
+      }),
+    ];
+    const exercises = [
+      mkExercise({
+        id: "pullup",
+        muscles: ["Upper back"],
+        equipment: "bodyweight",
+      }),
+    ];
+    // measurements omitted entirely (sibling signature has no `measurements`).
+    const sets = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    expect(sets.series).toHaveLength(1);
+    expect(sets.series[0]!.key).toBe("Upper back");
+    expect(sets.series[0]!.values).toEqual([1]);
+
+    // Contrast: the SAME row under tonnage (no weigh-in) drops to 0 → no series.
+    const tonnage = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      now: NOW,
+    });
+    expect(tonnage.series).toEqual([]);
+  });
+
+  it("S-3 (U4): a reps=0 working row COUNTS, and a reps=null working row COUNTS", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "50",
+        reps: 0,
+        exercise_id: "bench",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z",
+        weight: "50",
+        reps: null,
+        exercise_id: "bench",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", muscles: ["Chest"] })];
+    const model = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    expect(model.series).toHaveLength(1);
+    expect(model.series[0]!.key).toBe("Chest");
+    // Both working rows count regardless of reps → 2.
+    expect(model.series[0]!.values).toEqual([2]);
+  });
+
+  it("S-4 (Invariant D): a dropset row does NOT count — same rows diverge from tonnage", () => {
+    // 1 working + 1 dropset on the same muscle/week, both w>0 && r>0.
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        set_type: "working",
+      }),
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z",
+        weight: "80",
+        reps: 8,
+        exercise_id: "bench",
+        set_type: "dropset",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", muscles: ["Chest"] })];
+
+    // Sets: working-only → count 1, NOT 2.
+    const sets = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    expect(sets.series).toHaveLength(1);
+    expect(sets.series[0]!.values).toEqual([1]);
+
+    // Divergence pin: the SAME rows under tonnage count BOTH (working + dropset).
+    const tonnage = presentWeeklyVolumeByMuscle({
+      rows,
+      exercises,
+      measurements: [],
+      now: NOW,
+    });
+    // 100×5 + 80×8 = 500 + 640 = 1140.
+    expect(tonnage.series[0]!.values).toEqual([1140]);
+  });
+
+  it("S-5: muscles[0] attribution + 'Other' bucket as integer counts", () => {
+    const rows = [
+      // Multi-muscle exercise → attributed to PRIMARY (Chest) only.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+      }),
+      // Unknown-muscle exercise → "Other".
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z",
+        weight: "50",
+        reps: 10,
+        exercise_id: "mystery",
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest", "Shoulders"] }),
+      mkExercise({ id: "mystery", muscles: [] }),
+    ];
+    const model = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    expect(model.series.map((s) => s.key)).toEqual(["Chest", "Other"]);
+    // One working set each → count 1.
+    expect(model.series[0]!.values).toEqual([1]);
+    expect(model.series[1]!.values).toEqual([1]);
+  });
+
+  it("S-6: skips rows whose exercise_id is not in the library (dangling)", () => {
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "ghost",
+      }),
+    ];
+    const model = presentWeeklyHardSetsByMuscle({
+      rows,
+      exercises: [mkExercise({ id: "bench", muscles: ["Chest"] })],
+      now: NOW,
+    });
+    expect(model.series).toEqual([]);
+  });
+
+  it("S-7: empty input → { weeks:[], series:[] }", () => {
+    const model = presentWeeklyHardSetsByMuscle({
+      rows: [],
+      exercises: [],
+      now: NOW,
+    });
+    expect(model.weeks).toEqual([]);
+    expect(model.series).toEqual([]);
+  });
+
+  it("S-8a (windowed): a pre-window working row is EXCLUDED from the count", () => {
+    const rows = [
+      // W10 — dropped by a 10-week window.
+      mkRow({
+        completed_at: "2026-03-02T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-old",
+        started_at: "2026-03-02T09:00:00Z",
+      }),
+      // W21 — in-window.
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-new",
+        started_at: "2026-05-18T09:00:00Z",
+      }),
+    ];
+    const exercises = [mkExercise({ id: "bench", muscles: ["Chest"] })];
+    const full = presentWeeklyHardSetsByMuscle({ rows, exercises, now: NOW });
+    const windowed = presentWeeklyHardSetsByMuscle({
+      rows,
+      exercises,
+      windowStartMs: computeWindowStart(10, NOW),
+      now: NOW,
+    });
+    // Window shrinks the axis to the first in-window week.
+    expect(windowed.weeks.length).toBeLessThan(full.weeks.length);
+    expect(windowed.series[0]!.key).toBe("Chest");
+    // Only the in-window working set counts → 1 (in the last week).
+    expect(windowed.series[0]!.values.at(-1)).toBe(1);
+  });
+
+  it("S-8b (windowed boundary): started_at === threshold is IN, threshold-1ms is OUT", () => {
+    const threshold = computeWindowStart(10, NOW)!;
+    const atThreshold = new Date(threshold).toISOString();
+    const justBefore = new Date(threshold - 1).toISOString();
+    const rows = [
+      mkRow({
+        completed_at: "2026-05-18T10:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "bench",
+        session_id: "s-at",
+        started_at: atThreshold, // exactly threshold → INCLUDED
+      }),
+      mkRow({
+        completed_at: "2026-05-18T11:00:00Z",
+        weight: "100",
+        reps: 5,
+        exercise_id: "squat",
+        session_id: "s-before",
+        started_at: justBefore, // 1ms before → EXCLUDED
+      }),
+    ];
+    const exercises = [
+      mkExercise({ id: "bench", muscles: ["Chest"] }),
+      mkExercise({ id: "squat", muscles: ["Legs"] }),
+    ];
+    const windowed = presentWeeklyHardSetsByMuscle({
+      rows,
+      exercises,
+      windowStartMs: threshold,
+      now: NOW,
+    });
+    const keys = windowed.series.map((s) => s.key);
+    expect(keys).toContain("Chest"); // started exactly at threshold
+    expect(keys).not.toContain("Legs"); // 1ms before threshold
   });
 });

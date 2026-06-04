@@ -11,17 +11,23 @@ import { useWeightUnit } from "~/hooks/use-preferences";
 import { useLifetimeWeeklyVolume } from "~/hooks/use-stats";
 import { formatVolume } from "~/utils/units";
 import {
+  presentWeeklyHardSetsByMuscle,
   presentWeeklyVolumeByMuscle,
   type MuscleSeriesKey,
 } from "~/utils/weekly-muscle-volume";
 
 /**
- * Weekly per-muscle volume chart. Replaces the removed per-session chart.
- * Buckets the (bodyweight-aware) lifetime weekly-volume rows by ISO week ×
- * primary muscle, renders selectable multi-line trend with check-all /
- * uncheck-all + per-muscle toggles (local, non-persisted state — mirrors the
- * removed section's `useState` idiom). Full-history trend viz: does NOT honor
- * `max_volume_window_weeks` (Decision #3).
+ * Weekly per-muscle chart. Replaces the removed per-session chart. Buckets the
+ * lifetime weekly-volume rows by ISO week × primary muscle, renders selectable
+ * multi-line trend with check-all / uncheck-all + per-muscle toggles (local,
+ * non-persisted state — mirrors the removed section's `useState` idiom).
+ *
+ * Two metrics, swapped via an ephemeral kg↔sets segmented toggle (default kg,
+ * non-persisted — U9): "Volume (kg)" = bodyweight-aware tonnage; "Hard sets" =
+ * count of working sets per muscle/week (working-only, load-irrelevant). The
+ * line-selection (`visible`) state and the chart are SHARED across metrics.
+ *
+ * Full-history trend viz: does NOT honor `max_volume_window_weeks` (Decision #3).
  */
 
 // 7 fixed colors keyed to MUSCLE_GROUPS order + "Other".
@@ -45,15 +51,28 @@ export function WeeklyMuscleVolumeSection(props: {
   const { data: measurements } = useMeasurements();
   const unit = useWeightUnit();
 
+  // Ephemeral metric mode (U9 — default kg, NOT persisted). Drives which
+  // presenter the memo calls, the y-axis formatter, and the header label.
+  const [metric, setMetric] = useState<"kg" | "sets">("kg");
+
+  // Branch the single memo on `metric` (recompute only the active model). The
+  // sets branch passes NO measurements (load-irrelevant). `measurements` stays
+  // in deps — harmless on the sets branch since it isn't read there.
   const model = useMemo(() => {
     if (!rows || !exercises) return null;
-    return presentWeeklyVolumeByMuscle({
-      rows,
-      exercises,
-      measurements: measurements ?? [],
-      windowStartMs: props.windowStartMs,
-    });
-  }, [rows, exercises, measurements, props.windowStartMs]);
+    return metric === "sets"
+      ? presentWeeklyHardSetsByMuscle({
+          rows,
+          exercises,
+          windowStartMs: props.windowStartMs,
+        })
+      : presentWeeklyVolumeByMuscle({
+          rows,
+          exercises,
+          measurements: measurements ?? [],
+          windowStartMs: props.windowStartMs,
+        });
+  }, [rows, exercises, measurements, props.windowStartMs, metric]);
 
   // All muscle lines on by default. Keyed off the present series so a newly
   // appearing muscle starts visible.
@@ -92,25 +111,95 @@ export function WeeklyMuscleVolumeSection(props: {
   const xLabels = model.weeks.map((w) => w.label);
   const allOn = seriesKeys.every((k) => visible.has(k));
 
+  const headerLabel =
+    metric === "sets"
+      ? "Weekly hard sets per muscle"
+      : "Weekly volume per muscle";
+  // Sets → integer & unitless (Math.round defends against the chart's
+  // fractional intermediate y-ticks `(range/4)*i`); kg → formatVolume (suffix).
+  const formatValue =
+    metric === "sets"
+      ? (v: number) => `${Math.round(v)}`
+      : (v: number) => formatVolume(v, unit);
+
+  // Peak value across the VISIBLE series — a stable, non-SVG `<Text>` handle for
+  // the active metric's max (e.g. "3 sets" / "500 kg"). Gives the chart's peak a
+  // queryable DOM node (the y-tick lives in `<SvgText>`, which is not a reliable
+  // text-query target on web) and reads honestly with the metric toggle.
+  let peakValue = 0;
+  for (const s of model.series) {
+    if (!visible.has(s.key)) continue;
+    for (const v of s.values) if (v > peakValue) peakValue = v;
+  }
+  const peakLabel =
+    metric === "sets"
+      ? `${Math.round(peakValue)} ${Math.round(peakValue) === 1 ? "set" : "sets"}`
+      : formatVolume(peakValue, unit);
+
   return (
     <View className="mt-2 px-4 pb-2">
+      {/* kg↔sets metric toggle (ephemeral, default kg). Mirrors the
+          <ProgressWindowSelector> segmented idiom. */}
+      <View className="mb-2 flex-row gap-2">
+        {(["kg", "sets"] as const).map((m) => {
+          const selected = metric === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => {
+                if (selected) return;
+                setMetric(m);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                m === "kg" ? "Metric: volume in kg" : "Metric: hard sets"
+              }
+              accessibilityState={{ selected }}
+              className={`flex-1 rounded-md py-2 ${
+                selected
+                  ? "bg-black dark:bg-white"
+                  : "border border-gray-300 dark:border-gray-700"
+              }`}
+            >
+              <Text
+                className={`text-center text-base font-medium ${
+                  selected
+                    ? "text-white dark:text-black"
+                    : "text-black dark:text-white"
+                }`}
+              >
+                {m === "kg" ? "Volume (kg)" : "Hard sets"}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View className="mb-2 flex-row items-center justify-between">
         <Text className="text-xs uppercase tracking-wide text-gray-500">
-          Weekly volume per muscle
+          {headerLabel}
         </Text>
-        <Pressable
-          onPress={() =>
-            setVisible(allOn ? new Set() : new Set(seriesKeys))
-          }
-          accessibilityRole="button"
-          accessibilityLabel={allOn ? "Hide all muscles" : "Show all muscles"}
-          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          className="rounded-full border border-gray-300 px-2.5 py-1 dark:border-gray-700"
-        >
-          <Text className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            {allOn ? "Uncheck all" : "Check all"}
+        <View className="flex-row items-center gap-2">
+          <Text
+            testID="weekly-muscle-peak"
+            className="text-xs font-medium text-gray-500"
+          >
+            {`Peak ${peakLabel}`}
           </Text>
-        </Pressable>
+          <Pressable
+            onPress={() =>
+              setVisible(allOn ? new Set() : new Set(seriesKeys))
+            }
+            accessibilityRole="button"
+            accessibilityLabel={allOn ? "Hide all muscles" : "Show all muscles"}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            className="rounded-full border border-gray-300 px-2.5 py-1 dark:border-gray-700"
+          >
+            <Text className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              {allOn ? "Uncheck all" : "Check all"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <MultiSeriesChart
@@ -119,7 +208,7 @@ export function WeeklyMuscleVolumeSection(props: {
         width={width}
         height={200}
         title=""
-        formatValue={(v) => formatVolume(v, unit)}
+        formatValue={formatValue}
       />
 
       {/* Selectable muscle legend / toggles. */}
