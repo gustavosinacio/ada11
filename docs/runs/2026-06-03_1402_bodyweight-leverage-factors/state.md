@@ -14,12 +14,12 @@ Bodyweight leverage factors — per-exercise fraction of bodyweight (push-up ≈
 > Not part of this run.
 
 ## Current state
-- Owner: conductor → evaluator
-- Step: 7. Finalize (Test PASS; writing final-summary, invoking Evaluator)
+- Owner: conductor
+- Step: 7. Finalize — COMPLETE (Evaluator scored 6 agents; archived to vault; README indexed; migration 0021 applied live; committed 417e256 + fac339a; deploy in progress)
 - Round (current loop): n/a (D↔V 2 rounds; I↔R 1; I↔T 1)
 - Status: done
 - Started (BRT): 2026-06-03 14:02
-- Updated (BRT): 2026-06-03 15:14
+- Updated (BRT): 2026-06-03 15:30
 
 ## Budgets remaining
 - Design ↔ Validate rounds: 2 / 3 (round 1 consumed: v1 NO-GO — 2 majors)
