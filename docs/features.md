@@ -3,6 +3,7 @@
 ## Open
 
 [ ] Secondary-muscle volume attribution — fractional credit to secondary muscles (bench → partial Arms/Shoulders) instead of primary-only `muscles[0]`. (refines Phase 1)
+    - INVESTIGATED + DEFERRED 2026-06-04 (`docs/runs/2026-06-04_0905_secondary-muscle-attribution/`). The CODE is trivial — a single shared attribution seam in `bucketByMuscleWeek` (`src/utils/weekly-muscle-volume.ts:149-170`); one ~3-line change makes BOTH tonnage AND hard-sets fractional. The BLOCKER is data: `exercises.muscles` is single-muscle for 81/95 canonical rows (the secondaries don't exist), and `muscles[0]` isn't reliably the primary. So this is a data-authoring task — author per-exercise muscle→fraction profiles (summing to 1.0) for the ~14 multi-muscle compounds, an owner/domain decision with no literature consensus. When revisited: store via a new `exercises.muscle_weights jsonb` column + backfill OR a code table (NOT derive from `muscles[]`); fraction tonnage only (hard-sets stays integer/primary — "0.4 of a set" is odd); single-muscle = 1.0 = today (identity); retroactive per-muscle redistribution.
 
 ## Done
 
