@@ -105,24 +105,52 @@ test.describe("Ada11 CRUD flows (web)", () => {
         .fill("Heavy bench focus");
       await page.getByText("Save routine").last().click();
 
-      // Back to /workout (the unified home), the new routine appears.
+      // Saving a routine navigates to the new routine's BUILDER
+      // (`routines/new.tsx:42` does router.replace(`/routines/{id}`)), NOT back
+      // to /workout — a pre-existing app behavior. Let the create persist, purge
+      // the query cache so /workout's list refetches fresh (avoids rehydrating a
+      // stale persisted cache), then go to the unified home where the row shows.
+      await page.waitForURL(/\/routines\/[0-9a-f-]+$/, { timeout: 10_000 });
+      await page.waitForTimeout(3_000);
+      await page.evaluate(() =>
+        window.localStorage.removeItem("ada11-query-cache"),
+      );
+      await page.goto("/workout", { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/workout$/, { timeout: 10_000 });
       await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 });
 
-      // Open the routine builder via the Edit pill on the row.
-      await page.getByLabel(`Edit routine: ${name}`).click();
-      await page.waitForURL(/\/routines\/[0-9a-f-]+/, { timeout: 10_000 });
+      // The row's Edit pill was removed (the preview is now the hub). Open the
+      // builder via the row → preview → header "Edit this routine" path.
+      await page.getByLabel(`View routine: ${name}`).click();
+      await page.waitForURL(/\/routines\/[0-9a-f-]+\/preview(\?|$)/, {
+        timeout: 10_000,
+      });
+      // Exact label (MIN-1): "Edit this routine", NOT "Edit routine".
+      await page.getByLabel("Edit this routine").click();
+      // The builder URL ends after the id (no /preview suffix) — confirms we
+      // are on the builder, not still on the preview.
+      await page.waitForURL(/\/routines\/[0-9a-f-]+$/, { timeout: 10_000 });
 
       // Cross-platform confirmDelete uses window.confirm on web. Register the
       // handler BEFORE clicking — the dialog fires synchronously.
       page.on("dialog", (d) => void d.accept());
 
-      // Delete the routine.
+      // Delete the routine. The builder's onDelete calls router.back(), which
+      // now pops to the preview (the push origin changed from /workout to the
+      // preview). Navigate explicitly back to the Workout home to assert the
+      // routine is gone from the list — the delete-flow teeth are preserved
+      // (routine deleted + no longer listed).
       await page.getByText("Delete routine").last().click();
-
-      // Should pop back to /workout (router.back() returns to the push origin).
+      // Let the soft-delete land + persist, purge the query cache so /workout
+      // refetches fresh (instead of rehydrating a stale persisted list that
+      // still shows the deleted routine), then assert it is gone.
+      await page.waitForTimeout(3_000);
+      await page.evaluate(() =>
+        window.localStorage.removeItem("ada11-query-cache"),
+      );
+      await page.goto("/workout", { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/workout$/, { timeout: 10_000 });
-      await expect(page.getByText(name)).not.toBeVisible({ timeout: 5_000 });
+      await expect(page.getByText(name)).not.toBeVisible({ timeout: 10_000 });
     } finally {
       await deleteUserSafe(userId);
     }

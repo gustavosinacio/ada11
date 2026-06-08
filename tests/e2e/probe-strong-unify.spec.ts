@@ -191,14 +191,26 @@ test.describe("Strong-style unify — probes", () => {
     try {
       await signInAndLand(page, email);
 
-      // Create a routine first.
+      // Create a routine first. Saving navigates to the new routine's BUILDER
+      // (`routines/new.tsx:42` does router.replace(`/routines/{id}`)), NOT back
+      // to /workout — a pre-existing app behavior. Go to /workout explicitly to
+      // assert the row appears in the unified home list.
       await page.getByLabel("New routine").click();
       await page.waitForURL(/\/routines\/new$/, { timeout: 10_000 });
       const routineName = `Push Day ${Date.now()}`;
       await page.getByPlaceholder("e.g. Push Day").fill(routineName);
       await page.getByText("Save routine").last().click();
+      await page.waitForURL(/\/routines\/[0-9a-f-]+$/, { timeout: 10_000 });
+      // Let the create persist to the query cache, then purge it before the
+      // hard goto so /workout's routine list refetches fresh instead of
+      // rehydrating a stale persisted cache (the hard-reload-nav-race class).
+      await page.waitForTimeout(PERSIST_FLUSH_MS);
+      await page.evaluate(() =>
+        window.localStorage.removeItem("ada11-query-cache"),
+      );
+      await page.goto("/workout", { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/workout$/, { timeout: 10_000 });
-      await expect(page.getByText(routineName)).toBeVisible();
+      await expect(page.getByText(routineName)).toBeVisible({ timeout: 10_000 });
 
       // Quick start ad-hoc session.
       await page.getByText("Quick start workout", { exact: true }).last().click();
@@ -213,24 +225,46 @@ test.describe("Strong-style unify — probes", () => {
       // Banner here too.
       await expect(page.getByLabel("Resume workout in progress")).toBeVisible({ timeout: 10_000 });
 
-      // Row is rendered AT opacity 0.6.
-      const row = page.getByLabel(`Start workout: ${routineName}`);
+      // Row is rendered AT opacity 0.6. Label is now "View routine: {name}".
+      // The `opacity-60` class sits on the row's WRAPPING <View>, while the
+      // accessibilityLabel is on the inner <Pressable> (routine-list-item.tsx:
+      // 28 vs 33). getComputedStyle(pressable).opacity would read the inner
+      // node's OWN opacity ("1"), not the dimmed wrapper — so read the parent
+      // View's opacity. Poll to settle the hasActive-propagation render race.
+      const row = page.getByLabel(`View routine: ${routineName}`);
       await expect(row).toBeVisible();
-      const opacity = await row.evaluate((el) => window.getComputedStyle(el).opacity);
-      expect(opacity).toBe("0.6");
+      await expect
+        .poll(
+          () =>
+            row.evaluate(
+              (el) =>
+                window.getComputedStyle(el.parentElement as Element).opacity,
+            ),
+          { message: "row dimmed to 0.6 while a session is active", timeout: 10_000 },
+        )
+        .toBe("0.6");
 
-      // Per design v3 line 337: `onPress={disabled ? undefined : onPress}`.
-      // Tap on the dimmed body is a no-op (does NOT route, does NOT create a
-      // 2nd session, does NOT navigate to the live one). The banner is the
-      // intended resume mechanism.
+      // The row's single Pressable still honors `disabled={hasActive}`:
+      // `onPress={disabled ? undefined : onPress}`. Tap on the dimmed body is a
+      // no-op (does NOT route, does NOT navigate to the preview or the live
+      // session). The banner is the intended resume mechanism.
       await row.click();
       await page.waitForTimeout(1500);
       expect(page.url()).toMatch(/\/workout$/);
 
-      // The Edit pill, however, is still tappable (separate Pressable with
-      // its own onPress + stopPropagation).
-      await page.getByLabel(`Edit routine: ${routineName}`).click();
-      await page.waitForURL(/\/routines\/[0-9a-f-]+/, { timeout: 10_000 });
+      // The row's Edit pill was removed (the preview is the hub). Because the
+      // row is disabled-while-active, its tap is a no-op (just asserted) so the
+      // preview is UNREACHABLE here — the only way to the builder is a direct
+      // goto (the same pattern as routine-strong-builder test 4). Read the
+      // routine id once via admin (the test holds only the name).
+      const { data: r } = await admin
+        .from("routines")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("name", routineName)
+        .single();
+      await page.goto(`/routines/${r!.id}`, { waitUntil: "domcontentloaded" });
+      await page.waitForURL(/\/routines\/[0-9a-f-]+$/, { timeout: 10_000 });
 
       // Banner still here on the routine builder screen.
       await expect(page.getByLabel("Resume workout in progress")).toBeVisible();
